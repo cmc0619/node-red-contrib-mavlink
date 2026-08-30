@@ -417,7 +417,7 @@ test('a present non-array payload.items does not fall back to configured items',
   );
 });
 
-test('null payload.items stays unset and the configured list rides', async () => {
+test('null payload.items rides instead of selecting the configured list', async () => {
   const conn = new StubConnection();
   const Node = loadNode(conn);
   const node = new Node({
@@ -430,8 +430,8 @@ test('null payload.items stays unset and the configured list rides', async () =>
     items: JSON.stringify([{ frame: 3, command: 16, x: 1, y: 2, z: 3 }]),
   });
   const { outputs, err } = await runInput(node, { payload: { items: null } });
-  assert.equal(err, undefined);
-  assert.equal(outputs[0][0].payload.messages[0].fields.count, 1);
+  assert.ok(err);
+  assert.ok(outputs.every((ports) => ports[0] === null));
 });
 
 test('an omitted items field over blank config does not invent COUNT 0', async () => {

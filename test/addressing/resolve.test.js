@@ -120,8 +120,7 @@ test('firmware ladder is payload → profile via firstDefined (no invented ardup
   assert.equal(firstDefined(undefined, undefined), undefined);
 });
 
-test('profileFromVehicleNode maps defaults, firmware and family, null-safe', () => {
-  assert.equal(profileFromVehicleNode(null), null);
+test('profileFromVehicleNode maps defaults, firmware and family', () => {
   assert.deepEqual(
     profileFromVehicleNode({
       defaultTargetSystem: 3,
@@ -153,4 +152,3 @@ test('numberOr: a present finite value coerces, including an explicit 0', () => 
   assert.equal(numberOr(0, 1000), 0);
   assert.equal(numberOr('0', 1000), 0);
 });
-

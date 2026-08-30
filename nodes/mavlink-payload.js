@@ -87,11 +87,11 @@ module.exports = function registerMavlinkPayload(RED) {
          *  builder, so a swap re-runs this rather than converting by hand. */
         function buildFor(carrier) {
           return buildPayloadMessage({
-            topic: payload.topic || config.topic,
-            verb: payload.verb || config.verb,
-            path: payload.path || config.path,
+            topic: payload.topic === undefined ? config.topic : payload.topic,
+            verb: payload.verb === undefined ? config.verb : payload.verb,
+            path: payload.path === undefined ? config.path : payload.path,
             target,
-            values: payload.values || config.values,
+            values: payload.values === undefined ? config.values : payload.values,
             // Required for command-backed verbs (§9): a non-member carrier
             // selects no builder (§5), so the message ships undefined and
             // craters at the tier that touches it.
@@ -100,7 +100,7 @@ module.exports = function registerMavlinkPayload(RED) {
           });
         }
 
-        const carrierChosen = payload.sendAs || config.sendAs;
+        const carrierChosen = payload.sendAs === undefined ? config.sendAs : payload.sendAs;
         const builtCmd = buildFor(carrierChosen);
 
         /**

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Target / filter sysid fields are uint8 (0..255); blank means inherit / all.
+ * Target sysids are uint8 (0..255); the inbound source filter is 1..255.
  * Enforcement is defaults.validate — HTML min/max alone does not red the node.
  */
 
@@ -46,7 +46,6 @@ const TARGET_FILES = [
   ['mavlink-payload.html', 'targetSystem'],
   ['mavlink-mission.html', 'targetSystem'],
   ['mavlink-state.html', 'targetSystem'],
-  ['mavlink-in.html', 'sysid'],
 ];
 
 /**
@@ -70,6 +69,12 @@ function descriptorBlock(html, prop) {
   }
   throw new Error(`unbalanced braces in ${prop} descriptor`);
 }
+
+test('mavlink-in.html: source sysid validates as an addressable node 1..255', () => {
+  const html = fs.readFileSync(path.join(nodesDir, 'mavlink-in.html'), 'utf8');
+  assert.match(descriptorBlock(html, 'sysid'), /RED\.mavlink\.validateUint8\(1\)/);
+  assert.match(html, /id="node-input-sysid"[^>]*min="1"[^>]*max="255"/);
+});
 
 for (const [file, prop] of TARGET_FILES) {
   test(`${file}: ${prop} validates as uint8 0..255 and has min/max on the input`, () => {

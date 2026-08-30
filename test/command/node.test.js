@@ -16,6 +16,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { StubPeerTable } = require('../../lib/command/test/stubs/connection');
+const { loadBundled } = require('../../lib/metadata');
+
+const COMMON_BUNDLE = loadBundled('common');
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -30,6 +33,7 @@ test('Build tier: output 0 carries the COMMAND_LONG and output 1 a top-level sta
   await tick();
 
   assert.ok(sent, 'outputs fired');
+  assert.ok(sent[0], sent[1] && sent[1].detail);
   assert.equal(sent[0].payload.name, 'COMMAND_LONG');
   assert.equal(sent[1].result, 'built');
 });
@@ -918,7 +922,7 @@ function connStubWithInject(vehicleOverride) {
     peerTable: null,
     vehicle: vehicleOverride !== undefined
       ? vehicleOverride
-      : { targetSystem: 1, targetComponent: 1 },
+      : { id: 'vehicleProfile', targetSystem: 1, targetComponent: 1 },
     send(message, opts) { sent.push({ message, opts }); },
     resolveSourceIds: () => null,
     subscribe(filter, handler) {
@@ -945,7 +949,7 @@ function connStub(vehicleOverride) {
     peerTable: null,
     vehicle: vehicleOverride !== undefined
       ? vehicleOverride
-      : { targetSystem: 1, targetComponent: 1 },
+      : { id: 'vehicleProfile', targetSystem: 1, targetComponent: 1 },
     send(message, opts) { sent.push({ message, opts }); },
     resolveSourceIds: () => null,
     subscribe(filter, handler) {
@@ -960,6 +964,10 @@ function connStub(vehicleOverride) {
 }
 
 function redStub(nodesById) {
+  const registry = {
+    vehicleProfile: { getDialect: () => COMMON_BUNDLE },
+    ...nodesById,
+  };
   return {
     nodes: {
       types: {},
@@ -974,7 +982,7 @@ function redStub(nodesById) {
         this.types[name] = ctor;
       },
       getNode(id) {
-        return nodesById[id];
+        return registry[id];
       },
     },
     httpAdmin: { get() {} },

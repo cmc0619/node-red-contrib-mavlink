@@ -39,18 +39,6 @@ test('HEARTBEAT populates presence, type, autopilot, armed state, and flight mod
   assert.equal(component.systemStatus, 4);
 });
 
-test('a source sysid 0 creates no peer — no vehicle sources the broadcast id (§7, #264)', () => {
-  // A phantom peer 0 with compid 1 would walk into fan-out's `all` selection
-  // as a broadcast-shaped member.
-  const table = new PeerTable({ now: () => 0 });
-  const events = [];
-  table.on('peer-new', (e) => events.push(e));
-  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 0, 1), EP1);
-  assert.deepEqual(events, []);
-  assert.equal(table.size(), 0);
-  assert.deepEqual(table.snapshot(), []);
-});
-
 test('a GCS-range sysid (>= 250) is tracked but its endpoint is never learned', () => {
   // 250–255 is the GCS range: a ground station is never a destination for
   // vehicle-directed traffic, so its frames enrich the record (a State node

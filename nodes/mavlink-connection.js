@@ -229,7 +229,7 @@ module.exports.applyStatus = applyStatus;
  */
 function identitySnapshot(idNode, defaults, bundle, connectionId) {
   if (idNode.derivesSysidFromVehicle) {
-    idNode.bindVehicleSysid(defaults.defaultTargetSystem, idNode.describe(), connectionId);
+    idNode.bindVehicleSysid(defaults.defaultTargetSystem, connectionId);
   }
   const wire = idNode.getIdentity();
   const hb = idNode.getHeartbeatFields();
@@ -261,11 +261,8 @@ function buildTransportConfig(config) {
     mode: config.mode,
     bindAddress: config.bindHost,
     bindPort: Number(config.bindPort),
-    // A blank host rides as '' — every transport consumer tests these fields
-    // for truthiness, so '' already reads as absent. The port keeps its
-    // ternary: Number('') is 0, a value nobody chose.
     remoteAddress: config.remoteHost,
-    remotePort: config.remotePort ? Number(config.remotePort) : undefined,
+    remotePort: Number(config.remotePort),
   });
   switch (config.mode) {
     case 'serial':
@@ -281,7 +278,7 @@ function buildTransportConfig(config) {
         ...socket(),
         // UDP only — TCP has no broadcast, and the editor hides the row for it.
         broadcastAddress: config.broadcastHost,
-        broadcastPort: config.broadcastPort ? Number(config.broadcastPort) : undefined,
+        broadcastPort: Number(config.broadcastPort),
       };
     default: break; // This space intentionally left blank (§5)
   }
@@ -396,14 +393,9 @@ function rejectedSurface(reason, hasKey) {
  * @param {string} enumName
  * @param {string} entryName
  * @returns {number}
- * @throws {Error} when the enum or entry is not in the dialect
  */
 function enumValue(bundle, enumName, entryName) {
-  const enumDef = bundle.enums[enumName];
-  const entry = enumDef && enumDef.entries.find((e) => e.name === entryName);
-  // eslint-disable-next-line no-restricted-syntax -- §0 rule 1: the compiled dialect bundle does not carry this enum entry
-  if (!entry) throw new Error(`${entryName} is not defined in enum ${enumName}`);
-  return Number(entry.value);
+  return Number(bundle.enums[enumName].entries.find((entry) => entry.name === entryName).value);
 }
 
 /**

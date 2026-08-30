@@ -49,7 +49,6 @@ const {
 } = require('../lib/delivery');
 const {
   resolveDeliveryContext,
-  firstDefined,
   numberOr,
 } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
@@ -568,23 +567,25 @@ module.exports = function registerMavlinkParam(RED) {
  * @returns {object} normalized param request
  */
 function requestFrom(config, payload, { target, profile, connectionNode }) {
-  const firmware = firstDefined(payload.firmware, profile && profile.firmware);
+  const firmware = payload.firmware === undefined
+    ? profile && profile.firmware
+    : payload.firmware;
   // `paramEncoding` only. The old `payload.encoding` rung was undocumented,
   // unexampled and untested — nothing in the repo ever wrote it (1a79c88 removed
   // the matching config-side alias).
   const encoding = payload.paramEncoding;
   const capabilities = capabilitiesFromPeer(connectionNode, target);
   return {
-    action: payload.action || config.action,
+    action: payload.action === undefined ? config.action : payload.action,
     target,
-    paramId: payload.paramId || config.paramId,
+    paramId: payload.paramId === undefined ? config.paramId : payload.paramId,
     // paramIndex 0 is a valid index; keep it rather than letting `||` drop it to
     // the library's -1 default. Absent (undefined) is left for the library.
-    paramIndex: firstDefined(payload.paramIndex, config.paramIndex),
+    paramIndex: payload.paramIndex === undefined ? config.paramIndex : payload.paramIndex,
     value: payload.value !== undefined ? payload.value : config.value,
     // No REAL32 fallback: an absent type resolves to nothing, never to a
     // guess — guessing the type silently mis-encodes the value (#222).
-    paramType: payload.paramType || config.paramType,
+    paramType: payload.paramType === undefined ? config.paramType : payload.paramType,
     firmware,
     encoding,
     capabilities,

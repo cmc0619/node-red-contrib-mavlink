@@ -38,7 +38,7 @@ test('a companion carries its saved CompID; only SysID is derived', () => {
   assert.equal(second.sourceSystemId, null, 'SysID is still derived from the vehicle');
   assert.equal(second.derivesSysidFromVehicle, true);
 
-  second.bindVehicleSysid(7, 'Link', 'conn-1');
+  second.bindVehicleSysid(7, 'conn-1');
   assert.deepEqual(second.getIdentity(), { sysid: 7, compid: 192 });
 });
 

@@ -70,7 +70,7 @@
             }) || 'every entry must be a non-blank message name string';
           },
         },
-        sysid:       { value: '', validate: RED.mavlink.validateUint8(0) },
+        sysid:       { value: '', validate: RED.mavlink.validateUint8(1) },
         compid:      { value: '', validate: RED.mavlink.validateUint8(0) },
         showUnknown: { value: false },
         changedOnly: { value: false },
@@ -220,7 +220,7 @@
   </div>
   <div class="form-row">
     <label for="node-input-sysid"><i class="fa fa-filter"></i> Sysid</label>
-    <input type="number" id="node-input-sysid" min="0" max="255" placeholder="blank = all" style="width:80px">
+    <input type="number" id="node-input-sysid" min="1" max="255" placeholder="blank = all" style="width:80px">
   </div>
   <div class="form-row">
     <label for="node-input-compid"><i class="fa fa-filter"></i> Compid</label>

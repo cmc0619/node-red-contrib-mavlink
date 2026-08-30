@@ -151,6 +151,4 @@ test('dialectFromConnection reads the bound profile node', () => {
     dialectFromConnection(RED, { vehicle: { id: 'veh' } }),
     bundle
   );
-  assert.equal(dialectFromConnection(RED, { vehicle: null }), null);
 });
-

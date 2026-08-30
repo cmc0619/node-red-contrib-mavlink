@@ -29,14 +29,16 @@ module.exports = function registerMavlinkState(RED) {
     };
 
     let feed = null;
-    if (config.mode === 'feed') {
-      // The editor saves events as a comma-joined string from a members-only
-      // multi-select; an empty selection means the full default set.
-      const events = config.events.split(',').map((s) => s.trim()).filter(Boolean);
-      feed = createStateFeed(connectionNode.peerTable, { events, modes }, (record) => {
-        node.send([{ payload: record }]);
-      });
-      node.status({ fill: 'grey', shape: 'ring', text: 'listening' });
+    switch (config.mode) {
+      case 'feed': {
+        const events = config.events.split(',').map((s) => s.trim()).filter(Boolean);
+        feed = createStateFeed(connectionNode.peerTable, { events, modes }, (record) => {
+          node.send([{ payload: record }]);
+        });
+        node.status({ fill: 'grey', shape: 'ring', text: 'listening' });
+        break;
+      }
+      default: break; // This space intentionally left blank (§5)
     }
 
     node.on('input', (msg, send, done) => {
@@ -45,29 +47,26 @@ module.exports = function registerMavlinkState(RED) {
           done();
           return;
         }
-        if (config.mode === 'snapshot') {
-          const payload = msg.payload ?? {};
-          const peers = snapshotPeers(connectionNode.peerTable, {
-            // Nullish-preserving: a configured 0 reaches the filter as 0 rather
-            // than being swallowed by `||` and treated as unset.
-            sysid: firstDefined(payload.sysid, config.targetSystem),
-            compid: firstDefined(payload.compid, config.targetComponent),
-          }, modes);
-          applyActionStatus(node, 'ok', `${peers.length} peer(s)`);
-          send([
-            { payload: peers },
-            makeStatusRecord(node.type, {
-              result: 'succeeded',
-              detail: 'snapshot',
-              count: peers.length,
-              // Failures on msgids the bound dialect carries, counted since
-              // deploy: read the delta between two snapshots, since one
-              // corrupt frame can fail the check more than once
-              // (lib/connection/wire.js). A dialect mismatch is not
-              // corruption; it arrives as an UNKNOWN_<id> message.
-              crcFailures: connectionNode.crcFailureCount(),
-            }),
-          ]);
+        switch (config.mode) {
+          case 'snapshot': {
+            const payload = msg.payload ?? {};
+            const peers = snapshotPeers(connectionNode.peerTable, {
+              sysid: firstDefined(payload.sysid, config.targetSystem),
+              compid: firstDefined(payload.compid, config.targetComponent),
+            }, modes);
+            applyActionStatus(node, 'ok', `${peers.length} peer(s)`);
+            send([
+              { payload: peers },
+              makeStatusRecord(node.type, {
+                result: 'succeeded',
+                detail: 'snapshot',
+                count: peers.length,
+                crcFailures: connectionNode.crcFailureCount(),
+              }),
+            ]);
+            break;
+          }
+          default: break; // This space intentionally left blank (§5)
         }
         done();
       } catch (err) {

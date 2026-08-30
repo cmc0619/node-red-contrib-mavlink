@@ -229,7 +229,6 @@ module.exports = function registerMavlinkCommand(RED) {
      */
     function applyModeName(userParams, payload, resolution) {
       if (commandId !== DO_SET_MODE) return;
-      if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return;
       if (isBlank(payload.mode)) return;
       const modeParams = setModeParams(payload.mode, modeContext(resolution));
       // A resolved mode is one indivisible answer, so an explicit number wins
