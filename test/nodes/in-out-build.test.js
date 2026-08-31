@@ -1095,9 +1095,10 @@ test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', 
   // The real disabled-connection stub used to swallow sends, so mavlink-out
   // reported sent/green over a switched-off link — the §2 phantom success.
   const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-connection')(RED);
   const connNode = makeNodeInstance({ id: 'conn-1' });
-  RED._nodeTypes['mavlink-connection'].call(connNode, { disabled: true });
+  RED._nodeTypes['mavlink-connection'].call(connNode, { disabled: true, vehicle: 'v1' });
   RED.nodes._register('conn-1', connNode);
   require('../../nodes/mavlink-out')(RED);
   const Constructor = RED._nodeTypes['mavlink-out'];

@@ -57,8 +57,20 @@ const BASE_CONFIG = {
   additionalIdentities: [],
 };
 
-test('a disabled Connection still exposes an empty peer table', () => {
-  const { ctor } = makeRED({});
+test('a disabled Connection still exposes an empty peer table and the vehicle snapshot', () => {
+  const { ctor } = makeRED({
+    'veh-1': {
+      getDefaults: () => ({
+        defaultTargetSystem: 1,
+        defaultTargetComponent: 1,
+        firmware: 'ardupilot',
+        vehicleFamily: 'copter',
+      }),
+      getDialect: () => {
+        throw new Error('the dialect compile must stay off the disabled deploy path');
+      },
+    },
+  });
   const node = Object.create(null);
   ctor.call(node, { ...BASE_CONFIG, disabled: true });
 
@@ -67,6 +79,16 @@ test('a disabled Connection still exposes an empty peer table', () => {
   // when the truth is "the link is switched off and nobody is on it".
   assert.ok(node.peerTable, 'peer table is present');
   assert.equal(typeof node.subscribe, 'function');
+  // The vehicle snapshot is read side too: a wire-tier Build resolves its
+  // dialect through `vehicle.id` in its constructor, so without this a
+  // deliberately disabled link stopped the whole flow from deploying (Codex).
+  assert.deepEqual(node.vehicle, {
+    id: 'veh-1',
+    targetSystem: 1,
+    targetComponent: 1,
+    firmware: 'ardupilot',
+    vehicleFamily: 'copter',
+  });
   // send refuses rather than no-ops: swallowing the frame would let the
   // sender report "sent" over a link that moved nothing (§2).
   assert.throws(() => node.send({ name: 'HEARTBEAT', fields: {} }, {}), /disabled/);
