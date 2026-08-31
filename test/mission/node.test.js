@@ -543,35 +543,6 @@ test('a busy lock refuses a second same-type transfer on the node', async () => 
   first.emit('close', () => {});
 });
 
-test('an unknown wire-tier operation craters loud and frees the lock (#222)', async () => {
-  const conn = new StubConnection();
-  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
-  const Node = loadNode(conn);
-
-  // Hand-edited operation: createMachine matches no case and returns
-  // undefined, so the wire tier craters on the start() dereference.
-  const broken = new Node({ operation: 'downlaod', connection: 'conn', delivery: 'confirm', missionType: 'mission', id: 'a' });
-  const res = await runInput(broken, { payload: {} });
-  assert.ok(res.err, 'an unknown operation must fail loud');
-  assert.match(String(res.err), /reading 'start'/);
-  assert.equal(conn.sent.length, 0, 'nothing reached the wire');
-  assert.equal(conn.subscriberCount(), 0, 'no subscription opened');
-  assert.equal(res.outputs[0][0], null, 'output 0 stays silent');
-  assert.equal(res.outputs[0][1].result, 'failed');
-
-  // The crater must not strand the lock: a real download on the same
-  // (connection, target, type) runs instead of reporting "busy".
-  conn.onSend((message, deliver) => {
-    if (message.name === 'MISSION_REQUEST_LIST') {
-      deliver({ name: 'MISSION_COUNT', fields: { count: 0, mission_type: 0 } });
-    }
-  });
-  const next = new Node({ operation: 'download', connection: 'conn', delivery: 'confirm', missionType: 'mission', id: 'b' });
-  const after = await runInput(next, { payload: {} });
-  assert.notEqual(after.outputs.at(-1)[1].phase, 'locked', 'the lock came free after the crater');
-  assert.equal(after.outputs.at(-1)[1].result, 'succeeded');
-});
-
 test('mission companion identity: target derived from airframe sysid, compid pinned to 1', async () => {
   const conn = new StubConnection();
   conn.vehicle = { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' };

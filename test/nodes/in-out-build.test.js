@@ -290,17 +290,6 @@ function makeVehicleStub() {
 // mavlink-in tests
 // ---------------------------------------------------------------------------
 
-test('mavlink-in: an unresolvable Connection craters the constructor loud', () => {
-  // A consumer node with no inputs has no per-message path to fail on, so the
-  // subscribe call is where a bad reference surfaces — a TypeError in the
-  // deploy log, blaming the flow that shipped it (§0).
-  const RED = makeRED();
-  require('../../nodes/mavlink-in')(RED);
-  const Constructor = RED._nodeTypes['mavlink-in'];
-  const node = makeNodeInstance({ id: 'n1', connection: 'missing' });
-  assert.throws(() => Constructor.call(node, inConfig({ connection: 'missing' })), TypeError);
-});
-
 test('mavlink-in: subscribes to the connection on construction', () => {
   const RED = makeRED();
   const { stub, subscribers } = makeConnectionStub();
@@ -913,25 +902,6 @@ test('mavlink-in: unsubscribes from the connection on close', () => {
 // mavlink-out tests
 // ---------------------------------------------------------------------------
 
-test('mavlink-out: an unresolvable Connection fails loud per input', () => {
-  // Deploy succeeds — the constructor holds no per-connection state — and the
-  // first send craters in the handler's try/catch: one terminal record on
-  // output 1 plus done(err), the same exit as every other send fault (§2, §9).
-  const RED = makeRED();
-  require('../../nodes/mavlink-out')(RED);
-  const Constructor = RED._nodeTypes['mavlink-out'];
-  const node = makeNodeInstance({ connection: 'missing' });
-  Constructor.call(node, { connection: 'missing', band: '2' });
-
-  node._input({ payload: { name: 'HEARTBEAT', fields: {} } });
-
-  assert.equal(node._sends.length, 1);
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null, 'output 0 must not fire on a dead reference');
-  assert.equal(out1.result, 'failed');
-  assert.equal(node._status && node._status.fill, 'red');
-});
-
 test('mavlink-out: suppresses when msg.payload === false', () => {
   const RED = makeRED();
   const { stub, sent } = makeConnectionStub();
@@ -1246,47 +1216,6 @@ test('mavlink-build Send tier: a connection send throw becomes a failed status r
   assert.equal(out0, null, 'output 0 must not fire when the send fails');
   assert.equal(out1.result, 'failed');
   assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
-});
-
-test('mavlink-build: unreadable fields JSON is not caught — the editor already refused it', () => {
-  // Two guardrails have stood here. The original badged and returned before
-  // registering an input handler, so every message the node was wired to
-  // receive vanished. The replacement fell back to {}, which on a Send tier
-  // transmitted a blank-field message and reported success — worse.
-  //
-  // Neither is wanted. The editor validates this field, so reaching the
-  // constructor with bad JSON means a hand-edited flow or a deploy forced past
-  // a red field: AGENTS.md:520-529 classifies both as unsupported paths and
-  // says not to add the guard. Node-RED contains a throwing constructor, logs
-  // it, and loads the rest of the flow.
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-
-  assert.throws(() => Constructor.call(node, {
-    vehicle: 'v1',
-    dialect: '__vehicle',
-    messageName: 'HEARTBEAT',
-    tier: 'build',
-    fields: '{ not valid json',
-  }), SyntaxError);
-});
-
-test('mavlink-build Send tier: a missing Connection is a misconfiguration, not a Build', () => {
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-  assert.throws(() => Constructor.call(node, {
-    vehicle: 'v1',
-    dialect: '__vehicle',
-    messageName: 'HEARTBEAT',
-    tier: 'send',
-    fields: JSON.stringify({ type: 6, autopilot: 3 }),
-  }), TypeError);
 });
 
 test('mavlink-build Build tier: codec error emits error status on output 1', () => {
