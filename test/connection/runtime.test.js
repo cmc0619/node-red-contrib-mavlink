@@ -124,6 +124,27 @@ test('an inbound datagram enriches the peer table and delivers a copy to subscri
   connection.close();
 });
 
+test('source sysid 0 is rejected at connection ingress', async () => {
+  const { connection, dg } = build();
+  await connection.start();
+
+  const received = [];
+  connection.subscribe(null, (message) => received.push(message));
+  dg.sockets[0].receive(
+    frameBuffer({
+      name: 'HEARTBEAT',
+      sysid: 0,
+      compid: 1,
+      fields: { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 4 },
+    }),
+    { address: '10.0.0.5', port: 14550 }
+  );
+
+  assert.deepEqual(received, []);
+  assert.equal(connection.peerTable.size(), 0);
+  connection.close();
+});
+
 test('outbound sends drain one at a time in band order, using the socket callback as the release', async () => {
   const { connection, dg } = build();
   await connection.start();

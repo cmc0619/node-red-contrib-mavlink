@@ -609,6 +609,7 @@ function peer(sysid, extra = {}) {
 
 function connectionStub(rows) {
   return {
+    vehicle: { id: 'vehicle' },
     peerTable: {
       snapshot() {
         return rows;
@@ -644,6 +645,7 @@ function redStub(nodesById) {
         this.types[name] = ctor;
       },
       getNode(id) {
+        if (id === 'vehicle') return { getDialect: () => ({ commands: {} }) };
         return nodesById[id];
       },
     },

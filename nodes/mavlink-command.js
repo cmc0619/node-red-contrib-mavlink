@@ -54,7 +54,6 @@ const {
   DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
-const { DEFAULT_MAX_RESENDS } = require('../lib/command/ack');
 const {
   DO_SET_MODE,
   MODE_FLAG_CUSTOM_MODE_ENABLED,
@@ -229,7 +228,6 @@ module.exports = function registerMavlinkCommand(RED) {
      */
     function applyModeName(userParams, payload, resolution) {
       if (commandId !== DO_SET_MODE) return;
-      if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return;
       if (isBlank(payload.mode)) return;
       const modeParams = setModeParams(payload.mode, modeContext(resolution));
       // A resolved mode is one indivisible answer, so an explicit number wins
@@ -450,18 +448,6 @@ module.exports = function registerMavlinkCommand(RED) {
             timeoutMs,
             maxRetries: noAutoRetry ? 0 : maxRetries,
             noAutoRetry,
-            // Timeout re-send is opt-in (#249). A preset that does not set
-            // noAutoRetry is a curated statement that re-issuing this command is
-            // safe. Advanced mode is a raw MAV_CMD id — nothing says whether a
-            // second REBOOT_SHUTDOWN or MISSION_START is harmless, and a silent
-            // window is the *normal* outcome for a rebooting vehicle — so it
-            // passes nothing and inherits the library's no-resend default.
-            maxResends: preset && !noAutoRetry ? DEFAULT_MAX_RESENDS : undefined,
-            // Per-attempt telemetry on the badge only (#248) — same channel as
-            // the carrier-swap retry; outputs stay terminal-only.
-            onResend: (attempt, max) => {
-              applyActionStatus(node, 'sending', `retrying (${attempt}/${max}) ${displayName}\u2026`);
-            },
             // Same badge channel: a takeoff answers IN_PROGRESS for seconds (\u00a79),
             // and without this the operator watches an unchanging wait.
             onInProgress: (progress) => {

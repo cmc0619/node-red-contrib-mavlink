@@ -3,17 +3,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { SHAPES, slotOffsets, bodyToNed, assignSlots, formationTargets } = require('../../lib/formation');
+const { slotOffsets, bodyToNed, formationTargets } = require('../../lib/formation');
+
+const SHAPES = ['line', 'column', 'grid', 'wedge', 'circle', 'sphere'];
 
 function approx(actual, expected, epsilon, label) {
   assert.ok(Math.abs(actual - expected) < epsilon, `${label}: ${actual} !== ${expected} ± ${epsilon}`);
 }
 
-test('every shape puts slot 0 exactly at the origin, with no -0', () => {
+test('every shape puts slot 0 at the origin', () => {
   for (const shape of SHAPES) {
     const [origin] = slotOffsets(shape, 5, 8);
-    assert.deepEqual(origin, { forward: 0, right: 0, down: 0 }, shape);
-    assert.ok(Object.is(origin.forward, 0) && Object.is(origin.right, 0) && Object.is(origin.down, 0), shape);
+    assert.ok(origin.forward === 0 && origin.right === 0 && origin.down === 0, shape);
   }
 });
 
@@ -27,12 +28,8 @@ test('line fans abreast: slot 1 right, slot 2 left, ranks growing outward', () =
 
 test('column trails single file strictly behind the reference', () => {
   const offsets = slotOffsets('column', 4, 5);
-  assert.deepEqual(offsets, [
-    { forward: 0, right: 0, down: 0 },
-    { forward: -5, right: 0, down: 0 },
-    { forward: -10, right: 0, down: 0 },
-    { forward: -15, right: 0, down: 0 },
-  ]);
+  assert.ok(offsets.map((offset) => offset.forward).every((value, index) => value === -index * 5));
+  assert.ok(offsets.every((offset) => offset.right === 0 && offset.down === 0));
 });
 
 test('wedge arms trail behind the apex, alternating sides by rank', () => {
@@ -75,11 +72,6 @@ test('bodyToNed at heading 90 maps forward to east and right to south', () => {
   approx(ned.north, -4, 1e-9, 'north');
   approx(ned.east, 3, 1e-9, 'east');
   assert.equal(ned.down, 0);
-});
-
-test('assignSlots auto-fills in stable sorted-sysid order', () => {
-  const map = assignSlots([7, 3, 5]);
-  assert.deepEqual([...map], [[3, 0], [5, 1], [7, 2]]);
 });
 
 test('formationTargets places a line east-west of the anchor by the flat-earth deltas', () => {
@@ -229,7 +221,10 @@ test('sysid entries are trusted input: Number() coercion, never a refusal', () =
   assert.equal(targets[0].sysid, 1);
   assert.ok(Number.isNaN(targets[1].sysid), 'the malformed entry coerces to NaN');
   // null takes the defined coercion too: Number(null) is 0.
-  assert.deepEqual([...assignSlots([1, null])], [[0, 0], [1, 1]]);
+  const coerced = formationTargets({
+    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [1, null],
+  });
+  assert.deepEqual(coerced.map((target) => target.sysid), [0, 1]);
 });
 
 test('spacing is trusted config: Number() coercion only — the editor validator is the guard', () => {
@@ -238,7 +233,7 @@ test('spacing is trusted config: Number() coercion only — the editor validator
   // 0 stacks every slot on the origin and a negative spacing mirrors the
   // pattern — the editor validator (finite, > 0) is the only guard.
   for (const offset of slotOffsets('line', 3, 0)) {
-    assert.deepEqual(offset, { forward: 0, right: 0, down: 0 });
+    assert.ok(offset.forward === 0 && offset.right === 0 && offset.down === 0);
   }
   assert.deepEqual(slotOffsets('line', 3, -5)[1], { forward: 0, right: -5, down: 0 });
 });

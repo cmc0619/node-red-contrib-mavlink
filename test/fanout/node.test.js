@@ -103,7 +103,7 @@ test('build+list with no connection emits one retargeted message per member on o
   assert.match(node._status.text, /preview/);
 });
 
-test('a payload that is not a built message craters through done(err) — no build-tier guardrail', async () => {
+test('a payload that is not a built message reports a failed aggregate', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
@@ -115,8 +115,9 @@ test('a payload that is not a built message craters through done(err) — no bui
     () => null,
     (e) => e
   );
-  assert.ok(err, 'a malformed payload craters to done(err)');
+  assert.equal(err, null);
   assert.equal(sent[0], null);
+  assert.equal(sent[1].success, false);
   assert.equal(connection.sends.length, 0);
 });
 

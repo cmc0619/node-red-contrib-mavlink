@@ -54,23 +54,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // Connection is optional — needed for Send tier.
     const connectionNode = RED.nodes.getNode(config.connection);
 
-    // The operator's tier, as configured. A missing Connection does not mean
-    // they chose Build — silently rewriting a chosen Send into a Build emits a
-    // constructed message on output 0 and reports success for something that
-    // was never transmitted, which is the degrade §9 forbids everywhere else.
-    // A Send with no Connection is a misconfiguration; it fails loud per
-    // message. Membership is judged per-run (§14 selection-typo
-    // cluster, the Move/Mission shape): `tier === 'build'` was the only
-    // gate, so an unknown token — a typo'd hand-edit of 'build' included —
-    // fell through to the Send side and put a real frame on the wire the
-    // operator asked only to construct. Blank throws too: the editor's select
-    // has no blank option. Known-ness is computed once here because the
-    // repeat timer must also read it: refusing per-run stops the wire, but an
-    // autonomous tick against a dead tier would flood output 1 with the
-    // refusal at the configured rate (Gitar, #310) — the exact behavior the
-    // timer's messageMeta guard already promises to avoid.
     const tier = config.tier;
-    const tierKnown = tier === 'build' || tier === 'send';
 
     // No `|| 'HEARTBEAT'`: an absent name leaves messageMeta null, which
     // fails loud on input. Building a
@@ -91,17 +75,11 @@ module.exports = function registerMavlinkBuild(RED) {
     let rateWindowStart = 0;
     let rateWindowCount = 0;
 
-    // Last unknown-key set warned, for per-streak dedup (the Move node's
-    // lastAdvisory pattern): a repeat timer or stream feed re-presenting the
-    // same typo would spam the debug sidebar, and noise gets ignored.
-    let lastWarnedKeys = null;
-
     // Resolve the dialect bundle per the role × tier matrix (§6).
     //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
     //   Build + '__vehicle' → vehicle node's bundle.
     //   Wire tier → the connection's bound profile node's bundle (custom-safe).
-    // Null when any rung fails to resolve — refused per message.
-    /** @type {import('../lib/metadata').DialectBundle|null} */
+    /** @type {import('../lib/metadata').DialectBundle} */
     let bundle;
     if (tier === 'build') {
       if (config.dialect === '__vehicle') {
@@ -113,7 +91,7 @@ module.exports = function registerMavlinkBuild(RED) {
     } else {
       bundle = dialectFromConnection(RED, connectionNode);
     }
-    const messageMeta = bundle ? bundle.messages[messageName] : null;
+    const messageMeta = bundle.messages[messageName];
 
     /**
      * Core action: merge fields, encode, and emit based on the tier.
@@ -147,53 +125,9 @@ module.exports = function registerMavlinkBuild(RED) {
         return false;
       }
 
-      // A tier the `tier` select cannot save (RED.mavlink.oneOf,
-      // mavlink-build.html) matches neither arm below, so nothing is emitted
-      // and nothing is sent — but a triggering input still completes: a
-      // message left hanging is worse than one that did nothing (same rule
-      // as mission/command/param). `tierKnown` gates the repeat timer for
-      // the same reason: an unresolved tier must not arm a do-nothing loop.
-      if (!tierKnown) {
-        if (done) done();
-        return false;
-      }
-
-      if (!messageMeta) {
-        return failRun(new Error('dialect or message unresolved — fix the node config and redeploy'));
-      }
-
       // Merge config defaults with any per-message overrides from the trigger.
-      const overrides =
-        triggerMsg &&
-        triggerMsg.payload !== null &&
-        typeof triggerMsg.payload === 'object' &&
-        !Array.isArray(triggerMsg.payload)
-          ? triggerMsg.payload
-          : {};
+      const overrides = triggerMsg ? triggerMsg.payload : {};
       const rawFields = { ...configFields, ...overrides };
-
-      // Advisory, not refusal (#262): encodeMessage walks the dialect's field
-      // list, so a key it does not name is silently dropped — which hid typos
-      // (a misspelled field built a message missing it and reported success).
-      // Refusing would be wrong too: dialect lag is a real scenario — a flow
-      // written against a newer dialect than the one deployed should still
-      // build what it can. rawFields carries field values only (band, target
-      // and identityId ride the msg, not the payload), so every unknown key
-      // is worth naming.
-      const known = new Set(messageMeta.fields.map((f) => f.name));
-      const unknown = Object.keys(rawFields).filter((key) => !known.has(key));
-      if (unknown.length > 0) {
-        // Sorted, because the dedup key must identify the *set*: Object.keys
-        // follows insertion order, so the same two misspellings arriving in
-        // the other order would read as a new set and warn again.
-        const warnedKeys = unknown.slice().sort().join(', ');
-        if (warnedKeys !== lastWarnedKeys) {
-          node.warn(`mavlink-build: ${messageName} has no field ${warnedKeys} — ignored`);
-        }
-        lastWarnedKeys = warnedKeys;
-      } else {
-        lastWarnedKeys = null;
-      }
 
       // Encode: apply the field codec to produce wire-ready values.
       let encodedFields;
@@ -206,68 +140,54 @@ module.exports = function registerMavlinkBuild(RED) {
       const builtMessage = { name: messageName, fields: encodedFields };
 
       switch (tier) {
-      case 'build': {
-        // Build tier: emit the message on output 0 for downstream processing.
-        const outMsg = triggerMsg ? { ...triggerMsg } : {};
-        outMsg.payload = { message: builtMessage, messageName, tier: 'build' };
+        case 'build': {
+          const outMsg = triggerMsg ? { ...triggerMsg } : {};
+          outMsg.payload = { message: builtMessage, messageName, tier: 'build' };
+          const sr = makeStatusRecord(node.type, {
+            result: 'built',
+            message: messageName,
+            tier: 'build',
+          });
+          applyActionStatus(node, 'ok', messageName);
+          node.send([outMsg, sr]);
+          return true;
+        }
+        case 'send': {
+          const band = triggerMsg?.band === undefined ? defaultBand : triggerMsg.band;
+          const target = triggerMsg?.target;
+          const identityId = triggerMsg?.identityId;
+          try {
+            connectionNode.send(builtMessage, { band, target, identityId });
+          } catch (err) {
+            return failRun(new Error(`send: ${err.message}`), { tier: 'send', band });
+          }
 
-        const sr = makeStatusRecord(node.type, {
-          result: 'built',
-          message: messageName,
-          tier: 'build',
-        });
-        applyActionStatus(node, 'ok', messageName);
-        node.send([outMsg, sr]);
-        return true;
-      }
+          const now = Date.now();
+          rateWindowCount += 1;
+          if (now - rateWindowStart >= 1000) {
+            rateWindowStart = now;
+            rateWindowCount = 1;
+          }
+
+          const outMsg = triggerMsg
+            ? { ...triggerMsg }
+            : { payload: { result: 'sent', messageName, tier: 'send' } };
+          const sr = makeStatusRecord(node.type, {
+            result: 'sent',
+            message: messageName,
+            tier: 'send',
+            band,
+          });
+          applyActionStatus(node, 'ok', repeatMs > 0
+            ? `${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`
+            : messageName);
+          node.send([outMsg, sr]);
+          return true;
+        }
         default: break; // This space intentionally left blank (§5)
       }
-
-      // Send tier: enqueue on the connection queue. msg.band overrides the
-      // config default by presence and rides as given — msg is trusted (§0);
-      // a band no queue case answers to selects no behavior at the switch (§5).
-      const band = triggerMsg?.band ?? defaultBand;
-      const target = (triggerMsg && triggerMsg.target) || null;
-      const identityId = (triggerMsg && triggerMsg.identityId) || undefined;
-
-      // The queue send can throw synchronously (full Control band, unknown
-      // identity, disabled connection). A Send with no Connection never gets
-      // here — its dialect resolves *through* the Connection, so it was
-      // already refused above as unresolved config.
-      try {
-        connectionNode.send(builtMessage, { band, target, identityId });
-      } catch (err) {
-        return failRun(new Error(`send: ${err.message}`), { tier: 'send', band });
-      }
-
-      // Track achieved rate.
-      const now = Date.now();
-      rateWindowCount += 1;
-      if (now - rateWindowStart >= 1000) {
-        rateWindowStart = now;
-        rateWindowCount = 1;
-      }
-
-      // §9: on the Send tier, output 0 is a pass-through trigger, not a Build
-      // envelope — a downstream node advances on success and never inspects the
-      // payload. Preserve the inbound msg unchanged; a timer-fired send has no
-      // upstream trigger, so it emits the fire-and-forget result instead.
-      const outMsg = triggerMsg
-        ? { ...triggerMsg }
-        : { payload: { result: 'sent', messageName, tier: 'send' } };
-
-      const sr = makeStatusRecord(node.type, {
-        result: 'sent',
-        message: messageName,
-        tier: 'send',
-        band,
-      });
-
-      applyActionStatus(node, 'ok', repeatMs > 0
-        ? `${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`
-        : messageName);
-      node.send([outMsg, sr]);
-      return true;
+      if (done) done();
+      return false;
     }
 
     // Input handler.
@@ -282,10 +202,7 @@ module.exports = function registerMavlinkBuild(RED) {
       if (execute(msg, done)) done();
     });
 
-    // Repeat timer. Never armed for a config that cannot run — an autonomous
-    // tick against a dead config would flood output 1 and every Catch flow at
-    // the configured rate with the refusal the input handler already reports. Manual triggers still fail loudly through the input handler.
-    if (repeatMs > 0 && messageMeta && tierKnown) {
+    if (repeatMs > 0) {
       rateWindowStart = Date.now();
       repeatTimer = setInterval(() => {
         execute(null);

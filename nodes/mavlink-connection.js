@@ -62,16 +62,43 @@ module.exports = function registerMavlinkConnection(RED) {
 
     node.disabled = !!config.disabled;
 
+    const vehicleNode = RED.nodes.getNode(config.vehicle);
+    const defaults = vehicleNode.getDefaults();
+
+    // The addressing/firmware descriptor both vehicle shapes below derive
+    // from — built once so the public snapshot and the runtime config cannot
+    // drift apart.
+    const vehicleDescriptor = {
+      targetSystem: defaults.defaultTargetSystem,
+      targetComponent: defaults.defaultTargetComponent,
+      firmware: defaults.firmware,
+    };
+
+    // Public frozen snapshot so palette nodes can inherit target defaults from
+    // the Vehicle Profile without reaching into private runtime fields. `id` is
+    // the profile node id: a node that needs the compiled bundle resolves the
+    // profile node and calls getDialect() — never loadBundled(name), which only
+    // knows bundled dialects and would break custom XML profiles.
+    node.vehicle = Object.freeze({
+      id: config.vehicle,
+      ...vehicleDescriptor,
+      vehicleFamily: defaults.vehicleFamily,
+    });
+
     // Disabled means no runtime is constructed at all: no dialing, listening,
-    // or timers (§7). Show the grey disabled badge and stop.
+    // or timers (§7) — the dialect compile above waits too. Show the grey
+    // disabled badge and stop.
     //
     // The read-side stubs still answer, because a disabled Connection is a
     // valid choice, not a broken reference. An empty peer table (no timers —
     // sweeping is driven by the runtime, which does not exist here) lets
     // action nodes report "no members" instead of "invalid config", which is
     // the honest answer: the flow is configured correctly and the link is
-    // switched off. `send` refuses instead — swallowing a frame would let the
-    // sender report "sent" over a link that moved nothing (§2).
+    // switched off. The vehicle snapshot above is part of that read side —
+    // wire-tier nodes resolve their dialect through it at deploy, so the flow
+    // loads and fails at send time. `send` refuses instead — swallowing a
+    // frame would let the sender report "sent" over a link that moved
+    // nothing (§2).
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
@@ -95,29 +122,7 @@ module.exports = function registerMavlinkConnection(RED) {
       return;
     }
 
-    const vehicleNode = RED.nodes.getNode(config.vehicle);
     const bundle = vehicleNode.getDialect();
-    const defaults = vehicleNode.getDefaults();
-
-    // The addressing/firmware descriptor both vehicle shapes below derive
-    // from — built once so the public snapshot and the runtime config cannot
-    // drift apart.
-    const vehicleDescriptor = {
-      targetSystem: defaults.defaultTargetSystem,
-      targetComponent: defaults.defaultTargetComponent,
-      firmware: defaults.firmware,
-    };
-
-    // Public frozen snapshot so palette nodes can inherit target defaults from
-    // the Vehicle Profile without reaching into private runtime fields. `id` is
-    // the profile node id: a node that needs the compiled bundle resolves the
-    // profile node and calls getDialect() — never loadBundled(name), which only
-    // knows bundled dialects and would break custom XML profiles.
-    node.vehicle = Object.freeze({
-      id: config.vehicle,
-      ...vehicleDescriptor,
-      vehicleFamily: defaults.vehicleFamily,
-    });
 
     // localIdentity is a required reference and additionalIdentities is the
     // editor's normalized list (oneditsave always writes it) — used as saved.
@@ -229,7 +234,7 @@ module.exports.applyStatus = applyStatus;
  */
 function identitySnapshot(idNode, defaults, bundle, connectionId) {
   if (idNode.derivesSysidFromVehicle) {
-    idNode.bindVehicleSysid(defaults.defaultTargetSystem, idNode.describe(), connectionId);
+    idNode.bindVehicleSysid(defaults.defaultTargetSystem, connectionId);
   }
   const wire = idNode.getIdentity();
   const hb = idNode.getHeartbeatFields();
@@ -261,11 +266,8 @@ function buildTransportConfig(config) {
     mode: config.mode,
     bindAddress: config.bindHost,
     bindPort: Number(config.bindPort),
-    // A blank host rides as '' — every transport consumer tests these fields
-    // for truthiness, so '' already reads as absent. The port keeps its
-    // ternary: Number('') is 0, a value nobody chose.
     remoteAddress: config.remoteHost,
-    remotePort: config.remotePort ? Number(config.remotePort) : undefined,
+    remotePort: Number(config.remotePort),
   });
   switch (config.mode) {
     case 'serial':
@@ -281,7 +283,7 @@ function buildTransportConfig(config) {
         ...socket(),
         // UDP only — TCP has no broadcast, and the editor hides the row for it.
         broadcastAddress: config.broadcastHost,
-        broadcastPort: config.broadcastPort ? Number(config.broadcastPort) : undefined,
+        broadcastPort: Number(config.broadcastPort),
       };
     default: break; // This space intentionally left blank (§5)
   }
@@ -396,14 +398,9 @@ function rejectedSurface(reason, hasKey) {
  * @param {string} enumName
  * @param {string} entryName
  * @returns {number}
- * @throws {Error} when the enum or entry is not in the dialect
  */
 function enumValue(bundle, enumName, entryName) {
-  const enumDef = bundle.enums[enumName];
-  const entry = enumDef && enumDef.entries.find((e) => e.name === entryName);
-  // eslint-disable-next-line no-restricted-syntax -- §0 rule 1: the compiled dialect bundle does not carry this enum entry
-  if (!entry) throw new Error(`${entryName} is not defined in enum ${enumName}`);
-  return Number(entry.value);
+  return Number(bundle.enums[enumName].entries.find((entry) => entry.name === entryName).value);
 }
 
 /**

@@ -20,10 +20,8 @@
  */
 
 const {
-  rolePreset,
+  ROLE_PRESETS,
   heartbeatFields,
-  bindVehicleSysid,
-  releaseVehicleSysid,
 } = require('../lib/identity');
 
 module.exports = function registerMavlinkLocalIdentity(RED) {
@@ -34,12 +32,8 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // role is editor-guaranteed: a `required` select of the ROLE_PRESETS keys
-    // (mavlink-local-identity.html), so the red ring is the protector and the
-    // runtime trusts the saved member (§6). A hand-edited non-member craters at
-    // the preset read below, at construction.
     node.role = config.role;
-    const preset = rolePreset(node.role);
+    const preset = ROLE_PRESETS[node.role];
 
     /**
      * Whether this identity derives its source sysid from the bound vehicle
@@ -48,7 +42,7 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
      */
     node.derivesSysidFromVehicle = preset.derivesSysidFromVehicle;
 
-    /** @type {Map<string, {sysid: number, source: string}>} keyed by connection id */
+    /** @type {Map<string, number>} keyed by connection id */
     node._vehicleSysidClaims = new Map();
 
     /** @type {number|null} null until a Connection derives it (companion only) */
@@ -80,11 +74,25 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
      * Companion only; throws on conflicting derivations.
      *
      * @param {number} sysid
-     * @param {string} source   human-readable connection label
      * @param {string} sourceId connection node id
      */
-    node.bindVehicleSysid = (sysid, source, sourceId) => {
-      node._vehicleSysid = bindVehicleSysid(node._vehicleSysidClaims, sysid, source, sourceId);
+    node.bindVehicleSysid = (sysid, sourceId) => {
+      // getIdentity() answers connection-agnostically at action time, so two
+      // Connections deriving different sysids would retarget one link's
+      // actions to the other's aircraft. Cross-node state no single editor
+      // dialog can see — a companion belongs to one airframe (§14.136).
+      for (const [id, claimed] of node._vehicleSysidClaims) {
+        if (id !== sourceId && claimed !== sysid) {
+          // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: two Connections deriving different sysids for one companion is cross-node state no single editor dialog can see
+          throw new Error(
+            `Companion identity sysid conflict: one Connection derives sysid ${claimed}` +
+              ` but another derives sysid ${sysid}.` +
+              ' A companion belongs to one airframe — use the GCS role for multi-vehicle runtimes.'
+          );
+        }
+      }
+      node._vehicleSysidClaims.set(sourceId, sysid);
+      node._vehicleSysid = sysid;
     };
 
     /**
@@ -93,29 +101,20 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
      * @param {string} sourceId  connection node id
      */
     node.releaseVehicleSysid = (sourceId) => {
-      node._vehicleSysid = releaseVehicleSysid(node._vehicleSysidClaims, sourceId);
+      node._vehicleSysidClaims.delete(sourceId);
+      const next = node._vehicleSysidClaims.values().next();
+      node._vehicleSysid = next.done ? null : next.value;
     };
 
     /**
-     * The wire identity to stamp into outbound frame headers.
+     * The wire identity to stamp into outbound frame headers. A companion no
+     * Connection has bound yet carries a null sysid.
      *
-     * @returns {{sysid: number, compid: number}}
-     * @throws {Error} for an unbound companion (no Connection has derived sysid yet)
+     * @returns {{sysid: number|null, compid: number}}
      */
-    node.getIdentity = () => {
-      if (node.derivesSysidFromVehicle) {
-        if (node._vehicleSysid === null) {
-          // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: no Connection has resolved the vehicle sysid yet at call time
-          throw new Error(
-            `Local Identity '${config.name || node.id}' is an onboard companion whose` +
-              ' source SysID comes from the Vehicle Profile it is bound to,' +
-              ' but no Connection has resolved one yet.'
-          );
-        }
-        return { sysid: node._vehicleSysid, compid: node.sourceComponentId };
-      }
-      return { sysid: node.sourceSystemId, compid: node.sourceComponentId };
-    };
+    node.getIdentity = () => node.derivesSysidFromVehicle
+      ? { sysid: node._vehicleSysid, compid: node.sourceComponentId }
+      : { sysid: node.sourceSystemId, compid: node.sourceComponentId };
 
     /**
      * HEARTBEAT field values for this identity (DESIGN.md §7 Heartbeat).
@@ -126,19 +125,6 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     node.getHeartbeatFields = () =>
       heartbeatFields({ heartbeatType: node.heartbeatType, heartbeatAutopilot: node.heartbeatAutopilot });
 
-    /**
-     * Human-readable label for log messages and status: "name (sysid/compid)".
-     *
-     * @returns {string}
-     */
-    node.describe = () => {
-      const sysid = node.derivesSysidFromVehicle
-        ? node._vehicleSysid === null
-          ? '<vehicle>'
-          : node._vehicleSysid
-        : node.sourceSystemId;
-      return `${config.name || node.id} (${sysid}/${node.sourceComponentId})`;
-    };
   }
 
   RED.nodes.registerType('mavlink-local-identity', MavlinkLocalIdentityNode);

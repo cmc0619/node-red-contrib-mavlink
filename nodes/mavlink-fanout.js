@@ -26,10 +26,10 @@ module.exports = function registerMavlinkFanout(RED) {
           return;
         }
         const { message, opts } = unwrapPayload(msg.payload);
-        const selection = opts.selection || selectionFrom(config);
+        const selection = opts.selection === undefined ? selectionFrom(config) : opts.selection;
         const selectionMode = selection.mode;
-        const effectiveDelivery = opts.delivery || config.delivery;
-        const listSelected = selectionMode === 'list' || Array.isArray(opts.targets);
+        const effectiveDelivery = opts.delivery === undefined ? config.delivery : opts.delivery;
+        const listSelected = selectionMode === 'list' || opts.targets !== undefined;
 
         let effectiveConnection = connectionNode;
         if (!connectionNode) {
@@ -40,8 +40,8 @@ module.exports = function registerMavlinkFanout(RED) {
               // peer table instead of a live one (§6 Fan-out exception).
               if (listSelected) {
                 effectiveConnection = buildListStub(
-                  Array.isArray(opts.targets)
-                    ? opts.targets.map((t) => (typeof t === 'object' && t !== null ? t.sysid : t))
+                  opts.targets !== undefined
+                    ? opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
                     : selection.sysids
                 );
               }
@@ -63,14 +63,14 @@ module.exports = function registerMavlinkFanout(RED) {
           // Affirmative dispatch (§5): lib/fanout maps only broadcast and
           // sequential — an unknown or blank mode selects no case, so no run
           // starts and the aggregate comes back undefined (handled below).
-          mode: opts.executionMode || config.executionMode,
+          mode: opts.executionMode === undefined ? config.executionMode : opts.executionMode,
           delivery: effectiveDelivery,
           intervalMs: numberOption(opts, config, 'intervalMs'),
           timeoutMs: numberOption(opts, config, 'timeoutMs'),
           maxRetries: numberOption(opts, config, 'maxRetries'),
           concurrency: numberOption(opts, config, 'concurrency'),
           stopOnError: opts.stopOnError !== undefined ? !!opts.stopOnError : !!config.stopOnError,
-          identityId: opts.identityId || config.identity,
+          identityId: opts.identityId === undefined ? config.identity : opts.identityId,
         }));
 
         // Two ways there is nothing to report. A redeploy cancelled us: the
@@ -136,7 +136,7 @@ module.exports = function registerMavlinkFanout(RED) {
  * @returns {{message: object, opts: object}}
  */
 function unwrapPayload(payload) {
-  if (payload && typeof payload === 'object' && payload.message && typeof payload.message === 'object') {
+  if (payload.message !== undefined) {
     const { message, ...opts } = payload;
     return { message, opts };
   }
@@ -267,13 +267,6 @@ function buildListStub(sysids) {
         if (!ids.includes(sysid) || compid !== 1) return undefined;
         return { compid: 1, state: 'active', type: 0, firmware: null, armed: false, autopilot: 0 };
       },
-    },
-    send() {
-      // eslint-disable-next-line no-restricted-syntax -- outside §0: an unreachable-by-design stub — the build-tier list stub has no link to send on
-      throw new Error('mavlink-fanout: build-mode list stub does not send — output goes to mavlink-out');
-    },
-    subscribe() {
-      return () => {};
     },
   };
 }

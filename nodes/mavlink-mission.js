@@ -97,9 +97,11 @@ module.exports = function registerMavlinkMission(RED) {
       }
 
       const payload = msg.payload ?? {};
-      // Presence fallback (§5): `??`, not `||` — a numeric 0 is MISSION, a
-      // real member the falsy test would silently drop to the config value.
-      const missionTypeKey = payload.missionType ?? config.missionType;
+      // Only an absent override selects the configured value; numeric 0 and
+      // every other explicit value ride unchanged.
+      const missionTypeKey = payload.missionType === undefined
+        ? config.missionType
+        : payload.missionType;
 
       const { target } = resolveDeliveryContext(RED, {
         delivery,
@@ -123,12 +125,12 @@ module.exports = function registerMavlinkMission(RED) {
       const maxRetries = numberOr(config.maxRetries, undefined);
 
       // Upload item source: msg.payload.items overrides configured items —
-      // presence fallback (§5): `??`, not a truthy test. Family and broadcast
+      // presence fallback (§5), not a truthy test. Family and broadcast
       // are editor red rings. An explicit payload `[]` rides — COUNT 0 is the
       // wire erase. An omitted items field over blank config does not become
       // `[]`.
       const uploadItems = operation === OPERATION.UPLOAD
-        ? payload.items ?? configItems
+        ? payload.items === undefined ? configItems : payload.items
         : [];
 
       // Affirmative tier dispatch (§5): each tier is a whole arm, so a
@@ -176,7 +178,7 @@ module.exports = function registerMavlinkMission(RED) {
             connNode.send(message, {
               band: BAND.BULK,
               target,
-              identityId: payload.identityId || config.identity,
+              identityId: payload.identityId === undefined ? config.identity : payload.identityId,
             }),
           subscribe: (filter, handler) => connNode.subscribe(filter, handler),
           target,

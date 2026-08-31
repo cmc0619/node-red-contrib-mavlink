@@ -200,7 +200,7 @@ function resolveAnchor(config, payload, peerTable) {
     : isBlank(config.headingDeg) ? NaN : Number(config.headingDeg);
 
   // A payload anchor overrides the configured mode outright.
-  if (payload.anchor) {
+  if (payload.anchor !== undefined) {
     return { anchor: payload.anchor, headingDeg: heading };
   }
 
@@ -300,4 +300,3 @@ function resolvePitch(config, payload) {
   // Editor default is 0 — trust config.pitchDeg (Number only, no second default).
   return Number(config.pitchDeg);
 }
-

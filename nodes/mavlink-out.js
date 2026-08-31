@@ -63,8 +63,8 @@ module.exports = function registerMavlinkOut(RED) {
       // unknown identity — exits through one terminal record plus done(err),
       // so the chain halts and a Catch node hears about it (§2, §9).
       try {
-        // No shape guardrail: an unrecognised payload resolves to null and
-        // craters in connectionNode.send, whose serialize-validate throws
+        // No shape guardrail: an unrecognised payload rides as given and
+        // craters in connectionNode.send, whose serializer throws
         // synchronously on a non-message before anything is enqueued
         // (lib/connection/runtime.js send()) — the same crater as any shape the
         // wire cannot carry, no curated "expected { name, fields }" hand-holding.
@@ -72,11 +72,11 @@ module.exports = function registerMavlinkOut(RED) {
         // msg.band overrides the config default by presence and rides as
         // given — msg is trusted (§0); a band no queue case answers to
         // selects no behavior at the switch (§5).
-        const band = msg.band ?? defaultBand;
+        const band = msg.band === undefined ? defaultBand : msg.band;
         connectionNode.send(message, {
           band,
-          target: msg.target || null,
-          identityId: msg.identityId || undefined,
+          target: msg.target,
+          identityId: msg.identityId,
         });
         applyActionStatus(node, 'ok', message.name);
         send([msg, makeStatusRecord(node.type, {
@@ -96,42 +96,13 @@ module.exports = function registerMavlinkOut(RED) {
 
 /**
  * Extract the `{ name, fields }` message from the various accepted message
- * shapes. Returns null when the shape is not recognised.
+ * shapes.
  *
  * @param {object} msg  the inbound Node-RED message
- * @returns {{ name: string, fields: object }|null}
+ * @returns {{ name: string, fields: object }}
  */
 function resolveMessage(msg) {
-  const payload = msg && msg.payload;
-
-  if (payload && typeof payload === 'object') {
-    // Build-tier envelope: { message: { name, fields }, ... }
-    if (
-      payload.message &&
-      typeof payload.message === 'object' &&
-      typeof payload.message.name === 'string'
-    ) {
-      return payload.message;
-    }
-
-    // Decoded-shape: { name, fields }
-    if (typeof payload.name === 'string') {
-      return payload;
-    }
-  }
-
-  // mavlink-in shape: the message name is in msg.topic and the decoded field
-  // values are in msg.payload. Recognising this lets a direct In → Out flow
-  // forward traffic across connections without a Function node in between.
-  if (
-    typeof msg.topic === 'string' &&
-    msg.topic !== '' &&
-    payload &&
-    typeof payload === 'object' &&
-    !Array.isArray(payload)
-  ) {
-    return { name: msg.topic, fields: payload };
-  }
-
-  return null;
+  if (msg.payload.message !== undefined) return msg.payload.message;
+  if (msg.topic !== undefined) return { name: msg.topic, fields: msg.payload };
+  return msg.payload;
 }

@@ -112,20 +112,19 @@ test('classifyMessage infers confirmation and band from the message name', () =>
   );
 });
 
-test('a payload that is not a built message craters — no build-tier guardrail', () => {
+test('a malformed message is never reported successful', async () => {
   const connection = connectionStub([peer(1)]);
-  // No shape guard: a malformed payload reads `.name`/`.fields` off a non-object
-  // or a message with no fields and craters (TypeError), rather than a curated
-  // "wire a Build node" refusal.
-  for (const bad of [null, 42, 'arm', {}, { name: 'COMMAND_LONG' }]) {
-    assert.throws(
-      () => executeFanout({ mode: 'sequential', selection: { mode: 'all' }, connection, message: bad, delivery: 'send' })
-    );
-  }
+  assert.throws(() => executeFanout({
+    mode: 'sequential', selection: { mode: 'all' }, connection, message: null, delivery: 'send',
+  }));
+  const result = await executeFanout({
+    mode: 'sequential', selection: { mode: 'all' }, connection, message: {}, delivery: 'send',
+  });
+  assert.equal(result.success, false);
   assert.equal(connection.sends.length, 0);
 });
 
-test('mission transfer steps and PARAM_REQUEST_LIST are refused — not single-message actions (§10)', async () => {
+test('mission and parameter messages replicate like any other built message', async () => {
   const connection = connectionStub([peer(1)]);
 
   for (const name of [
@@ -135,13 +134,12 @@ test('mission transfer steps and PARAM_REQUEST_LIST are refused — not single-m
     'MISSION_ACK',
     'MISSION_WRITE_PARTIAL_LIST',
   ]) {
-    const refused = await executeFanout({ mode: 'sequential', selection: { mode: 'all' },
+    const result = await executeFanout({ mode: 'sequential', selection: { mode: 'all' },
       connection,
       message: { name, fields: { target_system: 1, target_component: 1, count: 4 } },
       delivery: 'send',
     });
-    assert.equal(refused.result, 'refused', `${name} must refuse`);
-    assert.match(refused.detail, /mission transfer/);
+    assert.equal(result.success, true, `${name} must ride`);
   }
 
   const paramList = await executeFanout({ mode: 'sequential', selection: { mode: 'all' },
@@ -149,9 +147,8 @@ test('mission transfer steps and PARAM_REQUEST_LIST are refused — not single-m
     message: { name: 'PARAM_REQUEST_LIST', fields: { target_system: 1, target_component: 1 } },
     delivery: 'send',
   });
-  assert.equal(paramList.result, 'refused');
-  assert.match(paramList.detail, /bulk transfer/);
-  assert.equal(connection.sends.length, 0);
+  assert.equal(paramList.success, true);
+  assert.equal(connection.sends.length, 6);
 });
 
 test('single-shot MISSION_* commands replicate — the family name is not the rule (§10)', async () => {
@@ -201,15 +198,15 @@ test('every offboard setpoint rides the streaming band, not just the position pa
   }
 });
 
-test('a message with no target_system field cannot be retargeted and is refused', async () => {
+test('fan-out stamps target_system on a message that did not carry one', async () => {
   const connection = connectionStub([peer(1)]);
   const result = await executeFanout({ mode: 'sequential', selection: { mode: 'all' },
     connection,
     message: { name: 'HEARTBEAT', fields: { type: 6, autopilot: 8 } },
     delivery: 'send',
   });
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /target_system/);
+  assert.equal(result.success, true);
+  assert.equal(connection.sends[0].message.fields.target_system, 1);
 });
 
 // ── Replication mechanics ─────────────────────────────────────────────────────
@@ -373,7 +370,7 @@ test('broadcast aggregate warns about mixed firmware for uniform commands', asyn
   assert.match(result.warnings.join('\n'), /mixed firmware/);
 });
 
-test('broadcast refuses a filtered or explicit-list selection and sends nothing (§10)', async () => {
+test('broadcast reports the whole-link audience regardless of a subset selection', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
   const list = await executeFanout({
@@ -391,12 +388,11 @@ test('broadcast refuses a filtered or explicit-list selection and sends nothing 
     selection: { mode: 'filter', filter: { firmware: 'px4' } },
   });
 
-  assert.equal(list.result, 'refused');
-  assert.match(list.detail, /broadcast/);
-  assert.match(list.detail, /list/);
-  assert.equal(filter.result, 'refused');
-  assert.match(filter.detail, /filter/);
-  assert.equal(connection.sends.length, 0, 'a refused broadcast blasts nobody');
+  assert.equal(list.success, true);
+  assert.equal(list.count, 2);
+  assert.equal(filter.success, true);
+  assert.equal(filter.count, 2);
+  assert.equal(connection.sends.length, 2);
 });
 
 test('broadcast still allows an explicit all-vehicles selection', async () => {
@@ -415,7 +411,7 @@ test('broadcast still allows an explicit all-vehicles selection', async () => {
   assert.equal(connection.sends[0].message.fields.target_system, 0);
 });
 
-test('broadcast refuses when stale peers exist even under all-vehicles selection (§10)', async () => {
+test('broadcast reports stale peers because they still receive the packet', async () => {
   const connection = connectionStub([
     peer(1),
     peer(2, { state: 'stale' }),
@@ -429,12 +425,12 @@ test('broadcast refuses when stale peers exist even under all-vehicles selection
     selection: { mode: 'all' },
   });
 
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /stale|expired/);
-  assert.equal(connection.sends.length, 0);
+  assert.equal(result.success, true);
+  assert.equal(result.count, 2);
+  assert.equal(connection.sends.length, 1);
 });
 
-test('PARAM_SET is sequential-only — a broadcast set makes the echoes a storm (§10)', async () => {
+test('PARAM_SET broadcast rides when the flow asks for it', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
   const result = await executeFanout({ selection: { mode: 'all' },
@@ -444,9 +440,8 @@ test('PARAM_SET is sequential-only — a broadcast set makes the echoes a storm 
     delivery: 'send',
   });
 
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /sequential/);
-  assert.equal(connection.sends.length, 0);
+  assert.equal(result.success, true);
+  assert.equal(connection.sends.length, 1);
 });
 
 test('DO_FLIGHTTERMINATION fans out without a confirm gate', async () => {
@@ -663,7 +658,7 @@ test('a patch cannot cross-address another vehicle — target_system is forced b
   assert.equal(connection.sends[0].message.fields.target_system, 1);
 });
 
-test('broadcast refuses targets — one packet carries one field set (§10)', async () => {
+test('broadcast ignores per-member patches and carries the base field set', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
   const result = await executeFanout({ selection: { mode: 'all' },
@@ -674,14 +669,12 @@ test('broadcast refuses targets — one packet carries one field set (§10)', as
     delivery: 'send',
   });
 
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /uniform/);
-  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+  assert.equal(result.success, true);
+  assert.equal(connection.sends.length, 1);
+  assert.notEqual(connection.sends[0].message.fields.param5, -35);
 });
 
-test('duplicate sysids in targets refuse — last-wins merging would silently drop a patch (§10, #265)', async () => {
-  // The override map merges last-wins, so a duplicated entry shrank the fleet
-  // and dropped the first patch — an operator error reported as success.
+test('duplicate target patches use the last value supplied', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
   const result = await executeFanout({ selection: { mode: 'all' },
@@ -693,16 +686,12 @@ test('duplicate sysids in targets refuse — last-wins merging would silently dr
     intervalMs: 0,
   });
 
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /sysid 1 more than once/);
-  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+  assert.equal(result.success, true);
+  assert.equal(connection.sends.length, 2);
+  assert.equal(connection.sends.find((send) => send.options.target.sysid === 1).message.fields.param5, 47.6);
 });
 
-test('a targets patch may not rewrite `command` — the safety gate runs once, on the base', async () => {
-  // The run is classified and gated from the base message before any patch is
-  // applied, so a patch rewriting `command` would send an operation that was
-  // never gated: `{sysid, command: 185}` under a base of ARM put Flight
-  // Termination on the wire with no confirmation.
+test('a targets patch may rewrite command like any other wire field', async () => {
   const connection = connectionStub([peer(1)]);
 
   const result = await executeFanout({ selection: { mode: 'all' },
@@ -714,9 +703,8 @@ test('a targets patch may not rewrite `command` — the safety gate runs once, o
     intervalMs: 0,
   });
 
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /may not patch `command`/);
-  assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
+  assert.equal(result.success, true);
+  assert.equal(connection.sends[0].message.fields.command, 185);
 });
 
 // ── Config member metre offsets (#163) ────────────────────────────────────────
@@ -837,29 +825,26 @@ test('member metre offsets on SET_POSITION_TARGET_LOCAL_NED apply directly with 
   assert.equal(fields.z, -5, 'NED z is down-positive: up subtracts');
 });
 
-test('member offsets on a message with no position surface refuse, naming message and member', async () => {
+test('member offsets on a message with no position surface crater', () => {
   const connection = connectionStub([peer(1)]);
 
-  const result = await executeFanout({ selection: { mode: 'all' },
+  assert.throws(() => executeFanout({ selection: { mode: 'all' },
     connection,
     message: { name: 'SET_MODE', fields: { target_system: 1, base_mode: 1, custom_mode: 4 } },
     members: [{ sysid: 1, north: 10 }],
     mode: 'sequential',
     delivery: 'send',
-  });
-
-  assert.equal(result.result, 'refused');
-  assert.match(result.detail, /member 1/);
-  assert.match(result.detail, /SET_MODE/);
+  }));
   assert.equal(connection.sends.length, 0, 'nothing reaches the wire');
 });
 
-test('a malformed targets shape is refused before any send', async () => {
+test('malformed target lists crater or select no member', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
-  // A non-array, a broadcast sysid, an out-of-range sysid, and an entry with
-  // no sysid at all: each would silently select or patch the wrong vehicles.
-  for (const bad of ['1,2', [0], [256], [{ param5: -35 }]]) {
+  assert.throws(() => executeFanout({ selection: { mode: 'all' },
+    connection, message: builtCommand(), targets: '1,2', mode: 'sequential', delivery: 'send',
+  }));
+  for (const bad of [[0], [256], [{ param5: -35 }]]) {
     const result = await executeFanout({ selection: { mode: 'all' },
       connection,
       message: builtCommand(),
@@ -868,8 +853,7 @@ test('a malformed targets shape is refused before any send', async () => {
       delivery: 'send',
     });
 
-    assert.equal(result.result, 'refused', `${JSON.stringify(bad)} must refuse`);
-    assert.match(result.detail, /targets/);
+    assert.equal(result.result, 'empty');
   }
   assert.equal(connection.sends.length, 0);
 });

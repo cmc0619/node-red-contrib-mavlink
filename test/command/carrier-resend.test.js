@@ -15,6 +15,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { MAV_RESULT } = require('../../lib/command');
+const { loadBundled } = require('../../lib/metadata');
+
+const COMMON_BUNDLE = loadBundled('common');
 
 function runInput(node, msg, done = () => {}) {
   return new Promise((resolve) => {
@@ -96,7 +99,12 @@ function redStub(nodesById) {
  */
 function deploy(ackResults, config = {}, extraNodes = {}) {
   const conn = scriptedConn(ackResults);
-  const RED = redStub({ conn, ...extraNodes });
+  conn.vehicle = Object.freeze({ id: 'veh' });
+  const RED = redStub({
+    conn,
+    veh: { getDialect: () => COMMON_BUNDLE },
+    ...extraNodes,
+  });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
   const node = new Node({
@@ -273,12 +281,6 @@ test('msg.mavFrame selects a non-global frame so INT x/y scale by 1e4, not 1e7',
 });
 
 // ── Ask-the-XML kinds and the NaN refusal at node level (§9) ─────────────────
-
-const { loadBundled } = require('../../lib/metadata');
-
-// Compiled once like a real Vehicle Profile node — getDialect() returns a
-// held bundle, it does not re-parse per call.
-const COMMON_BUNDLE = loadBundled('common');
 
 test('INT + non-location command: XML kinds keep param5 raw on the wire', async () => {
   // Production contract: the connection's vehicle snapshot exposes only the

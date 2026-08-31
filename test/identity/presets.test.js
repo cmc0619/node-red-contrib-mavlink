@@ -7,7 +7,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { ROLE_PRESETS, rolePreset } = require('../../lib/identity');
+const { ROLE_PRESETS } = require('../../lib/identity');
 
 /* ---------- ROLE_PRESETS shape ---------- */
 
@@ -37,12 +37,4 @@ test('companion preset: sysid null, compid 191, derives from vehicle', () => {
 
 test('custom preset: derivesSysidFromVehicle false', () => {
   assert.equal(ROLE_PRESETS.custom.derivesSysidFromVehicle, false);
-});
-
-/* ---------- rolePreset ---------- */
-
-test('rolePreset returns the correct preset for each known role', () => {
-  assert.equal(rolePreset('gcs'), ROLE_PRESETS.gcs);
-  assert.equal(rolePreset('companion'), ROLE_PRESETS.companion);
-  assert.equal(rolePreset('custom'), ROLE_PRESETS.custom);
 });

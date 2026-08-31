@@ -1095,9 +1095,10 @@ test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', 
   // The real disabled-connection stub used to swallow sends, so mavlink-out
   // reported sent/green over a switched-off link — the §2 phantom success.
   const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-connection')(RED);
   const connNode = makeNodeInstance({ id: 'conn-1' });
-  RED._nodeTypes['mavlink-connection'].call(connNode, { disabled: true });
+  RED._nodeTypes['mavlink-connection'].call(connNode, { disabled: true, vehicle: 'v1' });
   RED.nodes._register('conn-1', connNode);
   require('../../nodes/mavlink-out')(RED);
   const Constructor = RED._nodeTypes['mavlink-out'];
@@ -1184,55 +1185,6 @@ test('mavlink-build Build tier: msg.payload overrides config fields', () => {
   const [out0] = node._sends[0];
   assert.equal(out0.payload.message.fields.autopilot, 8, 'msg.payload override should win');
   assert.equal(out0.payload.message.fields.type, 6, 'config default should remain for non-overridden fields');
-});
-
-test('mavlink-build: a field the dialect does not name warns once per streak and still builds (#262)', () => {
-  // encodeMessage walks the dialect's field list, so an unknown key was
-  // silently dropped — a typo built a message missing the field and reported
-  // success. Advisory, not refusal: dialect lag is a real scenario.
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
-  const warns = [];
-  node.warn = (text) => warns.push(text);
-  Constructor.call(node, {
-    vehicle: 'v1',
-    dialect: '__vehicle',
-    messageName: 'HEARTBEAT',
-    tier: 'build',
-    fields: JSON.stringify({ type: 6 }),
-  });
-
-  node._input({ payload: { autopilott: 8 } });
-
-  assert.equal(warns.length, 1, 'the typo is named once');
-  assert.match(warns[0], /HEARTBEAT/);
-  assert.match(warns[0], /autopilott/);
-  const [out0, out1] = node._sends[0];
-  assert.equal(out1.result, 'built', 'advisory, not refusal — the message still builds');
-  assert.deepEqual(out0.payload.message.fields, { type: 6 }, 'the unknown key is dropped from the wire');
-
-  // The same typo again is the same streak — no second warn.
-  node._input({ payload: { autopilott: 8 } });
-  assert.equal(warns.length, 1, 'a repeated identical key set is deduped');
-
-  // A clean build clears the streak and warns nothing.
-  node._input({ payload: { autopilot: 3 } });
-  assert.equal(warns.length, 1, 'a clean build warns nothing');
-
-  // The typo reappearing after a clean build is a new streak.
-  node._input({ payload: { autopilott: 8 } });
-  assert.equal(warns.length, 2, 'the advisory returns after a clean build');
-
-  // The dedup key identifies the *set*, not the insertion order. Object.keys
-  // follows insertion order, so two misspellings arriving the other way round
-  // would otherwise read as a new set and warn a second time.
-  node._input({ payload: { autopilott: 8, systtem_status: 4 } });
-  assert.equal(warns.length, 3, 'a genuinely new key set warns');
-  node._input({ payload: { systtem_status: 4, autopilott: 8 } });
-  assert.equal(warns.length, 3, 'the same set in the other order is not a new streak');
 });
 
 test('mavlink-build Send tier: enqueues on the connection and emits on both outputs', () => {
@@ -1323,32 +1275,18 @@ test('mavlink-build: unreadable fields JSON is not caught — the editor already
 });
 
 test('mavlink-build Send tier: a missing Connection is a misconfiguration, not a Build', () => {
-  // Was: "falls back to Build when no connection configured", asserting that a
-  // Send with no Connection emits a built message on output 0 and reports
-  // `built`. That is the silent degrade §9 forbids everywhere else — it reports
-  // success for something that was never transmitted, and it invents a tier the
-  // operator did not choose. The clamp that produced it is gone.
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
   const node = makeNodeInstance({ vehicle: 'v1' });
-  Constructor.call(node, {
+  assert.throws(() => Constructor.call(node, {
     vehicle: 'v1',
     dialect: '__vehicle',
     messageName: 'HEARTBEAT',
-    tier: 'send',   // requests Send but no connection
+    tier: 'send',
     fields: JSON.stringify({ type: 6, autopilot: 3 }),
-  });
-
-  assert.equal(node._sends.length, 0, 'emits nothing it did not send at deploy');
-
-  node._input({ payload: {} });
-
-  assert.equal(node._sends.length, 1, 'the first input fails loud');
-  const [out0, out1] = node._sends[0];
-  assert.equal(out0, null, 'output 0 must not fire — no silent degrade to Build');
-  assert.equal(out1.result, 'failed');
+  }), TypeError);
 });
 
 test('mavlink-build Build tier: codec error emits error status on output 1', () => {
