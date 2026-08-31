@@ -42,6 +42,7 @@ const {
 } = require('../lib/mission');
 const {
   resolveDeliveryContext,
+  numberOr,
 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkMission(RED) {
@@ -120,7 +121,8 @@ module.exports = function registerMavlinkMission(RED) {
 
       // Blank keeps the library default; the editor's number validator owns
       // the rest (§14: a finite-number check on operator input is a guardrail).
-      const timeoutMs = Number(config.timeout);
+      const timeoutMs = numberOr(config.timeout, undefined);
+      const maxRetries = numberOr(config.maxRetries, undefined);
 
       // Upload item source: msg.payload.items overrides configured items —
       // presence fallback (§5), not a truthy test. Family and broadcast
@@ -183,7 +185,7 @@ module.exports = function registerMavlinkMission(RED) {
           missionType,
           items: uploadItems,
           timeoutMs,
-          maxRetries: 0,
+          maxRetries,
           onProgress: (update) => {
             send([
               null,

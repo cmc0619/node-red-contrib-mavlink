@@ -67,7 +67,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // blesses blank ("no config-level defaults"); the blank branch spells that
     // one state. An absent key is not blank — it craters here, blaming the
     // malformed flow (§0).
-    const configFields = JSON.parse(config.fields);
+    const configFields = config.fields.trim() ? JSON.parse(config.fields) : {};
 
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);

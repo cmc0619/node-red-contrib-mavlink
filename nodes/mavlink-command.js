@@ -36,17 +36,22 @@
 const {
   makeStatusRecord,
   MAV_RESULT,
+  RESULT_NAME,
   getPreset,
   buildParamArray,
   mergeParams,
   AckWaiter,
   cancelSlot,
+  checkCompletion,
   waitForCompletion,
   buildCommandLong,
   buildCommandInt,
   CARRIER,
+  runWithCarrierSwap,
   intCoordKinds,
   resolveFrame,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
 const {
@@ -59,6 +64,7 @@ const {
   resolveDeliveryContext,
   dialectFromVehicleId,
   dialectFromConnection,
+  numberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -119,6 +125,7 @@ module.exports = function registerMavlinkCommand(RED) {
     const commandName =
       preset ? preset.command : `MAV_CMD(${commandId})`;
     const displayName = preset ? preset.name : `#${commandId}`;
+    const noAutoRetry = preset ? preset.noAutoRetry : false;
     const completionKey = preset ? preset.completionKey : null;
 
     const connNode = RED.nodes.getNode(config.connection);
@@ -296,7 +303,8 @@ module.exports = function registerMavlinkCommand(RED) {
 
       // Blank keeps the library default; the editor's number validator owns
       // the rest (§14: a finite-number check on operator input is a guardrail).
-      const timeoutMs = Number(config.timeout);
+      const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
+      const maxRetries = numberOr(config.maxRetries, DEFAULT_MAX_RETRIES);
       // Complete's poll timeout resolves here too — before the send, not in
       // the post-ack continuation where it used to sit: by then the vehicle
       // has already accepted and begun executing the command, so a garbage
@@ -304,7 +312,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // so a cleared value cannot red a Build/Send/Confirm node that never
       // reads it (the same liveOr rule the editors follow).
       const completionTimeoutMs = delivery === 'complete'
-        ? Number(config.completionTimeout)
+        ? numberOr(config.completionTimeout, 60000)
         : null;
 
       const payload = msg.payload === undefined ? {} : msg.payload;
@@ -437,6 +445,8 @@ module.exports = function registerMavlinkCommand(RED) {
             // different GCS on a shared link.
             sourceIds: connNode.resolveSourceIds(identityId),
             timeoutMs,
+            maxRetries: noAutoRetry ? 0 : maxRetries,
+            noAutoRetry,
             // Same badge channel: a takeoff answers IN_PROGRESS for seconds (\u00a79),
             // and without this the operator watches an unchanging wait.
             onInProgress: (progress) => {
@@ -462,8 +472,35 @@ module.exports = function registerMavlinkCommand(RED) {
         // wrong-carrier rule — at most ONE swap per transaction, a second
         // wrong-carrier ack failed loudly — has one owner in lib/command
         // (runWithCarrierSwap), shared with mavlink-payload.
-        const carrier = configuredCarrier;
-        const ackOutcome = await runWaiter(carrier);
+        const swap = await runWithCarrierSwap({
+          carrier: configuredCarrier,
+          run: runWaiter,
+          onSwap: (outcome, _from, to) => {
+            node.warn(
+              `mavlink-command: ${displayName} rejected as ` +
+                `${RESULT_NAME[outcome.resultCode]} — resending as ` +
+                `COMMAND_${to === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
+            );
+            applyActionStatus(node, 'sending', `retry ${to === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}…`);
+          },
+        });
+        const carrier = swap.carrier;
+        const ackOutcome = swap.outcome;
+        if (swap.wrongCarrier) {
+          const rec = makeRecord({
+            result: RESULT_NAME[ackOutcome.resultCode],
+            resultCode: ackOutcome.resultCode,
+            resultParam2: ackOutcome.resultParam2,
+            confirmedBy: 'ack',
+            retries: ackOutcome.retries,
+            elapsed: Date.now() - startMs,
+            detail: swap.wrongCarrier,
+          });
+          applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
+          emitStatus(rec, send, false);
+          done();
+          return;
+        }
 
         // A redeploy cancelled the wait (close() cancels the waiter slot).
         // The node is being torn down, so finish quietly: emitting or raising
@@ -476,6 +513,8 @@ module.exports = function registerMavlinkCommand(RED) {
 
         // From here the outcome may be from either the configured or swapped
         // carrier; note a completed swap in the success/failure detail below.
+        const carrierSwapped = carrier !== configuredCarrier;
+        const carrierLabel = `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'}`;
         // Completion's TAKEOFF datum is frame-aware, but only COMMAND_INT carries
         // a frame on the wire — COMMAND_LONG has none. After a possible INT→LONG
         // carrier swap, the effective carrier decides whether a frame applies:
@@ -485,6 +524,31 @@ module.exports = function registerMavlinkCommand(RED) {
 
         // Timeout: check peer table for completion condition.
         if (ackOutcome.result === 'timeout') {
+          if (completionKey && connNode.peerTable) {
+            const stateCheck = checkCompletion(
+              completionKey,
+              requestedParams,
+              connNode.peerTable,
+              target.sysid,
+              target.compid,
+              completionFrame
+            );
+            if (stateCheck.done) {
+              const rec = makeRecord({
+                result: 'accepted',
+                resultCode: null,
+                confirmedBy: 'state',
+                retries: ackOutcome.retries,
+                elapsed: Date.now() - startMs,
+                detail: `ack timeout but ${stateCheck.detail}`,
+              });
+              applyActionStatus(node, 'ok', `${displayName} accepted`);
+              emitStatus(rec, send, true, rec);
+              done();
+              return;
+            }
+          }
+
           // Genuinely unknown — report unconfirmed.
           const rec = makeRecord({
             result: 'unconfirmed',
@@ -589,7 +653,7 @@ module.exports = function registerMavlinkCommand(RED) {
             confirmedBy: 'ack',
             retries: ackOutcome.retries,
             elapsed: Date.now() - startMs,
-            detail: ackOutcome.detail,
+            detail: carrierSwapped ? `accepted after ${carrierLabel} carrier swap (§9)` : null,
           });
           applyActionStatus(node, 'ok', `${displayName} accepted`);
           emitStatus(rec, send, true, rec);
@@ -605,7 +669,9 @@ module.exports = function registerMavlinkCommand(RED) {
           confirmedBy: ackOutcome.confirmedBy,
           retries: ackOutcome.retries,
           elapsed: Date.now() - startMs,
-          detail: ackOutcome.detail,
+          detail: carrierSwapped
+            ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after ${carrierLabel} carrier swap, §9)`
+            : ackOutcome.detail,
         });
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);

@@ -19,7 +19,7 @@ const {
 } = require('../lib/move');
 const { AckWaiter, sendFnFor, cancelSlot } = require('../lib/command');
 const { BAND } = require('../lib/connection/bands');
-const { resolveDeliveryContext } = require('../lib/addressing');
+const { numberOr, resolveDeliveryContext } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -90,7 +90,7 @@ module.exports = function registerMavlinkMove(RED) {
         sourceIds: connectionNode.resolveSourceIds(identityId),
         // Blank keeps the library default; the editor's number validator owns
         // the rest (§14: a finite-number check on operator input is a guardrail).
-        timeoutMs: Number(config.ackTimeout),
+        timeoutMs: numberOr(config.ackTimeout, undefined),
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
@@ -233,8 +233,12 @@ module.exports = function registerMavlinkMove(RED) {
             case 'stream': {
               // Blank keeps the library default; the editor's number validator owns
               // the rest (§14: a finite-number check on operator input is a guardrail).
-              const rateHz = Number(payload.rateHz === undefined ? config.rateHz : payload.rateHz);
-              const ttlMs = Number(payload.ttlMs === undefined ? config.ttlMs : payload.ttlMs);
+              const rateHz = payload.rateHz === undefined
+                ? numberOr(config.rateHz)
+                : Number(payload.rateHz);
+              const ttlMs = payload.ttlMs === undefined
+                ? numberOr(config.ttlMs)
+                : Number(payload.ttlMs);
               // One stream per (connection, target) (#176): a second node
               // streaming to the same vehicle would alternate contradictory
               // setpoints — the vehicle oscillates while both nodes report

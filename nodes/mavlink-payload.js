@@ -11,9 +11,13 @@ const {
   sendFnFor,
   cancelSlot,
   resolveFrame,
+  runWithCarrierSwap,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
+  numberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -64,7 +68,8 @@ module.exports = function registerMavlinkPayload(RED) {
 
         // Blank keeps the library default; the editor's number validator owns
         // the rest (§14: a finite-number check on operator input is a guardrail).
-        const timeoutMs = Number(config.timeout);
+        const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
+        const maxRetries = numberOr(config.maxRetries, DEFAULT_MAX_RETRIES);
 
         const payload = msg.payload === undefined ? {} : msg.payload;
         // Payload: compidFromConfig keeps the compid field authoritative even
@@ -114,7 +119,7 @@ module.exports = function registerMavlinkPayload(RED) {
         async function awaitAck(firstBuilt) {
           // The recipe rendered for the attempt in flight; a swap re-renders it
           // through buildFor, so the final attempt's shape reports the outcome.
-          const built = firstBuilt;
+          let built = firstBuilt;
           // A new input supersedes the previous input's wait. The two carrier
           // attempts below are sequential, so this runs once per input.
           waiterSlot.cancel();
@@ -134,6 +139,7 @@ module.exports = function registerMavlinkPayload(RED) {
               // different GCS on a shared link.
               sourceIds: connectionNode.resolveSourceIds(identityId),
               timeoutMs,
+              maxRetries,
             });
             waiterSlot.active = waiter;
             try {
@@ -143,13 +149,29 @@ module.exports = function registerMavlinkPayload(RED) {
             }
           }
 
-          const outcome = await runWaiter();
+          const swap = await runWithCarrierSwap({
+            carrier: carrierChosen,
+            run: (carrier) => {
+              if (carrier !== carrierChosen) built = buildFor(carrier);
+              return runWaiter();
+            },
+            onSwap: (outcome, _from, to) => {
+              node.warn(
+                `mavlink-payload: ${built.message.name} rejected as ` +
+                  `${outcome.result} — resending as COMMAND_${to.toUpperCase()} ` +
+                  '(§9 carrier swap)'
+              );
+            },
+          });
+          const outcome = swap.outcome;
           if (outcome.result === 'cancelled') {
             // A redeploy cancelled the wait (see the close handler). Finish
             // quietly on a node that is going away — raising here would
             // trip a Catch node wired for "payload failed → failsafe" on a
             // mere deploy, the rule mavlink-mission already follows.
             done();
+          } else if (swap.wrongCarrier) {
+            failAck(node, send, built, { ...outcome, detail: swap.wrongCarrier }, msg, done);
           } else if (outcome.result === 'accepted') {
             completeAck(node, send, built, outcome);
             done();
