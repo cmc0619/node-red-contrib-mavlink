@@ -658,10 +658,9 @@ test('a hand-edited garbage Command mode resolves no command — nothing is buil
   assert.equal(conn.sent.length, 0, 'nothing reached the wire');
 });
 
-test('silent ACK windows re-send a LONG with incremented confirmation, badge telemetry, then the unchanged unconfirmed record (#248)', async (t) => {
-  // The harness fires the 1000 ms window timers via microtask, so the whole
-  // resend cascade — 3 re-sends, then the final window — drains before the
-  // setImmediate below.
+test('a silent ACK window sends once, then settles the unconfirmed record', async (t) => {
+  // The harness fires the 1000 ms window timer via microtask, so the window
+  // drains before the setImmediate below.
   installAckTimerHarness(t);
   const conn = connStubWithInject();
   const RED = redStub({ conn });
@@ -679,108 +678,21 @@ test('silent ACK windows re-send a LONG with incremented confirmation, badge tel
     timeout: '1000',
     maxRetries: '3',
   });
-  const statuses = [];
-  node.status = (s) => statuses.push(s.text);
   let output;
   let doneErr;
 
   node.emit('input', { payload: null }, (messages) => { output = messages; }, (err) => { doneErr = err; });
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.deepEqual(
-    conn.sent.map(({ message }) => message.fields.confirmation),
-    [0, 1, 2, 3],
-    'each timeout re-send increments the LONG confirmation byte'
-  );
-  // Per-attempt telemetry rides the badge only — outputs stay terminal-only.
-  for (const attempt of [1, 2, 3]) {
-    assert.ok(
-      statuses.some((text) => text.includes(`retrying (${attempt}/3)`)),
-      `badge reports retrying (${attempt}/3)`
-    );
-  }
-  // The §9 classification contract after the final window: peer-table check
-  // (no table here) → the same unconfirmed record as before #248, with the
-  // attempt count riding the existing retries field.
+  assert.equal(conn.sent.length, 1, 'the command is sent exactly once');
+  // The §9 classification after the window: peer-table check (no table here)
+  // → the unconfirmed record.
   assert.equal(output[0], null, 'output 0 must not fire');
   assert.equal(output[1].result, 'unconfirmed');
   assert.equal(output[1].resultCode, null);
   assert.equal(output[1].confirmedBy, 'none');
-  assert.equal(output[1].retries, 3);
-  assert.equal(output[1].detail, 'no terminal COMMAND_ACK received within timeout');
-  assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
-  node.emit('close', () => {});
-});
-
-test('silent ACK windows re-send an INT as-is — no confirmation byte, identical fields (#248)', async (t) => {
-  installAckTimerHarness(t);
-  const conn = connStubWithInject();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    params: '{}',
-    sendAs: 'int',
-    frame: '3',
-    mode: 'preset',
-    preset: 'reposition',
-    delivery: 'confirm',
-    connection: 'conn',
-    targetSystem: '1',
-    targetComponent: '1',
-    timeout: '1000',
-    maxRetries: '3',
-  });
-  let output;
-
-  node.emit(
-    'input',
-    { payload: { 5: -35, 6: 149, 7: 50 } },
-    (messages) => { output = messages; },
-    () => {}
-  );
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(conn.sent.length, 4, 'initial send plus 3 re-sends');
-  for (const { message } of conn.sent) {
-    assert.equal(message.name, 'COMMAND_INT');
-    assert.equal('confirmation' in message.fields, false, 'COMMAND_INT never grows a confirmation byte');
-    assert.deepEqual(message.fields, conn.sent[0].message.fields, 're-sends are byte-identical');
-  }
-  assert.equal(output[1].result, 'unconfirmed');
-  assert.equal(output[1].retries, 3);
-  node.emit('close', () => {});
-});
-
-test('Advanced mode sends once on a silent window — a raw MAV_CMD id never opts into re-send (#249)', async (t) => {
-  installAckTimerHarness(t);
-  const conn = connStubWithInject();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    params: '{}',
-    sendAs: 'long',
-    mode: 'advanced',
-    advancedCommand: '246', // PREFLIGHT_REBOOT_SHUTDOWN — silence IS the success
-    delivery: 'confirm',
-    connection: 'conn',
-    targetSystem: '1',
-    targetComponent: '1',
-    timeout: '1000',
-    maxRetries: '3',
-  });
-  let output;
-  let doneErr;
-
-  node.emit('input', { payload: { 1: 1 } }, (messages) => { output = messages; }, (err) => { doneErr = err; });
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(conn.sent.length, 1, 'a rebooting vehicle must not be rebooted three more times');
-  // The §9 classification after that single window is unchanged.
-  assert.equal(output[0], null, 'output 0 must not fire');
-  assert.equal(output[1].result, 'unconfirmed');
   assert.equal(output[1].retries, 0);
+  assert.equal(output[1].detail, 'no terminal COMMAND_ACK received within timeout');
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   node.emit('close', () => {});
 });

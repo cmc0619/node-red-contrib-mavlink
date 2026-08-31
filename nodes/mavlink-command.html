@@ -1216,7 +1216,7 @@
         <dd>Milliseconds from start to terminal outcome.</dd>
         <dt>retries <span class="property-type">number</span></dt>
         <dd>Re-transmissions beyond the first send — TEMPORARILY_REJECTED
-            back-offs plus timeout re-sends.</dd>
+            back-offs.</dd>
         <dt>command <span class="property-type">string</span></dt>
         <dd>Friendly command name when known.</dd>
         <dt>commandId <span class="property-type">number</span></dt>
@@ -1233,9 +1233,8 @@
         <em>Dialect</em>, or choose <em>from Vehicle Profile…</em> to use a custom XML dialect
         and that profile's default target. Identity and connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
-    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED,
-        and for presets that tolerate re-issue re-send up to 3 times when a window closes with
-        no ack at all. While the vehicle answers IN_PROGRESS the status badge shows the
+    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED.
+        While the vehicle answers IN_PROGRESS the status badge shows the
         progress it reports.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
@@ -1286,13 +1285,8 @@
     <code>msg.payload === false</code> when you need an explicit hold.
   </p>
   <p>
-    A silent ACK window is re-sent up to 3 times (idempotent recovery — a command
-    lost on the way out and an ack lost on the way back are indistinguishable).
-    Only presets whose entry allows auto-retry do this: commands that never
-    auto-retry, and every <b>Advanced</b>-mode command (a raw MAV_CMD id says nothing
-    about whether re-issuing it is safe), are sent once. Any ACK at all — including
-    IN_PROGRESS — also ends re-sending. After the final window the node
-    checks the peer table. If the completion condition is satisfied, the command is
+    When the ACK window closes with no ack at all, the node checks the peer
+    table. If the completion condition is satisfied, the command is
     confirmed by observed state. Otherwise the result is <em>unconfirmed</em>;
     output 0 does not fire unless <em>Continue chain if unconfirmed</em> is enabled.
   </p>
