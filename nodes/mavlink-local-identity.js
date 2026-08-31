@@ -71,12 +71,26 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
     /**
      * Record a vehicle sysid claim from a Connection.
-     * Companion only.
+     * Companion only; throws on conflicting derivations.
      *
      * @param {number} sysid
      * @param {string} sourceId connection node id
      */
     node.bindVehicleSysid = (sysid, sourceId) => {
+      // getIdentity() answers connection-agnostically at action time, so two
+      // Connections deriving different sysids would retarget one link's
+      // actions to the other's aircraft. Cross-node state no single editor
+      // dialog can see — a companion belongs to one airframe (§14.136).
+      for (const [id, claimed] of node._vehicleSysidClaims) {
+        if (id !== sourceId && claimed !== sysid) {
+          // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: two Connections deriving different sysids for one companion is cross-node state no single editor dialog can see
+          throw new Error(
+            `Companion identity sysid conflict: one Connection derives sysid ${claimed}` +
+              ` but another derives sysid ${sysid}.` +
+              ' A companion belongs to one airframe — use the GCS role for multi-vehicle runtimes.'
+          );
+        }
+      }
       node._vehicleSysidClaims.set(sourceId, sysid);
       node._vehicleSysid = sysid;
     };

@@ -42,6 +42,38 @@ test('a companion carries its saved CompID; only SysID is derived', () => {
   assert.deepEqual(second.getIdentity(), { sysid: 7, compid: 192 });
 });
 
+test('two Connections deriving different sysids for one companion conflict at bind', () => {
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+
+  // getIdentity() answers connection-agnostically at action time, so a
+  // last-write-wins bind would retarget the first link's actions to the
+  // second link's aircraft — silently. The bind is where the contradiction
+  // is visible (§14.136: a companion belongs to one airframe).
+  const companion = new Node({
+    id: 'c1', role: 'companion', sourceSystemId: '', sourceComponentId: 191,
+    heartbeatIntervalMs: 1000,
+  });
+
+  companion.bindVehicleSysid(7, 'conn-1');
+  companion.bindVehicleSysid(7, 'conn-2');
+  assert.deepEqual(companion.getIdentity(), { sysid: 7, compid: 191 },
+    'the same airframe over two links is one identity');
+
+  assert.throws(() => companion.bindVehicleSysid(9, 'conn-3'), /one airframe/);
+  assert.deepEqual(companion.getIdentity(), { sysid: 7, compid: 191 },
+    'the refused claim changes nothing');
+
+  assert.throws(() => companion.bindVehicleSysid(9, 'conn-1'), /one airframe/,
+    're-deriving one link differently still conflicts with the other link\'s live claim');
+
+  companion.releaseVehicleSysid('conn-2');
+  companion.bindVehicleSysid(9, 'conn-1');
+  assert.equal(companion.getIdentity().sysid, 9,
+    'with the other claim released, a re-derivation lands');
+});
+
 test('a never-opened node deploys on the editor concrete defaults, no runtime preset fill', () => {
   const RED = redStub();
   require('../../nodes/mavlink-local-identity')(RED);
