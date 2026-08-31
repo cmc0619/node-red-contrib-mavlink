@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- Work only on `codex/driver-gigo-conversion`; do not open a PR or push.
+- Work only on `codex/driver-gigo-conversion`; push that branch to `origin` as
+  progress is committed, but do not open or convert it into a PR.
 - Runtime input is trusted: remove defaults, substitutions, membership checks, range/format checks, normalization, and friendly rejection of editor-owned or `msg` values.
 - Preserve only malformed-frame handling in `mavlink-in`, plus serializer, queue, device/socket, and protocol outcome reporting.
 - Keep every real dispatcher as `default: break; // This space intentionally left blank (§5)`.
