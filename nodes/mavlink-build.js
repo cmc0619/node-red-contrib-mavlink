@@ -67,7 +67,7 @@ module.exports = function registerMavlinkBuild(RED) {
     // blesses blank ("no config-level defaults"); the blank branch spells that
     // one state. An absent key is not blank — it craters here, blaming the
     // malformed flow (§0).
-    const configFields = config.fields.trim() ? JSON.parse(config.fields) : {};
+    const configFields = JSON.parse(config.fields);
 
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);
@@ -118,7 +118,7 @@ module.exports = function registerMavlinkBuild(RED) {
           ...extra,
         })]);
         if (triggerMsg) {
-          done(new Error(`mavlink-build: ${err.message}`));
+          done(err);
         } else {
           node.error(`mavlink-build: ${err.message}`, {});
         }
@@ -134,7 +134,7 @@ module.exports = function registerMavlinkBuild(RED) {
       try {
         encodedFields = encodeMessage(messageMeta, rawFields, { enums: bundle.enums });
       } catch (err) {
-        return failRun(new Error(`encode: ${err.message}`));
+        return failRun(err);
       }
 
       const builtMessage = { name: messageName, fields: encodedFields };
@@ -159,7 +159,7 @@ module.exports = function registerMavlinkBuild(RED) {
           try {
             connectionNode.send(builtMessage, { band, target, identityId });
           } catch (err) {
-            return failRun(new Error(`send: ${err.message}`), { tier: 'send', band });
+            return failRun(err, { tier: 'send', band });
           }
 
           const now = Date.now();

@@ -19,7 +19,7 @@ const {
 } = require('../lib/move');
 const { AckWaiter, sendFnFor, cancelSlot } = require('../lib/command');
 const { BAND } = require('../lib/connection/bands');
-const { numberOr, resolveDeliveryContext } = require('../lib/addressing');
+const { resolveDeliveryContext } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -90,7 +90,7 @@ module.exports = function registerMavlinkMove(RED) {
         sourceIds: connectionNode.resolveSourceIds(identityId),
         // Blank keeps the library default; the editor's number validator owns
         // the rest (§14: a finite-number check on operator input is a guardrail).
-        timeoutMs: numberOr(config.ackTimeout, undefined),
+        timeoutMs: Number(config.ackTimeout),
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
@@ -181,7 +181,7 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
-        const payload = msg.payload ?? {};
+        const payload = msg.payload === undefined ? {} : msg.payload;
         // The one runtime verb, dispatched before target resolution: a stop
         // names no target — it halts whatever this node is streaming — so
         // nothing a resolver could refuse may refuse it. Any other value
@@ -233,8 +233,8 @@ module.exports = function registerMavlinkMove(RED) {
             case 'stream': {
               // Blank keeps the library default; the editor's number validator owns
               // the rest (§14: a finite-number check on operator input is a guardrail).
-              const rateHz = numberOr(payload.rateHz, numberOr(config.rateHz));
-              const ttlMs = numberOr(payload.ttlMs, numberOr(config.ttlMs));
+              const rateHz = Number(payload.rateHz === undefined ? config.rateHz : payload.rateHz);
+              const ttlMs = Number(payload.ttlMs === undefined ? config.ttlMs : payload.ttlMs);
               // One stream per (connection, target) (#176): a second node
               // streaming to the same vehicle would alternate contradictory
               // setpoints — the vehicle oscillates while both nodes report
@@ -284,21 +284,19 @@ module.exports = function registerMavlinkMove(RED) {
                   release();
                   completeExpiry(node, stopMessage, sent, brakeError);
                 },
-                // A tick send that throws is contained in the stream — it
-                // keeps cadence and retries (§ "Move setpoint matrix"). One
-                // report per failure streak, status output only: the input
-                // that started the stream completed long ago, same as expiry.
+                // A tick send failure terminates the stream and reports the
+                // operational outcome after the starting input has completed.
                 onSendError: (err) => {
+                  if (stream === next) {
+                    stream = null;
+                    releaseStream = null;
+                    streamKey = null;
+                    release();
+                  }
                   applyActionStatus(node, 'error', err.message);
                   node.send([null, makeStatusRecord(node.type, {
                     result: 'failed', detail: `setpoint send failed: ${err.message}`,
                   })]);
-                },
-                // First success after a failed streak restores the badge the
-                // stream started with. No record — recovery is the absence of
-                // failure, not an event.
-                onSendRecovery: () => {
-                  applyActionStatus(node, 'ok', 'streaming');
                 },
               });
               // The old stream keeps running until the handover setpoint is

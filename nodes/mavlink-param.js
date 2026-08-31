@@ -49,9 +49,7 @@ const {
 } = require('../lib/delivery');
 const {
   resolveDeliveryContext,
-  numberOr,
 } = require('../lib/addressing');
-const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 /**
  * Attempts for a confirm-tier PARAM_SET, the initial send included. common.xml:
@@ -60,7 +58,6 @@ const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
  * timeout already sizes the wait, and a retry count would be a second dial for
  * the same failure.
  */
-const PARAM_SET_ATTEMPTS = 3;
 
 /**
  * Collect-tier stall detector cap (ms): silence this long inside the overall
@@ -68,19 +65,16 @@ const PARAM_SET_ATTEMPTS = 3;
  * a quarter of the configured timeout, capped here, so inactivity always
  * nests inside the outer bound with room for the refill rounds to fire.
  */
-const PARAM_LIST_INACTIVITY_MS = 1500;
 /**
  * Refill rounds per collect. Bounded: refill repairs gaps, it is not a second
  * transfer protocol — a stream needing more than this is reported honestly by
  * the overall timeout.
  */
-const PARAM_LIST_REFILL_ROUNDS = 3;
 /**
  * Missing indexes re-requested per round. Caps the burst well under the Bulk
  * band's queue depth so a stream that stalled early cannot convert into a
  * by-index read storm (Bulk overflow throws, §7).
  */
-const PARAM_LIST_REFILL_BATCH = 32;
 
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
@@ -252,13 +246,12 @@ module.exports = function registerMavlinkParam(RED) {
 
         // Blank keeps the library default; the editor's number validator owns
         // the rest (§14: a finite-number check on operator input is a guardrail).
-        const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
+        const timeoutMs = Number(config.timeout);
         // A quarter of the overall timeout, capped — inactivity must nest
         // inside the outer bound with room for the refill rounds to fire
         // before it.
-        const inactivityMs = Math.min(PARAM_LIST_INACTIVITY_MS, timeoutMs / 4);
 
-        const payload = msg.payload ?? {};
+        const payload = msg.payload === undefined ? {} : msg.payload;
 
         // Concrete Build dialects carry firmware from the editor (no target rung).
         const {
@@ -383,8 +376,6 @@ module.exports = function registerMavlinkParam(RED) {
             fn(finishDone);
           }
 
-          let attempt = 1;
-          let refillRounds = 0;
           let collector = null;
           switch (mode) {
             case 'collect-list':
@@ -399,7 +390,7 @@ module.exports = function registerMavlinkParam(RED) {
               case 'confirm-set':
                 if (!matchesParamEcho(request, decoded)) return;
                 settle((finishDone) => {
-                  completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
+                  completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: 1 });
                   finishDone();
                 });
                 break;
@@ -416,10 +407,7 @@ module.exports = function registerMavlinkParam(RED) {
                 // 65535 set echo or an out-of-range index lets a steady echo
                 // stream postpone the refill while a real index is still missing.
                 if (params === null) return;
-                if (params === true) {
-                  armInactivity();
-                  return;
-                }
+                if (params === true) return;
                 settle((finishDone) => {
                   completeResult(node, send, 'succeeded', 'list-complete', params);
                   finishDone();
@@ -444,93 +432,13 @@ module.exports = function registerMavlinkParam(RED) {
           function armDeadline() {
             return setTimeout(() => {
               if (!pending || pending.gen !== myGen) return;
-              let extra;
-              switch (mode) {
-                case 'confirm-set':
-                  if (attempt < PARAM_SET_ATTEMPTS) {
-                    attempt += 1;
-                    applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
-                    send([null, makeStatusRecord(node.type, {
-                      result: 'progress',
-                      detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
-                    })]);
-                    try {
-                      connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
-                    } catch (err) {
-                      // Timer context: Connection.send throws by design (queue
-                      // overflow, dead link) and nothing above this catches, so a
-                      // throw here would be an uncaughtException — settle instead
-                      // (same rule as lib/command/ack.js retry send).
-                      settle((finishDone) => failInput(node, send, err, finishDone));
-                      return;
-                    }
-                    pending.timer = armDeadline();
-                    return;
-                  }
-                  // Attempts spent: the timeout below reports how many.
-                  extra = { attempts: attempt };
-                  break;
-                default: break; // This space intentionally left blank (§5)
-              }
               settle((finishDone) =>
-                timeoutResult(node, send, timeoutDetail, finishDone, extra));
+                timeoutResult(node, send, timeoutDetail, finishDone));
             }, timeoutMs);
-          }
-
-          /** (Re-)arm the collect stall detector; nests inside the deadline. */
-          function armInactivity() {
-            if (!pending || pending.gen !== myGen) return;
-            if (pending.inactivityTimer) clearTimeout(pending.inactivityTimer);
-            pending.inactivityTimer = setTimeout(onInactivity, inactivityMs);
-          }
-
-          /**
-           * The list stream went quiet before completing: re-request missing
-           * indexes by PARAM_REQUEST_READ, a bounded number of rounds with a
-           * bounded batch. Never terminal — the overall deadline stays the one
-           * authority on giving up, so a spent budget just stops the nudging.
-           */
-          function onInactivity() {
-            if (!pending || pending.gen !== myGen) return;
-            const missing = collector.missing();
-            if (missing.length > 0 && refillRounds < PARAM_LIST_REFILL_ROUNDS) {
-              refillRounds += 1;
-              const batch = missing.slice(0, PARAM_LIST_REFILL_BATCH);
-              applyActionStatus(node, 'sending', `refill ${missing.length} missing\u2026`);
-              send([null, makeStatusRecord(node.type, {
-                result: 'progress',
-                detail: `re-requesting ${batch.length} of ${missing.length} missing`,
-                round: refillRounds,
-              })]);
-              for (const paramIndex of batch) {
-                try {
-                  connNode.send(
-                    buildParamMessage({ action: 'read', target: request.target, paramIndex }),
-                    { band: BAND.BULK, target: request.target, identityId }
-                  );
-                } catch (err) {
-                  // Bulk overflow throws by design (§7); the stream may still
-                  // resume, so the collect stays open under the deadline — drop
-                  // the rest of this round and say so.
-                  node.warn(`mavlink-param: list refill stopped: ${err.message}`);
-                  break;
-                }
-              }
-            }
-            // Keep watching while a round may still fire; before a count is
-            // known there is nothing to name yet (missing() is empty), and a
-            // round's replies re-arm through the subscription either way.
-            if (missing.length === 0 || refillRounds < PARAM_LIST_REFILL_ROUNDS) {
-              pending.inactivityTimer = setTimeout(onInactivity, inactivityMs);
-            }
           }
 
           pending = { unsubscribe, timer: null, inactivityTimer: null, done, gen: myGen };
           pending.timer = armDeadline();
-          switch (mode) {
-            case 'collect-list': armInactivity(); break;
-            default: break; // This space intentionally left blank (§5)
-          }
         }
       } catch (err) {
         failInput(node, send, err, done);

@@ -49,7 +49,7 @@ module.exports = function registerMavlinkState(RED) {
         }
         switch (config.mode) {
           case 'snapshot': {
-            const payload = msg.payload ?? {};
+            const payload = msg.payload === undefined ? {} : msg.payload;
             const peers = snapshotPeers(connectionNode.peerTable, {
               sysid: firstDefined(payload.sysid, config.targetSystem),
               compid: firstDefined(payload.compid, config.targetComponent),
