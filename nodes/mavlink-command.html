@@ -1285,7 +1285,8 @@
     <code>msg.payload === false</code> when you need an explicit hold.
   </p>
   <p>
-    When the ACK window closes with no ack at all, the node checks the peer
+    When the ACK window closes without a terminal COMMAND_ACK — silence, or
+    only IN_PROGRESS answers — the node checks the peer
     table. If the completion condition is satisfied, the command is
     confirmed by observed state. Otherwise the result is <em>unconfirmed</em>;
     output 0 does not fire unless <em>Continue chain if unconfirmed</em> is enabled.
