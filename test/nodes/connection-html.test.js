@@ -92,10 +92,18 @@ test('additionalIdentities has an editor row (issue #94 — feature must be reac
   );
   assert.match(
     html,
-    /this\.additionalIdentities\s*=\s*RED\.mavlink\.normalizeIdentityIds\(raw,\s*primary\)/,
-    'oneditsave routes through the shared, unit-tested normalizer — the '
-      + 'blank/duplicate/primary rules are behaviorally covered in '
-      + 'mavlink-editor-resource.test.js, not re-derived here'
+    /id="node-config-input-additionalIdentities"\s+multiple/,
+    'the editableList mirrors into the bound property Node-RED validates'
+  );
+  assert.match(
+    html,
+    /function currentAdditionalIdentities\(\)[\s\S]*RED\.mavlink\.normalizeIdentityIds\(raw,\s*primary\)/,
+    'the shared normalizer keeps the editable list and saved property identical'
+  );
+  assert.match(
+    html,
+    /this\.additionalIdentities\s*=\s*\$\('#node-config-input-additionalIdentities'\)\.val\(\)\s*\|\|\s*\[\]/,
+    'oneditsave persists the bound value that the live validator read'
   );
 });
 
@@ -155,6 +163,34 @@ test('a companion may be bound to only one Connection; GCS identities may be reu
     ),
     true,
     'a GCS identity may remain bound to more than one Connection'
+  );
+});
+
+test('additional identity validation reads the current editable-list value', () => {
+  // Removing the live bound control would make this test pass an old saved
+  // empty list and let the companion duplicate through while its own dialog
+  // is open.
+  const nodes = {
+    ...BOUND,
+    c2: {
+      type: 'mavlink-connection',
+      name: 'Backup radio',
+      localIdentity: 'id-comp',
+      additionalIdentities: [],
+    },
+  };
+  const defaults = loadNodeDefaults('mavlink-connection', nodes, {
+    dom: { '#node-config-input-additionalIdentities': { val: ['id-comp'] } },
+    editStack: [{ id: 'c1' }],
+  });
+
+  assert.match(
+    String(defaults.additionalIdentities.validate.call(
+      { id: 'c1', vehicle: 'veh', localIdentity: 'id-gcs', additionalIdentities: [] },
+      [],
+      {}
+    )),
+    /Backup radio[\s\S]*one Connection/
   );
 });
 

@@ -1210,6 +1210,8 @@ const { timestampFromMs } = require('../../lib/connection/signing');
  * @param {number} [options.initialOpenFailures]  initial opens that reject
  * @param {boolean} [options.failFirstOpen]  the deploy-time open itself fails,
  *   emitting a transport error first the way a real bind failure does
+ * @param {boolean} [options.holdInitialOpen]  the deploy-time open hangs until
+ *   the test releases it, for the error-while-opening race
  * @param {boolean} [options.holdRedialOpen]  redial opens hang until the test
  *   releases them via `releaseHeldOpen()` — for close-vs-open races
  * @param {object} [options.signing]  signing config override (reconnect
@@ -1221,6 +1223,7 @@ function reconnectBuild({
   openFailures = 0,
   initialOpenFailures = 0,
   failFirstOpen = false,
+  holdInitialOpen = false,
   holdRedialOpen = false,
   signing,
   mode = 'udp',
@@ -1246,6 +1249,9 @@ function reconnectBuild({
         const err = new Error('EADDRINUSE');
         transport.emit('error', err);
         return Promise.reject(err);
+      }
+      if (opens === 1 && holdInitialOpen) {
+        return new Promise((resolve) => heldOpens.push(resolve));
       }
       // The first open is the deploy-time one; the next `openFailures` redials
       // find the link still down.
@@ -1512,6 +1518,42 @@ test('a TCP client retries a failed initial dial three times', async () => {
   assert.equal(connection.getState(), STATE.CONNECTED);
   assert.deepEqual(redials().map((timer) => timer.ms), [500, 1000, 2000]);
   assert.equal(timers.active(), 2, 'the first successful dial starts heartbeats and the peer sweep');
+  connection.close();
+});
+
+test('an initial TCP retry drops commands queued before the first connection', async () => {
+  const { connection, transports, redials } = reconnectBuild({
+    mode: 'tcp',
+    initialOpenFailures: 1,
+  });
+
+  await connection.start();
+  connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
+
+  redials()[0].fn();
+  await delay(0);
+
+  assert.equal(connection.getState(), STATE.CONNECTED);
+  assert.equal(transports[1].sent.length, 0, 'a command accepted while disconnected cannot execute late');
+  connection.close();
+});
+
+test('an error while the initial TCP open settles leaves recovery with its redial', async () => {
+  const { connection, transports, redials, releaseHeldOpen } = reconnectBuild({
+    mode: 'tcp',
+    holdInitialOpen: true,
+  });
+
+  const starting = connection.start();
+  transports[0].emit('error', new Error('died while opening'));
+  assert.equal(redials().length, 1, 'the opening error arms a retry');
+
+  releaseHeldOpen();
+  await starting;
+  await delay(0);
+
+  assert.equal(connection.getState(), STATE.RECONNECTING, 'the stale start continuation cannot declare CONNECTED');
+  assert.equal(transports[0].closed, true, 'the superseded initial transport is closed');
   connection.close();
 });
 

@@ -140,6 +140,8 @@
       // additionals are the rows an operator can actually change. Siblings are
       // read live through liveOr so the check is scoped to this dialog (#217).
       additionalIdentities: { value: [], validate: function (v, _opt) {
+        var $live = RED.mavlink.ownDialogField(this, '#node-config-input-additionalIdentities');
+        if ($live) v = $live.val();
         var elsewhere = companionBoundElsewhere(this, v);
         if (elsewhere !== true) return elsewhere;
         var vehicleId = RED.mavlink.liveOr(this, '#node-config-input-vehicle', this.vehicle, '');
@@ -259,10 +261,26 @@
         return opts;
       }
       var $idList = $('#mav-conn-additional-identities');
+      function currentAdditionalIdentities() {
+        var primary = $('#node-config-input-localIdentity').val();
+        var raw = [];
+        $idList.editableList('items').each(function () {
+          raw.push($(this).find('select').val());
+        });
+        return RED.mavlink.normalizeIdentityIds(raw, primary);
+      }
+      function syncAdditionalIdentities() {
+        var $input = $('#node-config-input-additionalIdentities').empty();
+        currentAdditionalIdentities().forEach(function (id) {
+          $('<option></option>').val(id).prop('selected', true).appendTo($input);
+        });
+        $input.trigger('change');
+      }
       $idList.editableList({
         addButton: 'add identity',
         removable: true,
         height: 'auto',
+        removeItem: syncAdditionalIdentities,
         addItem: function (container, _index, data) {
           var $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
           $sel.append($('<option></option>').val('').text('— select identity —'));
@@ -270,11 +288,14 @@
             $sel.append($('<option></option>').val(o.id).text(o.label));
           });
           $sel.val(data && data.id ? data.id : '');
+          $sel.on('change', syncAdditionalIdentities);
         },
       });
       (this.additionalIdentities || []).forEach(function (id) {
         $idList.editableList('addItem', { id: id });
       });
+      $('#node-config-input-localIdentity').on('change', syncAdditionalIdentities);
+      syncAdditionalIdentities();
 
       function refreshTransportRows() {
         var mode = $('#node-config-input-mode').val() || 'udp';
@@ -313,14 +334,7 @@
       refreshTransportRows();
     },
     oneditsave: function () {
-      // Collect the raw rows; the blank/duplicate/primary rules live in the
-      // shared, unit-tested RED.mavlink.normalizeIdentityIds (§6).
-      var primary = $('#node-config-input-localIdentity').val();
-      var raw = [];
-      $('#mav-conn-additional-identities').editableList('items').each(function () {
-        raw.push($(this).find('select').val());
-      });
-      this.additionalIdentities = RED.mavlink.normalizeIdentityIds(raw, primary);
+      this.additionalIdentities = $('#node-config-input-additionalIdentities').val() || [];
     },
   });
   })();
@@ -401,6 +415,7 @@
   <div class="form-row" style="margin-bottom:0;">
     <label style="vertical-align:top;"><i class="fa fa-id-card-o"></i> Extra identities</label>
     <div style="display:inline-block; width:70%;">
+      <select id="node-config-input-additionalIdentities" multiple style="display:none;"></select>
       <ol id="mav-conn-additional-identities"></ol>
     </div>
   </div>
