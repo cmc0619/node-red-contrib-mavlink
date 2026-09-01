@@ -41,10 +41,15 @@ re-raising a settled question.
 2026-08-28): no migrations, no compatibility shims, no aliases for renamed things.
 Delete and re-pick.
 
-**The editor validates; the runtime trusts the saved config.** Runtime code must not
-duplicate validation the editor already performed. When a saved value is unreadable
-anyway, the parse falls back to the safe direction — it does not fall open and it does not
-grow a second deploy-time error path.
+**The editor validates; the runtime trusts the saved config. The driver massages
+NOTHING.** (Owner ruling, 2026-09-01, superseding the earlier "falls back to the safe
+direction" clause — that clause spawned the same argument in three separate reviews and
+is settled the other way.) A typo in the editor red-rings and cannot be saved; that ring
+is the *entire* protection. A saved value the ring would have refused — reachable only by
+hand-editing flow JSON — rides to its natural reading at runtime: no token skipping, no
+safe-direction fallback, no second deploy-time error path. Do not restore a runtime skip
+because the natural reading is scary; the fix for a degenerate config string is fixing
+the string.
 
 **Asked why something was removed or why it behaves that way, read `DESIGN.md` §14 before
 answering.** The CHANGELOG says *what* changed and compresses hard; §14 says *why*, and

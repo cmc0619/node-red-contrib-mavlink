@@ -247,7 +247,10 @@ the schema for static configuration.
 - Custom controls must initialize, save, validate, and clean up the value represented in
   `defaults`. Fix broken persistence in the editor; never compensate in runtime code.
 - Runtime code uses editor-validated properties directly. Do not add null checks, optional
-  chaining, fallback defaults, sanitizers, or duplicate validators.
+  chaining, fallback defaults, sanitizers, or duplicate validators. A saved value the
+  editor's red ring would have refused — reachable only by hand-edited flow JSON — rides
+  to its natural reading: no token skipping and no "safe direction" fallback in the parse
+  (owner ruling, 2026-09-01). The red ring is the entire protection.
 - Resolve required configuration-node references once and use the result. Do not scatter checks
   for the saved ID.
 - For typed inputs, validate the configured expression in the editor. At runtime, evaluate it
@@ -302,6 +305,8 @@ restores any of these to `lib/**` or `nodes/*.js`:
 - a `default:` arm that does anything
 - a membership or vocabulary test
 - a fallback, substitution, or coercion
+- a token skip or "safe direction" fallback in a parse of editor-owned config (owner
+  ruling, 2026-09-01: the red ring is the protection; a degenerate saved string rides)
 
 This holds however good the finding's evidence is. Declining is a finished answer. It does not
 need to be re-argued, and a decline recorded in a merged commit message is not reopened by the
