@@ -97,8 +97,8 @@ test('additionalIdentities has an editor row (issue #94 — feature must be reac
   );
   assert.match(
     html,
-    /function currentAdditionalIdentities\(\)[\s\S]*RED\.mavlink\.normalizeIdentityIds\(raw,\s*primary\)/,
-    'the shared normalizer keeps the editable list and saved property identical'
+    /function fillIdentityRow\(\$sel, want\)[\s\S]*taken\.indexOf\(n\.id\) !== -1 \|\| !identityFree\(conn, n\.id\)/,
+    'every row menu leaves out what the primary, the other rows, and other Connections hold'
   );
   assert.match(
     html,
@@ -166,6 +166,31 @@ test('a companion may be bound to only one Connection; GCS identities may be reu
   );
 });
 
+test('the Identity picker never offers a companion another Connection holds', () => {
+  const nodes = {
+    ...BOUND,
+    c2: { type: 'mavlink-connection', name: 'Backup radio', localIdentity: 'id-comp', additionalIdentities: [] },
+  };
+  // The identity dialog opened through the pencil sits above the Connection on
+  // the edit stack; the filter still has to find the Connection beneath it.
+  const defaults = loadNodeDefaults('mavlink-connection', nodes, {
+    editStack: [{ id: 'c1', type: 'mavlink-connection' }, { id: 'id-comp2', type: 'mavlink-local-identity' }],
+  });
+  const offered = Object.keys(BOUND).filter((id) => id !== 'veh' && defaults.localIdentity.filter({ id }));
+  assert.deepEqual(offered, ['id-gcs', 'id-second', 'id-own', 'id-comp2', 'id-comp-dup']);
+});
+
+test('the Identity picker keeps offering the companion this Connection already holds', () => {
+  const nodes = {
+    ...BOUND,
+    c1: { type: 'mavlink-connection', name: 'Main radio', localIdentity: 'id-comp', additionalIdentities: [] },
+  };
+  const defaults = loadNodeDefaults('mavlink-connection', nodes, {
+    editStack: [{ id: 'c1', type: 'mavlink-connection' }],
+  });
+  assert.equal(defaults.localIdentity.filter({ id: 'id-comp' }), true);
+});
+
 test('additional identity validation reads the current editable-list value', () => {
   // Removing the live bound control would make this test pass an old saved
   // empty list and let the companion duplicate through while its own dialog
@@ -226,8 +251,8 @@ test('two companions collide only when they share an onboard slot', () => {
   // Both derive sysid 7 from the Vehicle Profile, so the slot is the whole
   // difference: 191/192 are ONBOARD_COMPUTER and ONBOARD_COMPUTER2.
   assert.equal(boundValidate({ localIdentity: 'id-comp' }, ['id-comp2']), true);
-  // Two *distinct* companions on the same slot. Repeating one reference would
-  // not reach here — normalizeIdentityIds strips it at save — so the fixture
+  // Two *distinct* companions on the same slot. Repeating one reference cannot
+  // reach here — no row menu offers what another row holds — so the fixture
   // has to be a second identity that happens to share 191.
   assert.match(
     String(boundValidate({ localIdentity: 'id-comp' }, ['id-comp-dup'])),

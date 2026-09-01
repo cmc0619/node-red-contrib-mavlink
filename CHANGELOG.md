@@ -8,6 +8,14 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **The Connection dialog no longer offers an identity it cannot bind.** The
+  Identity picker leaves out a companion another Connection holds, and each
+  Extra identities row leaves out the primary and what the other rows hold,
+  refilled on every change. The save used to drop a repeated or primary
+  reference silently while the row kept showing it; the row now resets to
+  the placeholder instead. The red ring stays for the one route the menus
+  cannot see: an identity re-roled to companion after two Connections bound it.
+
 - **Param id search uses Node-RED's own autocomplete widget.** The hand-rolled
   results panel — its keyboard navigation, blur handling and CSS — is gone;
   ranking by name and description is unchanged and now feeds the stock
