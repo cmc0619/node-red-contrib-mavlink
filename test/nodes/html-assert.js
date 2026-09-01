@@ -134,7 +134,34 @@ function loadNodeType(nodeName, nodeLookup = {}, opts = {}) {
         return this;
       },
       attr() { return this; }, text() { return this; }, prop() { return this; }, is() { return false; },
-      css() { return this; }, replaceWith() { return this; }, next() { return { length: 0 }; } };
+      css() { return this; }, replaceWith() { return this; }, next() { return { length: 0 }; },
+      // remove() mutates the dialog the way jQuery does: a later $(selector)
+      // matches nothing. The pane-collection regression tests assert exactly
+      // that — Node-RED's properties pane reads #node-input-* after
+      // oneditsave, so what oneditsave removes the pane cannot clobber.
+      remove() {
+        if (Object.prototype.hasOwnProperty.call(dom, selector)) delete dom[selector];
+        return this;
+      },
+      // editableList('items') walks `entry.rows`: each row is a map of cell
+      // selector -> value, read back through `$(this).find(sel).val()` the way
+      // an editor scrape reads a rendered widget row.
+      editableList(arg) {
+        if (arg === 'items' && entry && entry.rows) {
+          return {
+            each(fn) {
+              entry.rows.forEach((cells) => fn.call({
+                find: (sel) => ({
+                  length: Object.prototype.hasOwnProperty.call(cells, sel) ? 1 : 0,
+                  val: () => cells[sel],
+                }),
+              }));
+              return this;
+            },
+          };
+        }
+        return this;
+      } };
     return node;
   }
   $.getJSON = () => ({ fail() { return this; } });

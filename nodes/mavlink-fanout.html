@@ -3,6 +3,29 @@
   // One spelling: the select fill and the row's visibility test must ask the
   // same question, or a hidden row could still be hiding a real choice.
   var IDENTITY_ROLES = ['gcs', 'custom'];
+
+  function currentMembers() {
+    var members = [];
+    $('#mav-fanout-members').editableList('items').each(function () {
+      var row = $(this);
+      var member = { sysid: Number(row.find('.mav-fanout-member-sysid').val()) };
+      ['north', 'east', 'up'].forEach(function (axis) {
+        var raw = row.find('.mav-fanout-member-' + axis).val();
+        if (!RED.mavlink.isBlank(raw)) member[axis] = Number(raw);
+      });
+      var patchText = String(row.find('.mav-fanout-member-patch').val() || '').trim();
+      if (patchText !== '') {
+        try {
+          member.patch = JSON.parse(patchText);
+        } catch (_err) {
+          member.patch = patchText;
+        }
+      }
+      members.push(member);
+    });
+    return members;
+  }
+
   RED.nodes.registerType('mavlink-fanout', {
     category: 'mavlink',
     paletteLabel: 'fan-out',
@@ -34,6 +57,19 @@
         // own position; patch is a raw wire-unit field object (blank = none).
         value: [],
         validate: function (v, _opt) {
+          var $own = RED.mavlink.ownDialogField(this, '#node-input-members');
+          if ($own) {
+            var encoded = $own.val();
+            if (!Array.isArray(encoded)) return 'must be a list of member rows';
+            v = [];
+            for (var e = 0; e < encoded.length; e++) {
+              try {
+                v.push(JSON.parse(encoded[e]));
+              } catch (_err) {
+                return 'every member row must be valid editor data';
+              }
+            }
+          }
           if (RED.mavlink.liveOr(this, '#node-input-selectionMode', this.selectionMode) !== 'list') return true;
           if (!Array.isArray(v) || v.length === 0) return 'needs at least one member row for list selection';
           // The fields a metre offset would write on any supported carrier —
@@ -159,11 +195,19 @@
       // offsets in metres, and an optional raw wire-unit patch. Same stock
       // widget the Connection node uses for its extra identities.
       var $members = $('#mav-fanout-members');
+      function syncMembers() {
+        var $input = $('#node-input-members').empty();
+        currentMembers().forEach(function (member) {
+          $('<option></option>').val(JSON.stringify(member)).prop('selected', true).appendTo($input);
+        });
+        $input.trigger('change');
+      }
       $members.editableList({
         addButton: 'add member',
         removable: true,
         sortable: true,
         height: 'auto',
+        removeItem: syncMembers,
         addItem: function (container, _index, member) {
           container.css({ display: 'flex', 'align-items': 'center', gap: '4px' });
           function cell(cls, placeholder, title, grow) {
@@ -185,11 +229,21 @@
               $patch.val(typeof member.patch === 'string' ? member.patch : JSON.stringify(member.patch));
             }
           }
+          [$sysid, $north, $east, $up, $patch].forEach(function ($field) {
+            $field.on('input change', syncMembers);
+          });
+          // A freshly added row has fired no field handler yet, but it is
+          // already a member: without this sync the validator judges the
+          // pre-add mirror while oneditsave reads the live rows, and an
+          // untouched blank row saves as sysid 0 — a broadcast member the
+          // red ring never saw.
+          syncMembers();
         },
       });
       (node.members || []).forEach(function (member) {
         $members.editableList('addItem', member);
       });
+      syncMembers();
 
       function refreshVehicleTypeOptions() {
         // MAV_TYPE options come from the connection's profile catalog; without
@@ -274,25 +328,14 @@
       // a patch that parses to a JSON object is stored as the object so the
       // runtime reads it directly; unparseable text is kept verbatim so the
       // members validator reds the row instead of silently dropping it.
-      var members = [];
-      $('#mav-fanout-members').editableList('items').each(function () {
-        var row = $(this);
-        var member = { sysid: Number(row.find('.mav-fanout-member-sysid').val()) };
-        ['north', 'east', 'up'].forEach(function (axis) {
-          var raw = row.find('.mav-fanout-member-' + axis).val();
-          if (!RED.mavlink.isBlank(raw)) member[axis] = Number(raw);
-        });
-        var patchText = String(row.find('.mav-fanout-member-patch').val() || '').trim();
-        if (patchText !== '') {
-          try {
-            member.patch = JSON.parse(patchText);
-          } catch (_err) {
-            member.patch = patchText;
-          }
-        }
-        members.push(member);
-      });
-      this.members = members;
+      this.members = currentMembers();
+      // The mirror exists for live validation only. Node-RED's properties
+      // pane runs after oneditsave and copies every surviving #node-input-*
+      // field's val() over the node property — for this multi-select that is
+      // the rows as JSON strings, clobbering the object array above. Removing
+      // it leaves the pane nothing to read; the next dialog open rebuilds it
+      // from the template.
+      $('#node-input-members').remove();
       if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
     },
     oneditcancel: function () {
@@ -310,6 +353,7 @@
     <label style="vertical-align:top;">Members</label>
     <div style="display:inline-block;width:70%;">
       <ol id="mav-fanout-members"></ol>
+      <select id="node-input-members" multiple style="display:none;"></select>
     </div>
   </div>
   <div class="form-tips" id="tip-fanout-members" style="margin-bottom:8px;">

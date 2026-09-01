@@ -98,11 +98,14 @@ module.exports = function registerMavlinkBuild(RED) {
      *
      * @param {object|null} triggerMsg  the inbound Node-RED msg, or null when
      *   fired from the repeat timer
+     * @param {Function|undefined} send  input-handler send callback, when this
+     *   execution came from an inbound message
      * @param {Function|undefined} done  input-handler done callback, when this
      *   execution came from an inbound message
      * @returns {boolean} true when execution completed successfully
      */
-    function execute(triggerMsg, done) {
+    function execute(triggerMsg, send, done) {
+      const emit = triggerMsg ? send : node.send.bind(node);
       /**
        * Terminal failure for this execution: badge, status record, and the
        * routed error — done(err) for a triggered run, node.error for a timer
@@ -111,7 +114,7 @@ module.exports = function registerMavlinkBuild(RED) {
        */
       function failRun(err, extra = {}) {
         applyActionStatus(node, 'error', err.message);
-        node.send([null, makeStatusRecord(node.type, {
+        emit([null, makeStatusRecord(node.type, {
           result: 'failed',
           detail: err.message,
           message: messageName,
@@ -149,7 +152,7 @@ module.exports = function registerMavlinkBuild(RED) {
             tier: 'build',
           });
           applyActionStatus(node, 'ok', messageName);
-          node.send([outMsg, sr]);
+          emit([outMsg, sr]);
           return true;
         }
         case 'send': {
@@ -181,7 +184,7 @@ module.exports = function registerMavlinkBuild(RED) {
           applyActionStatus(node, 'ok', repeatMs > 0
             ? `${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`
             : messageName);
-          node.send([outMsg, sr]);
+          emit([outMsg, sr]);
           return true;
         }
         default: break; // This space intentionally left blank (§5)
@@ -191,7 +194,7 @@ module.exports = function registerMavlinkBuild(RED) {
     }
 
     // Input handler.
-    node.on('input', (msg, _send, done) => {
+    node.on('input', (msg, send, done) => {
       if (shouldSuppress(msg)) {
         done();
         return;
@@ -199,7 +202,7 @@ module.exports = function registerMavlinkBuild(RED) {
 
       // execute() returns false exactly on the paths where it already called
       // done(err), so a true return is the only one still owing a done().
-      if (execute(msg, done)) done();
+      if (execute(msg, send, done)) done();
     });
 
     if (repeatMs > 0) {

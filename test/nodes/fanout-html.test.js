@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { loadNodeDefaults } = require('./html-assert');
+const { loadNodeDefaults, loadNodeType } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
@@ -156,6 +156,79 @@ test('members validator: per-row reasons, offsets-vs-position-patch conflict red
   assert.match(String(onList([{ sysid: 1, north: 1, patch: { lat_int: 5 } }])), /conflict/);
   assert.equal(onList([{ sysid: 1, patch: { param7: 50 } }]), true,
     'a position-field patch without offsets is legitimate');
+});
+
+test('members validation reads the open editable-list value', () => {
+  // Node-RED validates before oneditsave. A bad current row therefore has to
+  // reach the descriptor through its bound control instead of hiding behind
+  // the prior saved member list.
+  const defaults = loadNodeDefaults('mavlink-fanout', {}, {
+    dom: {
+      '#node-input-selectionMode': { val: 'list' },
+      '#node-input-members': { val: ['{"sysid":0}'] },
+    },
+    editStack: [{ id: 'fanout-1' }],
+  });
+  assert.match(
+    String(defaults.members.validate.call(
+      { id: 'fanout-1', selectionMode: 'list', members: [{ sysid: 1 }] },
+      [{ sysid: 1 }],
+      {}
+    )),
+    /sysid must be an integer 1-255/,
+    'the current invalid row owns the red ring'
+  );
+});
+
+test('oneditsave removes the members mirror so the properties pane finds nothing to copy', () => {
+  // Node-RED's save order is oneditsave first, then the properties pane
+  // copies every surviving #node-input-* field's val() over the node
+  // property. The mirror's val() is the rows as JSON strings, so a mirror
+  // that outlived oneditsave would replace the object array oneditsave just
+  // stored. This runs the save and checks the mirror is gone; the pane
+  // itself is Node-RED's code and is not replayed here — its skip of a
+  // property whose input matches nothing is read from editor-client 5.0.4
+  // (panes/properties.js apply: `input.val()` on an empty match is
+  // undefined, and `newValue != null` bails).
+  const dom = {
+    '#mav-fanout-members': {
+      rows: [{
+        '.mav-fanout-member-sysid': '7',
+        '.mav-fanout-member-north': '',
+        '.mav-fanout-member-east': '',
+        '.mav-fanout-member-up': '',
+        '.mav-fanout-member-patch': '',
+      }],
+    },
+    '#node-input-members': { val: ['{"sysid":7}'] },
+  };
+  const def = loadNodeType('mavlink-fanout', {}, { dom });
+  const node = {};
+  def.oneditsave.call(node);
+  // Field-by-field: the rows are built inside the editor script's realm, so
+  // a deep-equal would fail on the foreign Object prototype, not the data.
+  assert.equal(node.members.length, 1, 'one live row saves as one member');
+  assert.equal(node.members[0].sysid, 7, 'saved members are the live rows as objects');
+  assert.ok(!('#node-input-members' in dom),
+    'the mirror is gone, which is what the pane collection that runs next depends on');
+});
+
+test('addItem syncs the mirror so an untouched new row cannot dodge validation', () => {
+  // A freshly added row has fired no field handler, so without a sync inside
+  // addItem the validator judges the pre-add mirror while oneditsave reads
+  // the live rows — an untouched blank row would save as sysid 0, a
+  // broadcast member the red ring never saw.
+  const start = html.indexOf('addItem: function (container, _index, member) {');
+  assert.ok(start >= 0, 'members editableList must define addItem');
+  let i = html.indexOf('{', start) + 1;
+  let depth = 1;
+  while (i < html.length && depth > 0) {
+    const c = html[i++];
+    if (c === '{') depth += 1;
+    else if (c === '}') depth -= 1;
+  }
+  assert.ok(html.slice(start, i).includes('syncMembers();'),
+    'addItem must sync the mirror before the new row can reach oneditsave unvalidated');
 });
 
 test('selectionMode and executionMode red on membership, then on the Build pairing rules', () => {
