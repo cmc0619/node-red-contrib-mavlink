@@ -1207,15 +1207,25 @@ const { timestampFromMs } = require('../../lib/connection/signing');
  * @param {object} [options]
  * @param {number} [options.openFailures]  how many opens (after the first,
  *   which always succeeds) reject before one succeeds
+ * @param {number} [options.initialOpenFailures]  initial opens that reject
  * @param {boolean} [options.failFirstOpen]  the deploy-time open itself fails,
  *   emitting a transport error first the way a real bind failure does
  * @param {boolean} [options.holdRedialOpen]  redial opens hang until the test
  *   releases them via `releaseHeldOpen()` — for close-vs-open races
  * @param {object} [options.signing]  signing config override (reconnect
  *   hygiene tests exercise the inbound replay store)
+ * @param {boolean} [options.tcpClient]  TCP config includes a remote endpoint
  * @returns {object}
  */
-function reconnectBuild({ openFailures = 0, failFirstOpen = false, holdRedialOpen = false, signing } = {}) {
+function reconnectBuild({
+  openFailures = 0,
+  initialOpenFailures = 0,
+  failFirstOpen = false,
+  holdRedialOpen = false,
+  signing,
+  mode = 'udp',
+  tcpClient = true,
+} = {}) {
   const transports = [];
   const timeouts = [];
   const warns = [];
@@ -1224,11 +1234,12 @@ function reconnectBuild({ openFailures = 0, failFirstOpen = false, holdRedialOpe
   let opens = 0;
   const transportFactory = () => {
     const transport = new EventEmitter();
-    transport.mode = 'udp';
+    transport.mode = mode;
     transport.sent = [];
     transport.closed = false;
     transport.open = () => {
       opens += 1;
+      if (opens <= initialOpenFailures) return Promise.reject(new Error('not ready'));
       if (opens === 1 && failFirstOpen) {
         // A real bind failure (EADDRINUSE, missing device) emits the transport
         // error event and rejects the open — mimic both.
@@ -1263,7 +1274,11 @@ function reconnectBuild({ openFailures = 0, failFirstOpen = false, holdRedialOpe
   wire.clearDecoders = () => { cleared += 1; };
   const connection = new Connection(
     {
-      transport: { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550 },
+      transport: mode === 'tcp'
+        ? tcpClient
+          ? { mode: 'tcp', remoteAddress: '127.0.0.1', remotePort: 5760 }
+          : { mode: 'tcp', bindAddress: '0.0.0.0', bindPort: 5760 }
+        : { mode: 'udp', bindAddress: '0.0.0.0', bindPort: 14550 },
       vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
       identities: [GCS],
       defaultIdentityId: 'gcs',
@@ -1470,6 +1485,56 @@ test('a transport that never opened does not enter the redial loop — deploy fa
   await assert.rejects(() => connection.start(), /EADDRINUSE/);
   assert.equal(connection.getState(), STATE.ERROR, 'pre-establishment errors stay terminal (§2)');
   assert.equal(redials().length, 0, 'no redial is ever armed for a config that never worked');
+});
+
+test('a TCP listener that never opened does not enter the redial loop', async () => {
+  const { connection, redials } = reconnectBuild({ mode: 'tcp', tcpClient: false, failFirstOpen: true });
+
+  await assert.rejects(() => connection.start(), /EADDRINUSE/);
+  assert.equal(connection.getState(), STATE.ERROR);
+  assert.equal(redials().length, 0);
+});
+
+test('a TCP client retries a failed initial dial three times', async () => {
+  const { connection, redials, timers } = reconnectBuild({ mode: 'tcp', initialOpenFailures: 3 });
+
+  await connection.start();
+  assert.equal(connection.getState(), STATE.RECONNECTING);
+
+  for (let i = 0; i < 3; i++) {
+    const pending = redials().filter((timer) => !timer.fired);
+    assert.equal(pending.length, 1, 'one retry is armed at a time');
+    pending[0].fired = true;
+    pending[0].fn();
+    await delay(0);
+  }
+
+  assert.equal(connection.getState(), STATE.CONNECTED);
+  assert.deepEqual(redials().map((timer) => timer.ms), [500, 1000, 2000]);
+  assert.equal(timers.active(), 2, 'the first successful dial starts heartbeats and the peer sweep');
+  connection.close();
+});
+
+test('a TCP client enters ERROR after three failed initial retries', async () => {
+  const { connection, redials, transports } = reconnectBuild({
+    mode: 'tcp',
+    initialOpenFailures: 4,
+  });
+
+  await connection.start();
+  for (let i = 0; i < 3; i++) {
+    const pending = redials().filter((timer) => !timer.fired);
+    assert.equal(pending.length, 1, 'one retry is armed at a time');
+    pending[0].fired = true;
+    pending[0].fn();
+    await delay(0);
+  }
+
+  assert.equal(connection.getState(), STATE.ERROR);
+  assert.equal(transports.length, 4, 'initial dial plus three retries');
+  assert.equal(redials().length, 3, 'the retry budget does not arm a fourth timer');
+  assert.equal(transports[3].closed, true, 'the final failed transport is released');
+  connection.close();
 });
 
 test('reconnect demotes learned endpoints — primacy is re-established by the first live frame', async () => {
