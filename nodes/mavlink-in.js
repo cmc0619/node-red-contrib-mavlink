@@ -122,8 +122,7 @@ module.exports = function registerMavlinkIn(RED) {
     // an optional bare Hz default for unlisted names. The editor validator is
     // the loud-failure point for this shape (§2 config trust, AGENTS
     // "Runtime code MUST NOT duplicate validation already performed by the
-    // editor"); the parse skips tokens it cannot read, same as fanout's
-    // params JSON treating unparseable saved config as empty.
+    // editor").
     const rate = parseRateLimit(config.rateLimit);
 
     /** @type {Map<string, string>} key → last JSON of fields */
@@ -297,9 +296,7 @@ function parseNameList(value) {
  * Parse the rate-limit config: blank/0 = unlimited; a bare number is the Hz
  * for every message; `NAME=Hz` comma pairs limit named messages, and a bare
  * number among the pairs sets the default for unlisted names. `NAME=0` means
- * that message is unlimited. The editor validator is the loud-failure point
- * for the shape (§2 config trust); tokens that still cannot be read — only
- * reachable via hand-edited flow JSON — are skipped.
+ * that message is unlimited. The editor owns the shape.
  *
  * @param {*} value
  * @returns {{defaultMs: number, perMessageMs: Map<string, number>}}
@@ -310,24 +307,15 @@ function parseRateLimit(value) {
   if (!raw) return result;
   for (const token of raw.split(',')) {
     const part = token.trim();
-    if (!part) continue;
     const eq = part.indexOf('=');
     if (eq === -1) {
       const hz = Number(part);
-      if (Number.isFinite(hz) && hz > 0) result.defaultMs = 1000 / hz;
+      result.defaultMs = hz > 0 ? 1000 / hz : 0;
       continue;
     }
     const name = part.slice(0, eq).trim();
-    const rawHz = part.slice(eq + 1).trim();
-    // `Number('')` is 0, and 0 is the *explicit* "unlimited" value — so a
-    // blank (`ATTITUDE=`) would silently delete the limit the operator asked
-    // for, and a second blank token would clobber a good earlier one. An
-    // unreadable value is skipped instead, leaving the message on the default
-    // limit: the node keeps skipping rather than falling open.
-    const hz = rawHz === '' ? NaN : Number(rawHz);
-    if (name && Number.isFinite(hz) && hz >= 0) {
-      result.perMessageMs.set(name, hz > 0 ? 1000 / hz : 0);
-    }
+    const hz = Number(part.slice(eq + 1).trim());
+    result.perMessageMs.set(name, hz > 0 ? 1000 / hz : 0);
   }
   return result;
 }
