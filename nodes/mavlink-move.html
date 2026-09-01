@@ -172,8 +172,7 @@
       }
       for (var i = 0; i < axes.length; i++) {
         if (axes[i] === name) continue;
-        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + axes[i]);
-        var sibling = $sibling ? $sibling.val() : this[axes[i]];
+        var sibling = fieldValue(this, axes[i]);
         if (!RED.mavlink.isBlank(sibling)) {
           return 'is required once another ' + label + ' axis is filled — a blank axis is '
             + 'commanded 0 under the type_mask, not left alone';
@@ -208,8 +207,7 @@
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
       for (var i = 0; i < ANGLES.length; i++) {
         if (ANGLES[i] === name) continue;
-        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + ANGLES[i]);
-        var sibling = $sibling ? $sibling.val() : this[ANGLES[i]];
+        var sibling = fieldValue(this, ANGLES[i]);
         if (!RED.mavlink.isBlank(sibling)) {
           return 'is required once another angle is filled — the three share one ignore '
             + 'bit, so a blank angle is commanded 0 rather than left alone';
