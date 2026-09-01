@@ -340,7 +340,3 @@ module.exports = function registerMavlinkVehicle(RED) {
 
   RED.nodes.registerType('mavlink-vehicle', MavlinkVehicleNode);
 };
-
-/* Expose lists for editor HTML and tests */
-module.exports.FIRMWARE_TYPES = vehicleApi ? vehicleApi.FIRMWARE_TYPES : [];
-module.exports.VEHICLE_FAMILIES = vehicleApi ? vehicleApi.VEHICLE_FAMILIES : [];
