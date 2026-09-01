@@ -323,6 +323,13 @@
       // runtime reads it directly; unparseable text is kept verbatim so the
       // members validator reds the row instead of silently dropping it.
       this.members = currentMembers();
+      // The mirror exists for live validation only. Node-RED's properties
+      // pane runs after oneditsave and copies every surviving #node-input-*
+      // field's val() over the node property — for this multi-select that is
+      // the rows as JSON strings, clobbering the object array above. Removing
+      // it leaves the pane nothing to read; the next dialog open rebuilds it
+      // from the template.
+      $('#node-input-members').remove();
       if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
     },
     oneditcancel: function () {

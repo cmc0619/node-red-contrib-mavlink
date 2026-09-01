@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { loadNodeDefaults } = require('./html-assert');
+const { loadNodeDefaults, loadNodeType } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
@@ -178,6 +178,35 @@ test('members validation reads the open editable-list value', () => {
     /sysid must be an integer 1-255/,
     'the current invalid row owns the red ring'
   );
+});
+
+test('oneditsave consumes the members mirror before the properties pane reads it', () => {
+  // Node-RED's save order is oneditsave first, then the properties pane
+  // copies every surviving #node-input-* field's val() over the node
+  // property. The mirror's val() is the rows as JSON strings, so a mirror
+  // that outlived oneditsave would replace the object array oneditsave just
+  // stored. This replays both halves: the save, then the pane's lookup.
+  const dom = {
+    '#mav-fanout-members': {
+      rows: [{
+        '.mav-fanout-member-sysid': '7',
+        '.mav-fanout-member-north': '',
+        '.mav-fanout-member-east': '',
+        '.mav-fanout-member-up': '',
+        '.mav-fanout-member-patch': '',
+      }],
+    },
+    '#node-input-members': { val: ['{"sysid":7}'] },
+  };
+  const def = loadNodeType('mavlink-fanout', {}, { dom });
+  const node = {};
+  def.oneditsave.call(node);
+  // Field-by-field: the rows are built inside the editor script's realm, so
+  // a deep-equal would fail on the foreign Object prototype, not the data.
+  assert.equal(node.members.length, 1, 'one live row saves as one member');
+  assert.equal(node.members[0].sysid, 7, 'saved members are the live rows as objects');
+  assert.ok(!('#node-input-members' in dom),
+    'the mirror is gone — the pane collection that runs next finds nothing to overwrite');
 });
 
 test('selectionMode and executionMode red on membership, then on the Build pairing rules', () => {

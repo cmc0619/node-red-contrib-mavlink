@@ -1117,9 +1117,13 @@ test('mavlink-build sends input-triggered output through the supplied send', () 
   });
 
   const emitted = [];
-  node._handlers.input[0]({ payload: {} }, (msgs) => emitted.push(msgs), () => {});
+  node._handlers.input[0]({ payload: {}, correlationId: 'input-1' }, (msgs) => emitted.push(msgs), () => {});
 
   assert.equal(emitted.length, 1, 'input-triggered output is correlated to the received message');
+  assert.equal(emitted[0][0].correlationId, 'input-1',
+    'the output rides the triggering msg, not a fresh object');
+  assert.equal(emitted[0][0].payload.messageName, 'HEARTBEAT',
+    'the output carries the built message, not an unrelated send');
   assert.equal(node._sends.length, 0, 'node.send is reserved for timer-triggered output');
 });
 
