@@ -117,6 +117,11 @@ class FakeElement {
     return this;
   }
 
+  /** Chainable no-op: styling is not what any harness asserts on. */
+  css() {
+    return this;
+  }
+
   removeAttr(name) {
     delete this.attrs[name];
     return this;

@@ -113,10 +113,8 @@ test('Param definition GET failures clear stale UI and render server and fallbac
     },
     notice: 'stale notice',
   });
-  // The panel stays closed until the operator types or focuses; what a
-  // successful load must produce here is the hover text — description, unit
-  // and range ride on `title`, not on a row that stays in the dialog.
-  assert.equal(element('#mav-param-results').visible, false);
+  // What a successful load must produce here is the hover text — description,
+  // unit and range ride on `title`, not on a row that stays in the dialog.
   assert.equal(
     element('#node-input-paramId').attrs.title,
     'Previously loaded definition. | Unit: Hz'
@@ -125,8 +123,6 @@ test('Param definition GET failures clear stale UI and render server and fallbac
   context.loadParamDefsForTest();
   requests[1].reject({ responseJSON: { error: 'holding file is corrupt' } });
 
-  assert.equal(element('#mav-param-results').options.length, 0, 'stale hits are cleared');
-  assert.equal(element('#mav-param-results').visible, false);
   assert.equal(element('#node-input-paramId').attrs.title, undefined);
   assert.equal(element('#row-param-defs-tip').visible, true);
   assert.equal(element('#mav-param-defs-tip-text').label, 'holding file is corrupt');
@@ -202,11 +198,14 @@ test('Param definition loader explains every path on which it does not ask', () 
 });
 
 /**
- * The results panel. A datalist could only match the *start of the name*, so
- * finding a parameter meant already knowing what it was called — the exact
- * problem a seeded 6827-entry list makes worse, not better.
+ * The param id search. A datalist could only match the *start of the name*,
+ * so finding a parameter meant already knowing what it was called — the exact
+ * problem a seeded 6827-entry list makes worse, not better. Node-RED's stock
+ * autoComplete widget owns the panel, keyboard navigation and blur handling;
+ * what stays ours is the ranking in `searchParams` and the option shape
+ * `autocompleteOptions` hands the widget, so that is what is exercised here.
  */
-function mountParamPanel(defs, initialValue) {
+function mountParamSearch(defs, initialValue) {
   const start = paramHtml.indexOf('var _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
   assert.ok(start >= 0 && end > start, 'Param definition loader is present');
@@ -236,123 +235,71 @@ function mountParamPanel(defs, initialValue) {
   vm.runInNewContext(
     `${paramHtml.slice(start, end)}
      this.loadParamDefsForTest = loadParamDefs;
-     this.renderForTest = renderParamResults;
-     this.moveForTest = moveParamSelection;
-     this.hitsForTest = function () { return _hits.slice(); };
-     this.hitIndexForTest = function () { return _hitIndex; };`,
+     this.searchForTest = searchParams;
+     this.optionsForTest = autocompleteOptions;`,
     context
   );
   context.loadParamDefsForTest();
   requests[0].resolve({ defs });
 
-  /** Ids currently rendered, read off the panel's own rows. */
-  const rendered = () => element('#mav-param-results').options
-    .map((row) => row.attrs['data-param-id']);
-
-  return { context, element, rendered };
+  // Array.from re-homes the result in this realm: the editor script builds
+  // its arrays inside the vm context, and a deep-equal would fail on the
+  // foreign Array prototype rather than on the ids.
+  const search = (query) => Array.from(context.searchForTest(query));
+  return { context, element, search };
 }
 
-const PANEL_DEFS = {
+const SEARCH_DEFS = {
   RC1_MIN: { description: 'Minimum value for RC channel 1', unit: 'us' },
   RC1_MAX: { description: 'Maximum value for RC channel 1', unit: 'us' },
   BAT_V_EMPTY: { description: 'Empty cell voltage', unit: 'V' },
   ATC_RAT_RLL_P: { description: 'Roll axis rate controller P gain' },
 };
 
-test('the results panel searches descriptions, not just the start of the name', () => {
-  const { context, rendered } = mountParamPanel(PANEL_DEFS);
+test('the search matches descriptions, not just the start of the name', () => {
+  const { search } = mountParamSearch(SEARCH_DEFS);
 
-  context.renderForTest('minimum');
-  // No parameter is *called* "minimum" — the old datalist could never have
-  // surfaced this, which is the entire reason the panel exists.
-  assert.deepEqual(rendered(), ['RC1_MIN']);
-
-  context.renderForTest('voltage');
-  assert.deepEqual(rendered(), ['BAT_V_EMPTY']);
+  // No parameter is *called* "minimum" — a datalist could never have
+  // surfaced this, which is the entire reason the ranking is ours.
+  assert.deepEqual(search('minimum'), ['RC1_MIN']);
+  assert.deepEqual(search('voltage'), ['BAT_V_EMPTY']);
 });
 
 test('an exact or prefix name match outranks a description match', () => {
-  const { context, rendered } = mountParamPanel(PANEL_DEFS);
+  const { search } = mountParamSearch(SEARCH_DEFS);
 
-  context.renderForTest('RC1_');
-  assert.deepEqual(rendered(), ['RC1_MAX', 'RC1_MIN'], 'prefix hits, in id order');
+  assert.deepEqual(search('RC1_'), ['RC1_MAX', 'RC1_MIN'], 'prefix hits, in id order');
 
   // "RC channel 1" appears in both descriptions, so both match — but the one
   // whose *name* matches has to come first.
-  context.renderForTest('RC1_MAX');
-  assert.equal(rendered()[0], 'RC1_MAX');
+  assert.equal(search('RC1_MAX')[0], 'RC1_MAX');
 });
 
 test('search is case-insensitive and a blank query lists everything', () => {
-  const { context, rendered } = mountParamPanel(PANEL_DEFS);
+  const { search } = mountParamSearch(SEARCH_DEFS);
 
-  context.renderForTest('bat_v');
-  assert.deepEqual(rendered(), ['BAT_V_EMPTY']);
-
-  context.renderForTest('');
-  assert.equal(rendered().length, Object.keys(PANEL_DEFS).length);
+  assert.deepEqual(search('bat_v'), ['BAT_V_EMPTY']);
+  assert.equal(search('').length, Object.keys(SEARCH_DEFS).length);
 });
 
-test('a row carries the id and a detail line with units', () => {
-  const { context, element } = mountParamPanel(PANEL_DEFS);
-  context.renderForTest('RC1_MIN');
+test('an option carries the id as its value and a detail line with units', () => {
+  const { context } = mountParamSearch(SEARCH_DEFS);
+  const [option] = context.optionsForTest('RC1_MIN');
 
-  const row = element('#mav-param-results').options[0];
-  assert.equal(row.options[0].label, 'RC1_MIN');
-  assert.match(row.options[1].label, /Minimum value for RC channel 1/);
-  assert.match(row.options[1].label, /us/, 'units ride the detail line');
+  assert.equal(option.value, 'RC1_MIN', 'the widget writes the id, not the label, into the field');
+  const [id, detail] = option.label.options;
+  assert.equal(id.label, 'RC1_MIN');
+  assert.match(detail.label, /Minimum value for RC channel 1/);
+  assert.match(detail.label, /us/, 'units ride the detail line');
 });
 
-test('choosing a row fills the field and closes the panel', () => {
-  const { context, element } = mountParamPanel(PANEL_DEFS);
-  context.renderForTest('minimum');
-
-  const row = element('#mav-param-results').options[0];
-  // mousedown, not click: the input's blur fires first and would otherwise
-  // tear the panel down before a click could land.
-  row.handlers.mousedown({ preventDefault() {} });
-
-  assert.equal(element('#node-input-paramId').val(), 'RC1_MIN');
-  assert.equal(element('#mav-param-results').visible, false);
-  // Everything the operator needs about the parameter rides on hover, so the
-  // dialog does not keep a reference row in front of them after they picked.
-  assert.equal(
-    element('#node-input-paramId').attrs.title,
-    'Minimum value for RC channel 1 | Unit: us'
-  );
-});
-
-test('every row selects its own parameter, not the last one rendered', () => {
-  // The classic closure-over-loop-variable bug: one shared `id` would make
-  // each row choose whatever the loop finished on.
-  const { context, element } = mountParamPanel(PANEL_DEFS);
-  context.renderForTest('RC1_');
-
-  element('#mav-param-results').options[1].handlers.mousedown({ preventDefault() {} });
-  assert.equal(element('#node-input-paramId').val(), 'RC1_MIN');
-});
-
-test('arrow keys move the selection and wrap', () => {
-  const { context } = mountParamPanel(PANEL_DEFS);
-  context.renderForTest('RC1_');
-  assert.equal(context.hitIndexForTest(), 0);
-
-  context.moveForTest(1);
-  assert.equal(context.hitIndexForTest(), 1);
-  context.moveForTest(1);
-  assert.equal(context.hitIndexForTest(), 0, 'wraps past the end');
-  context.moveForTest(-1);
-  assert.equal(context.hitIndexForTest(), 1, 'and wraps backwards');
-});
-
-test('the panel is capped so a full seed cannot render 6827 rows', () => {
+test('the search is capped so a full seed cannot hand the widget 6827 rows', () => {
   const many = {};
   for (let i = 0; i < 400; i += 1) {
     many[`P_${String(i).padStart(4, '0')}`] = { description: 'bulk' };
   }
-  const { context, rendered } = mountParamPanel(many);
-  context.renderForTest('');
-  assert.equal(rendered().length, 50);
+  const { search } = mountParamSearch(many);
+  assert.equal(search('').length, 50);
 });
 
 /**

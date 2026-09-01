@@ -672,3 +672,11 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
   assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
 });
+
+test('param id search uses the stock autoComplete widget, not a hand-rolled results panel', () => {
+  // Node-RED's own widget owns the panel, keyboard navigation and blur
+  // handling; the ranking by name and description stays ours, in the search
+  // callback it is handed.
+  assert.match(html, /#node-input-paramId'\)\.autoComplete\(\{/);
+  assert.doesNotMatch(html, /mav-param-results/);
+});

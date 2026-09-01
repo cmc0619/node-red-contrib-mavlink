@@ -251,7 +251,6 @@
         if (!byIndex) $('#node-input-paramIndex').val(-1);
         // The results panel floats under the name field, so it is tied to that
         // row by construction rather than by a second condition that can drift.
-        if (!showName) hideParamResults();
       }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
@@ -434,17 +433,6 @@
        * string per parameter per keypress.
        */
       var _paramText = {};
-      /** Ids currently on screen, so keyboard selection has something to index. */
-      var _hits = [];
-      var _hitIndex = -1;
-      /**
-       * The query those hits came from. Arrow keys re-render, and re-reading
-       * the input would silently re-search — the same string in the live
-       * editor, but it makes the panel depend on the input rather than on what
-       * it last drew.
-       */
-      var _hitQuery = '';
-
       var MAX_HITS = 50;
 
       function rebuildParamIndex() {
@@ -460,7 +448,6 @@
         if (!hasDefs && _defsLoaded && _defsNotice) {
           $('#mav-param-defs-tip-text').text(_defsNotice);
         }
-        hideParamResults();
       }
 
       /**
@@ -487,63 +474,16 @@
         return exact.concat(prefix, contains, described).slice(0, MAX_HITS);
       }
 
-      function hideParamResults() {
-        _hits = [];
-        _hitIndex = -1;
-        _hitQuery = '';
-        $('#mav-param-results').empty().toggle(false);
-      }
-
-      function chooseParam(id) {
-        $('#node-input-paramId').val(id);
-        hideParamResults();
-        refreshParamInfo();
-      }
-
-      function renderParamResults(query, keepIndex) {
-        if (!_paramIds.length) { hideParamResults(); return; }
-        _hitQuery = String(query || '');
-        _hits = searchParams(_hitQuery);
-        _hitIndex = _hits.length
-          ? Math.max(0, Math.min(keepIndex === undefined ? 0 : keepIndex, _hits.length - 1))
-          : -1;
-
-        var $panel = $('#mav-param-results');
-        $panel.empty();
-        for (var i = 0; i < _hits.length; i++) {
-          var id = _hits[i];
+      function autocompleteOptions(query) {
+        return searchParams(query).map(function (id) {
           var def = _paramDefs[id] || {};
           var detail = def.description || '';
           if (def.unit) detail = detail ? detail + '  \u00b7  ' + def.unit : def.unit;
-
-          var $row = $('<div></div>')
-            .attr('class', 'mav-param-hit' + (i === _hitIndex ? ' mav-param-hit-active' : ''))
-            .attr('data-param-id', id);
-          $row.append($('<div></div>').attr('class', 'mav-param-hit-id').text(id));
-          if (detail) {
-            $row.append($('<div></div>').attr('class', 'mav-param-hit-detail').text(detail));
-          }
-          // `id` is captured per row; a shared loop variable would make every
-          // row select the last one.
-          $row.on('mousedown', (function (chosen) {
-            return function (event) {
-              // mousedown, not click: the input's blur would tear the panel
-              // down before a click could land.
-              if (event && event.preventDefault) event.preventDefault();
-              chooseParam(chosen);
-            };
-          }(id)));
-          $panel.append($row);
-        }
-        $panel.toggle(_hits.length > 0);
-      }
-
-      function moveParamSelection(delta) {
-        if (!_hits.length) return;
-        // Re-render rather than track nodes: the panel is capped at MAX_HITS,
-        // so the active row stays a function of state instead of history.
-        var next = (_hitIndex + delta + _hits.length) % _hits.length;
-        renderParamResults(_hitQuery, next);
+          var $label = $('<div></div>');
+          $label.append($('<strong></strong>').text(id));
+          if (detail) $label.append($('<span></span>').css('margin-left', '0.5em').text(detail));
+          return { value: id, label: $label };
+        });
       }
 
       /**
@@ -847,20 +787,9 @@
         if (_paramDefs[id] === _infoDef) return;
         refreshParamInfo();
       });
-      $('#node-input-paramId').on('input focus', function () {
-        renderParamResults($('#node-input-paramId').val());
-      });
-      $('#node-input-paramId').on('blur', hideParamResults);
-      $('#node-input-paramId').on('keydown', function (event) {
-        var key = event && event.key;
-        if (key === 'ArrowDown') { moveParamSelection(1); }
-        else if (key === 'ArrowUp') { moveParamSelection(-1); }
-        else if (key === 'Enter' && _hitIndex >= 0) { chooseParam(_hits[_hitIndex]); }
-        else if (key === 'Escape') { hideParamResults(); }
-        else { return; }
-        // Enter would otherwise submit the edit dialog, and the arrows would
-        // move the caret instead of the selection.
-        if (event.preventDefault) event.preventDefault();
+      $('#node-input-paramId').autoComplete({
+        search: autocompleteOptions,
+        minLength: 0,
       });
       // The action decides which message is built, so it decides which rows
       // exist at all — not just how the Value field is shaped.
@@ -938,42 +867,10 @@
 
 <script type="text/html" data-template-name="mavlink-param">
   <style>
-    /* Colours come from Node-RED's theme variables so the panel follows the
-       editor's light and dark themes instead of pinning its own palette. */
-    .mav-param-results {
-      max-height: 260px;
-      overflow-y: auto;
-      border: 1px solid var(--red-ui-form-input-border-color, #ccc);
-      border-radius: 3px;
-      background: var(--red-ui-form-input-background, #fff);
-      margin: 2px 0 0 107px;
-      width: 70%;
-    }
-    .mav-param-hit {
-      padding: 4px 8px;
-      cursor: pointer;
-      border-bottom: 1px solid var(--red-ui-secondary-border-color, #eee);
-    }
-    .mav-param-hit:last-child { border-bottom: none; }
-    .mav-param-hit:hover,
-    .mav-param-hit-active {
-      background: var(--red-ui-list-item-background-hover, #efefef);
-    }
-    .mav-param-hit-id {
-      font-family: monospace;
-      font-size: 0.9em;
-    }
     .mav-field-units {
       margin-left: 6px;
       color: var(--red-ui-secondary-text-color, #888);
       font-size: 0.85em;
-    }
-    .mav-param-hit-detail {
-      font-size: 0.8em;
-      color: var(--red-ui-secondary-text-color, #888);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
   </style>
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
@@ -1011,14 +908,6 @@
     <label for="node-input-paramId">Param id</label>
     <input type="text" id="node-input-paramId" maxlength="16" autocomplete="off"
            placeholder="search name or description, e.g. minimum">
-    <!--
-      A results panel, not a datalist: a datalist can only match the start of
-      the name, so you had to know the parameter was called RC1_MIN before you
-      could find it. This searches descriptions too, and shows units. Typing a
-      name that is in no list still works — Lua scripts and custom builds
-      declare parameters no metadata file has ever heard of.
-    -->
-    <div id="mav-param-results" class="mav-param-results" style="display:none"></div>
   </div>
   <div class="form-row" id="row-param-defs-tip" style="display:none">
     <label>&nbsp;</label>
