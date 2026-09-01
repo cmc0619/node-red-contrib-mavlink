@@ -10,10 +10,14 @@ const {
   matchesParamReadReply,
   createParamListCollector,
   resolveParamEncoding,
-  PARAM_ENCODING,
-  CAP_PARAM_ENCODE_BYTEWISE,
-  CAP_PARAM_ENCODE_C_CAST,
 } = require('../../lib/param');
+
+// MAV_PROTOCOL_CAPABILITY bits as AUTOPILOT_VERSION reports them, and the two
+// encoding names resolveParamEncoding answers with — literal on purpose, so
+// the tests measure the runtime's output instead of echoing its constants.
+const CAP_PARAM_ENCODE_BYTEWISE = 16;
+const CAP_PARAM_ENCODE_C_CAST = 131072;
+const PARAM_ENCODING = { BYTEWISE: 'bytewise', C_CAST: 'c-cast' };
 
 test('PARAM_SET for PX4 integer params writes the int bits into the float slot', () => {
   const message = buildParamMessage({

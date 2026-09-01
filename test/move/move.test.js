@@ -227,18 +227,34 @@ test('a commanded group coerces every axis — the editor is what requires them 
   assert.ok(Number.isNaN(absent.fields.vy));
 });
 
-test('buildStopMessage copies target ids and does not invent system 1', () => {
-  const { buildStopMessage } = require('../../lib/move');
-  const stop = buildStopMessage({
-    fields: { time_boot_ms: 9, target_system: 4, target_component: 7 },
-  });
+test('the brake copies target ids from the streamed setpoint and does not invent system 1', () => {
+  // Measured at the connection: stop() with a brake sends one more message,
+  // and its target ids are the setpoint's own — absent stays absent.
+  const brakeFor = (fields) => {
+    const sent = [];
+    const stream = createMoveStream({
+      message: { name: 'SET_POSITION_TARGET_LOCAL_NED', fields },
+      connection: { send: (m) => sent.push(m) },
+      rateHz: 4,
+      ttlMs: 0,
+      setInterval: () => ({ unref() { /* not a real timer */ } }),
+      clearInterval: () => { /* no timer to clear */ },
+    });
+    stream.start();
+    const before = sent.length;
+    stream.stop({ brake: true });
+    assert.equal(sent.length, before + 1, 'a braking stop sends exactly one brake');
+    return sent[sent.length - 1];
+  };
+  const stop = brakeFor({ time_boot_ms: 9, target_system: 4, target_component: 7, vx: 1 });
+  assert.equal(stop.name, 'SET_POSITION_TARGET_LOCAL_NED');
   assert.equal(stop.fields.target_system, 4);
   assert.equal(stop.fields.target_component, 7);
-  const missing = buildStopMessage({ fields: { time_boot_ms: 0 } });
+  assert.equal(stop.fields.vx, 0, 'the brake zeroes velocity');
+  const missing = brakeFor({ time_boot_ms: 0, vx: 1 });
   assert.equal(missing.fields.target_system, undefined);
   assert.equal(missing.fields.target_component, undefined);
 });
-
 
 test('stream ticks re-stamp time_boot_ms without mutating the built message', () => {
   const { createMoveStream } = require('../../lib/move');

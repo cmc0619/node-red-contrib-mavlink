@@ -16,8 +16,6 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
-  FIRMWARE_TYPES,
-  VEHICLE_FAMILIES,
   resolveDialect,
   knownDialects,
 } = require('../../lib/vehicle');
@@ -34,22 +32,6 @@ test('knownDialects returns seeded dialect names including the classic ten', () 
     assert.ok(known.includes(name), `missing seeded dialect ${name}`);
   }
   assert.ok(known.length >= classic.length);
-});
-
-/* ---------- FIRMWARE_TYPES ---------- */
-
-test('FIRMWARE_TYPES includes ardupilot, px4, custom', () => {
-  assert.ok(FIRMWARE_TYPES.includes('ardupilot'));
-  assert.ok(FIRMWARE_TYPES.includes('px4'));
-  assert.ok(FIRMWARE_TYPES.includes('custom'));
-});
-
-/* ---------- VEHICLE_FAMILIES ---------- */
-
-test('VEHICLE_FAMILIES has one family per ArduPilot document, plus unknown', () => {
-  for (const f of ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown']) {
-    assert.ok(VEHICLE_FAMILIES.includes(f), `expected ${f} in VEHICLE_FAMILIES`);
-  }
 });
 
 /* ---------- resolveDialect — seed ---------- */

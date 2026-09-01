@@ -13,11 +13,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  BADGE_MAX,
   makeStatusRecord,
   shouldSuppress,
   capBadge,
 } = require('../../lib/delivery');
+
+// §6: the badge cap. Measured here as the number capBadge produces, not
+// imported — the runtime exports behavior, not its constants.
+const BADGE_MAX = 24;
 
 // ---------------------------------------------------------------------------
 // makeStatusRecord
@@ -116,10 +119,3 @@ test('capBadge: coerces non-string input via String()', () => {
   assert.equal(result, '12345');
 });
 
-// ---------------------------------------------------------------------------
-// BADGE_MAX
-// ---------------------------------------------------------------------------
-
-test('BADGE_MAX is 24', () => {
-  assert.equal(BADGE_MAX, 24);
-});

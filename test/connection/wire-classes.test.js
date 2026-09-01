@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const mav = require('node-mavlink');
 const { loadBundled, compileXml } = require('../../lib/metadata');
 const { normalizeType } = require('../../lib/codec/types');
-const { buildMessageClass } = require('../../lib/connection/wire-classes');
+const { synthesizeWireClasses } = require('../../lib/connection/wire-classes');
 const { createWire } = require('../../lib/connection/wire');
 
 /**
@@ -63,16 +63,18 @@ test('every seeded ardupilotmega message round-trips through synthesized wire cl
  */
 test('synthesized layout matches mavlink-mappings when the seed has not drifted', () => {
   const bundle = loadBundled('ardupilotmega');
+  const synthByName = new Map(
+    synthesizeWireClasses(mav, bundle).map((cls) => [cls.MSG_NAME, cls])
+  );
   let compared = 0;
   let skipped = 0;
   for (const name of ['minimal', 'standard', 'common', 'ardupilotmega']) {
     for (const gen of Object.values((mav[name] && mav[name].REGISTRY) || {})) {
-      const meta = bundle.messages[gen.MSG_NAME];
-      if (!meta) {
+      const synth = synthByName.get(gen.MSG_NAME);
+      if (!synth) {
         skipped += 1;
         continue;
       }
-      const synth = buildMessageClass(mav, meta);
       if (synth.PAYLOAD_LENGTH !== gen.PAYLOAD_LENGTH || synth.FIELDS.length !== gen.FIELDS.length) {
         skipped += 1;
         continue;
@@ -141,7 +143,7 @@ test('unknown wire types fail loudly instead of guessing a size', () => {
   const bundle = customBundle();
   bundle.messages.WIDGET_STATUS.fields[0].type = 'uint128_t';
   assert.throws(
-    () => buildMessageClass(mav, bundle.messages.WIDGET_STATUS),
+    () => synthesizeWireClasses(mav, bundle),
     /unknown MAVLink wire type 'uint128_t'/
   );
 });

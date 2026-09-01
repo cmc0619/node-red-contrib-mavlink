@@ -3,7 +3,33 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { slotOffsets, bodyToNed, formationTargets } = require('../../lib/formation');
+const { formationTargets } = require('../../lib/formation');
+
+const EARTH_RADIUS_M = 6378137;
+
+/**
+ * The NED offset of every slot as formationTargets places it, recovered from
+ * the lat/lon/alt it emits at an equatorial, sea-level anchor: at lat 0 the
+ * flat-earth deltas invert exactly (north = lat·R, east = lon·R, down = −alt).
+ * Slot i is sysid i+1. At heading 0 and pitch 0, north is body-forward and
+ * east is body-right, so the shape geometry reads off directly.
+ */
+function placed(shape, count, spacing, headingDeg = 0, pitchDeg = 0) {
+  const sysids = Array.from({ length: count }, (_, i) => i + 1);
+  return formationTargets({ shape, spacing, anchor: { lat: 0, lon: 0, alt: 0 }, headingDeg, pitchDeg, sysids })
+    .map((t) => ({
+      north: (t.lat * Math.PI / 180) * EARTH_RADIUS_M,
+      east: (t.lon * Math.PI / 180) * EARTH_RADIUS_M,
+      down: -t.alt,
+    }));
+}
+
+/** The lat/lon round trip costs nanometres; compare axes to a micrometre. */
+function near(actual, expected, label) {
+  for (const axis of ['north', 'east', 'down']) {
+    approx(actual[axis], expected[axis], 1e-6, `${label || ''} ${axis}`.trim());
+  }
+}
 
 const SHAPES = ['line', 'column', 'grid', 'wedge', 'circle', 'sphere'];
 
@@ -13,65 +39,64 @@ function approx(actual, expected, epsilon, label) {
 
 test('every shape puts slot 0 at the origin', () => {
   for (const shape of SHAPES) {
-    const [origin] = slotOffsets(shape, 5, 8);
-    assert.ok(origin.forward === 0 && origin.right === 0 && origin.down === 0, shape);
+    const [origin] = placed(shape, 5, 8);
+    near(origin, { north: 0, east: 0, down: 0 }, shape);
   }
 });
 
 test('line fans abreast: slot 1 right, slot 2 left, ranks growing outward', () => {
-  const offsets = slotOffsets('line', 5, 10);
-  assert.deepEqual(offsets[1], { forward: 0, right: 10, down: 0 });
-  assert.deepEqual(offsets[2], { forward: 0, right: -10, down: 0 });
-  assert.deepEqual(offsets[3], { forward: 0, right: 20, down: 0 });
-  assert.deepEqual(offsets[4], { forward: 0, right: -20, down: 0 });
+  const offsets = placed('line', 5, 10);
+  near(offsets[1], { north: 0, east: 10, down: 0 });
+  near(offsets[2], { north: 0, east: -10, down: 0 });
+  near(offsets[3], { north: 0, east: 20, down: 0 });
+  near(offsets[4], { north: 0, east: -20, down: 0 });
 });
 
 test('column trails single file strictly behind the reference', () => {
-  const offsets = slotOffsets('column', 4, 5);
-  assert.ok(offsets.map((offset) => offset.forward).every((value, index) => value === -index * 5));
-  assert.ok(offsets.every((offset) => offset.right === 0 && offset.down === 0));
+  const offsets = placed('column', 4, 5);
+  offsets.forEach((offset, index) => near(offset, { north: -index * 5, east: 0, down: 0 }, `slot ${index}`));
 });
 
 test('wedge arms trail behind the apex, alternating sides by rank', () => {
-  const offsets = slotOffsets('wedge', 5, 10);
-  assert.deepEqual(offsets[1], { forward: -10, right: 10, down: 0 });
-  assert.deepEqual(offsets[2], { forward: -10, right: -10, down: 0 });
-  assert.deepEqual(offsets[3], { forward: -20, right: 20, down: 0 });
-  assert.deepEqual(offsets[4], { forward: -20, right: -20, down: 0 });
+  const offsets = placed('wedge', 5, 10);
+  near(offsets[1], { north: -10, east: 10, down: 0 });
+  near(offsets[2], { north: -10, east: -10, down: 0 });
+  near(offsets[3], { north: -20, east: 20, down: 0 });
+  near(offsets[4], { north: -20, east: -20, down: 0 });
 });
 
 test('circle centers slot 0 and spreads the rest evenly on a ring of radius=spacing', () => {
-  const offsets = slotOffsets('circle', 5, 12);
-  assert.deepEqual(offsets[0], { forward: 0, right: 0, down: 0 });
+  const offsets = placed('circle', 5, 12);
+  near(offsets[0], { north: 0, east: 0, down: 0 });
   // First follower sits dead ahead; the rest step around by 2π/4.
-  assert.deepEqual(offsets[1], { forward: 12, right: 0, down: 0 });
+  near(offsets[1], { north: 12, east: 0, down: 0 });
   for (let i = 1; i < 5; i += 1) {
-    approx(Math.hypot(offsets[i].forward, offsets[i].right), 12, 1e-9, `radius of slot ${i}`);
+    approx(Math.hypot(offsets[i].north, offsets[i].east), 12, 1e-9, `radius of slot ${i}`);
     const theta = (2 * Math.PI * (i - 1)) / 4;
-    approx(offsets[i].forward, 12 * Math.cos(theta), 1e-9, `forward of slot ${i}`);
-    approx(offsets[i].right, 12 * Math.sin(theta), 1e-9, `right of slot ${i}`);
+    approx(offsets[i].north, 12 * Math.cos(theta), 1e-9, `forward of slot ${i}`);
+    approx(offsets[i].east, 12 * Math.sin(theta), 1e-9, `right of slot ${i}`);
   }
 });
 
 test('grid fills a row-major block behind the anchor, centered left-right', () => {
   // 4 followers -> 2 columns: rows of 2, each a full spacing behind the last.
-  const offsets = slotOffsets('grid', 5, 10);
-  assert.deepEqual(offsets[1], { forward: -10, right: -5, down: 0 });
-  assert.deepEqual(offsets[2], { forward: -10, right: 5, down: 0 });
-  assert.deepEqual(offsets[3], { forward: -20, right: -5, down: 0 });
-  assert.deepEqual(offsets[4], { forward: -20, right: 5, down: 0 });
-  for (const o of offsets.slice(1)) assert.ok(o.forward < 0, 'rows are behind the anchor');
+  const offsets = placed('grid', 5, 10);
+  near(offsets[1], { north: -10, east: -5, down: 0 });
+  near(offsets[2], { north: -10, east: 5, down: 0 });
+  near(offsets[3], { north: -20, east: -5, down: 0 });
+  near(offsets[4], { north: -20, east: 5, down: 0 });
+  for (const o of offsets.slice(1)) assert.ok(o.north < 0, 'rows are behind the anchor');
 });
 
-test('bodyToNed at heading 0 maps forward to north and right to east', () => {
-  assert.deepEqual(bodyToNed({ forward: 3, right: 4, down: 5 }, 0), { north: 3, east: 4, down: 5 });
+test('heading 0 leaves body-forward on north and body-right on east', () => {
+  // wedge slot 1: forward −10, right +10.
+  near(placed('wedge', 2, 10)[1], { north: -10, east: 10, down: 0 });
 });
 
-test('bodyToNed at heading 90 maps forward to east and right to south', () => {
-  const ned = bodyToNed({ forward: 3, right: 4, down: 0 }, 90);
-  approx(ned.north, -4, 1e-9, 'north');
-  approx(ned.east, 3, 1e-9, 'east');
-  assert.equal(ned.down, 0);
+test('heading 90 turns body-forward onto east and body-right onto south', () => {
+  // line slot 1 is body-right 4 → south 4; circle slot 1 is body-forward 3 → east 3.
+  near(placed('line', 2, 4, 90)[1], { north: -4, east: 0, down: 0 }, 'right → south');
+  near(placed('circle', 2, 3, 90)[1], { north: 0, east: 3, down: 0 }, 'forward → east');
 });
 
 test('formationTargets places a line east-west of the anchor by the flat-earth deltas', () => {
@@ -120,10 +145,10 @@ test('planar shapes give every vehicle the anchor altitude', () => {
 });
 
 test('sphere puts slot 0 at the origin and followers on a radius=spacing shell', () => {
-  const offsets = slotOffsets('sphere', 5, 12);
-  assert.deepEqual(offsets[0], { forward: 0, right: 0, down: 0 });
+  const offsets = placed('sphere', 5, 12);
+  near(offsets[0], { north: 0, east: 0, down: 0 });
   for (let i = 1; i < 5; i += 1) {
-    const r = Math.hypot(offsets[i].forward, offsets[i].right, offsets[i].down);
+    const r = Math.hypot(offsets[i].north, offsets[i].east, offsets[i].down);
     approx(r, 12, 1e-9, `sphere radius of slot ${i}`);
   }
   // At least one follower is above the equator and one below (varying altitude).
@@ -145,11 +170,9 @@ test('sphere formationTargets vary altitude from the anchor', () => {
   assert.ok(alts.some((a) => a > 40) && alts.some((a) => a < 40), 'followers span above and below');
 });
 
-test('bodyToNed pitch 90 maps forward to −down (nose-up tumble around +Y)', () => {
-  const ned = bodyToNed({ forward: 10, right: 0, down: 0 }, 0, 90);
-  approx(ned.north, 0, 1e-9, 'north');
-  approx(ned.east, 0, 1e-9, 'east');
-  approx(ned.down, -10, 1e-9, 'down');
+test('pitch 90 tumbles body-forward onto −down (nose-up around +Y)', () => {
+  // circle slot 1 is body-forward 10 → 10 m above the anchor.
+  near(placed('circle', 2, 10, 0, 90)[1], { north: 0, east: 0, down: -10 });
 });
 
 test('formationTargets pitchDeg tumbles a column without changing lateral separation', () => {
@@ -229,13 +252,13 @@ test('sysid entries are trusted input: Number() coercion, never a refusal', () =
 
 test('spacing is trusted config: Number() coercion only — the editor validator is the guard', () => {
   // A numeric string behaves as the number it coerces to.
-  assert.deepEqual(slotOffsets('line', 2, '10')[1], { forward: 0, right: 10, down: 0 });
+  near(placed('line', 2, '10')[1], { north: 0, east: 10, down: 0 });
   // 0 stacks every slot on the origin and a negative spacing mirrors the
   // pattern — the editor validator (finite, > 0) is the only guard.
-  for (const offset of slotOffsets('line', 3, 0)) {
-    assert.ok(offset.forward === 0 && offset.right === 0 && offset.down === 0);
+  for (const offset of placed('line', 3, 0)) {
+    near(offset, { north: 0, east: 0, down: 0 });
   }
-  assert.deepEqual(slotOffsets('line', 3, -5)[1], { forward: 0, right: -5, down: 0 });
+  near(placed('line', 3, -5)[1], { north: 0, east: -5, down: 0 });
 });
 
 test('an empty sysid list positions nobody', () => {

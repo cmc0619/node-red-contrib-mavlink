@@ -3,7 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { SigningState, timestampFromMs, ONE_MINUTE_UNITS } = require('../../lib/connection/signing');
+const { SigningState, timestampFromMs } = require('../../lib/connection/signing');
+
+// MAVLink signing timestamps count 10 µs units; the accept window is one minute.
+const ONE_MINUTE_UNITS = 6_000_000;
 
 const NOW_MS = 1893456000000; // some 2030 wall-clock; the exact value is irrelevant
 const NOW_UNITS = timestampFromMs(NOW_MS);

@@ -11,7 +11,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  modeNumberFor,
   modeNameFor,
   setModeParams,
   px4CustomMode,
@@ -37,10 +36,10 @@ test('vehicle-published entries beat the shipped tables in both directions', () 
     bundle: AP_BUNDLE,
   };
   // COPTER_MODE_GUIDED is 4; the vehicle's own table says 99 and wins.
-  assert.equal(modeNumberFor('GUIDED', ctx), 99);
+  assert.deepEqual(setModeParams('GUIDED', ctx), { 2: 99 });
   assert.equal(modeNameFor(99, ctx), 'Guided');
   // A name the cache does not hold still falls through to the dialect enum.
-  assert.equal(modeNumberFor('LOITER', ctx), 5);
+  assert.deepEqual(setModeParams('LOITER', ctx), { 2: 5 });
 });
 
 test('a blank-named standard mode resolves through MAV_STANDARD_MODE', () => {
@@ -54,25 +53,25 @@ test('a blank-named standard mode resolves through MAV_STANDARD_MODE', () => {
     bundle: loadBundled('common'),
   };
   assert.equal(modeNameFor(px4CustomMode(4, 2), ctx), 'LAND');
-  assert.equal(modeNumberFor('land', ctx), px4CustomMode(4, 2));
+  assert.deepEqual(setModeParams('land', ctx), { 2: 4, 3: 2 });
 });
 
 test('ArduPilot dispatches by family: copter and boat read different enums', () => {
   const copter = { firmware: 'ardupilot', vehicleFamily: 'copter', bundle: AP_BUNDLE };
   const boat = { firmware: 'ardupilot', vehicleFamily: 'boat', bundle: AP_BUNDLE };
-  assert.equal(modeNumberFor('GUIDED', copter), 4); // COPTER_MODE_GUIDED
-  assert.equal(modeNumberFor('GUIDED', boat), 15); // ROVER_MODE_GUIDED (boat is Rover firmware)
+  assert.deepEqual(setModeParams('GUIDED', copter), { 2: 4 }); // COPTER_MODE_GUIDED
+  assert.deepEqual(setModeParams('GUIDED', boat), { 2: 15 }); // ROVER_MODE_GUIDED (boat is Rover firmware)
   assert.equal(modeNameFor(4, copter), 'GUIDED');
   assert.equal(modeNameFor(4, boat), 'HOLD'); // ROVER_MODE_HOLD
   // Names match case-insensitively; the answer keeps the enum's spelling.
-  assert.equal(modeNumberFor('guided', copter), 4);
+  assert.deepEqual(setModeParams('guided', copter), { 2: 4 });
 });
 
 test('PX4 packs main/sub into the custom_mode word and round-trips it', () => {
   const ctx = { firmware: 'px4' };
   // Measured words (PX4 1.18 SIH): Position = 0x00030000, Hold = 0x03040000.
-  assert.equal(modeNumberFor('Position', ctx), 0x00030000);
-  assert.equal(modeNumberFor('Hold', ctx), 0x03040000);
+  assert.deepEqual(setModeParams('Position', ctx), { 2: 3, 3: 0 }); // 0x00030000 split
+  assert.deepEqual(setModeParams('Hold', ctx), { 2: 4, 3: 3 }); // 0x03040000 split
   assert.equal(modeNameFor(0x03040000, ctx), 'Hold');
   assert.equal(px4MainMode(0x03040000), 4);
   assert.equal(px4SubMode(0x03040000), 3);
@@ -87,8 +86,10 @@ test('PX4 packs main/sub into the custom_mode word and round-trips it', () => {
 });
 
 test('an unresolved name is NaN — loud at the wire, never 0 and never undefined', () => {
-  assert.equal(Number.isNaN(modeNumberFor('WARP_9', { firmware: 'ardupilot', vehicleFamily: 'copter', bundle: AP_BUNDLE })), true);
-  assert.equal(Number.isNaN(modeNumberFor('GUIDED', { firmware: 'custom' })), true);
+  assert.equal(
+    Number.isNaN(setModeParams('WARP_9', { firmware: 'ardupilot', vehicleFamily: 'copter', bundle: AP_BUNDLE })[2]),
+    true
+  );
   // The PX4 split propagates the NaN into both params rather than packing 0.
   const params = setModeParams('WARP_9', { firmware: 'px4' });
   assert.equal(Number.isNaN(params[2]), true);

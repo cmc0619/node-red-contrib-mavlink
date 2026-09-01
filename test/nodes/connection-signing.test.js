@@ -24,7 +24,7 @@ const {
   applyStatus,
 } = require('../../nodes/mavlink-connection');
 const { SigningState, timestampFromMs, STATE } = require('../../lib/connection');
-const { BADGE_MAX } = require('../../lib/delivery');
+const BADGE_MAX = 24; // §6 badge cap, as the runtime produces it
 
 test('a passphrase alone (both checkboxes off) still derives a key', () => {
   const signing = buildSigning(

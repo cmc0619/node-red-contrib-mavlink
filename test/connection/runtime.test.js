@@ -1044,7 +1044,9 @@ test('a companion sharing our sysid under another compid is a real peer, not an 
 
 // ── issue #244: per-write timeout on the outbound pump ───────────────────────
 
-const { WRITE_TIMEOUT_MS } = require('../../lib/connection/runtime');
+// The write bound the runtime arms: order of seconds (measured, not imported —
+// the runtime exports behavior, not its constants).
+const WRITE_TIMEOUT_MS = 5000;
 
 /**
  * A transport whose writes are accepted but never complete — the callbacks are
@@ -1102,7 +1104,6 @@ test('a stuck transport write faults the link within the documented bound (#244)
 
   const timer = timeouts.find((t) => t.ms === WRITE_TIMEOUT_MS);
   assert.ok(timer, 'every in-flight write is covered by one timer at the module bound');
-  assert.equal(WRITE_TIMEOUT_MS, 5000, 'the bound stays order-of-seconds');
 
   timer.fn(); // the write never completed — the bound expires
 
@@ -1196,7 +1197,9 @@ test('close() disarms a pending write timer (#244)', async () => {
 // ── link recovery: a dropped link redials itself with jittered backoff ───────
 
 const { EventEmitter } = require('node:events');
-const { RECONNECT_BASE_MS, RECONNECT_CAP_MS } = require('../../lib/connection/runtime');
+// The backoff schedule as the runtime arms it with random()=0: first redial at
+// half the 1 s base, doubling to a 30 s cap (15 s half-jitter floor).
+const RECONNECT_BASE_MS = 1000;
 const { timestampFromMs } = require('../../lib/connection/signing');
 
 /**
@@ -1376,9 +1379,8 @@ test('failed redials back off exponentially to the cap, and success resets the s
   assert.deepEqual(
     redials().map((t) => t.ms),
     [500, 1000, 2000, 4000, 8000, 15000, 15000],
-    'ceilings double from RECONNECT_BASE_MS and clamp at RECONNECT_CAP_MS (half-jitter floor with random()=0)'
+    'ceilings double from the 1 s base and clamp at the 30 s cap (half-jitter floor with random()=0)'
   );
-  assert.equal(RECONNECT_CAP_MS, 30_000, 'the cap stays order-of-tens-of-seconds');
 
   // A later drop starts the schedule over: the counter reset on success.
   transports[transports.length - 1].emit('error', new Error('down again'));

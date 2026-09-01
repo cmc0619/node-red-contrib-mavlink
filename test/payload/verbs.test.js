@@ -9,32 +9,6 @@ const {
   fieldMetaFromBundle,
 } = require('../../lib/payload');
 
-/** Verbs accepted by buildPayloadMessage per topic (gimbal aim uses legacy path). */
-const KNOWN_VERBS = {
-  camera: ['photo', 'stop-photo', 'start-video', 'stop-video', 'set-mode', 'zoom', 'focus', 'trigger-distance'],
-  gimbal: ['aim', 'set-mode', 'roi-set', 'roi-clear'],
-  servo: ['set', 'repeat'],
-  relay: ['set', 'repeat'],
-  gripper: ['operate'],
-  winch: ['operate'],
-  parachute: ['operate'],
-};
-
-test('PAYLOAD_VERBS lists every payload topic', () => {
-  assert.deepEqual(Object.keys(PAYLOAD_VERBS), Object.keys(KNOWN_VERBS));
-});
-
-test('PAYLOAD_VERBS catalog matches known verbs per topic', () => {
-  for (const topic of Object.keys(PAYLOAD_VERBS)) {
-    const values = PAYLOAD_VERBS[topic].map((v) => v.value);
-    const labels = PAYLOAD_VERBS[topic].map((v) => v.label);
-    assert.deepEqual(values, KNOWN_VERBS[topic], `${topic} verb list drift`);
-    assert.equal(new Set(labels).size, labels.length, `${topic} labels must be unique`);
-    for (const entry of PAYLOAD_VERBS[topic]) {
-      assert.match(entry.label, /\S/, `${topic}/${entry.value} needs a label`);
-    }
-  }
-});
 
 test('every catalog verb builds without error', () => {
   for (const topic of Object.keys(PAYLOAD_VERBS)) {

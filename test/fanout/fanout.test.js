@@ -5,7 +5,6 @@ const assert = require('node:assert/strict');
 
 const {
   executeFanout,
-  classifyMessage,
   selectFanoutMembers,
 } = require('../../lib/fanout');
 const { BAND } = require('../../lib/connection/bands');
@@ -97,21 +96,6 @@ test("a typo'd delivery tier sends nothing — it matches no tier arm", async ()
   assert.equal(result.continue, false, 'no phantom success (§2)');
 });
 
-// ── The replicator contract: message in, kind inferred from its name ──────────
-
-test('classifyMessage infers confirmation and band from the message name', () => {
-  assert.equal(classifyMessage(builtCommand(), 'sequential').kind.confirmation, 'command_ack');
-  assert.equal(classifyMessage(builtCommand({ name: 'COMMAND_INT' }), 'sequential').kind.commandId, 400);
-  assert.equal(classifyMessage(builtParamSet(), 'sequential').kind.confirmation, 'param_echo');
-  assert.equal(classifyMessage(builtSetpoint(), 'sequential').kind.confirmation, 'none');
-  // An unknown-but-targeted message replicates fire-and-forget.
-  assert.equal(
-    classifyMessage({ name: 'SET_MODE', fields: { target_system: 1, base_mode: 1, custom_mode: 4 } }, 'sequential')
-      .kind.confirmation,
-    'none'
-  );
-});
-
 test('a malformed message is never reported successful', async () => {
   const connection = connectionStub([peer(1)]);
   assert.throws(() => executeFanout({
@@ -182,19 +166,24 @@ test('single-shot MISSION_* commands replicate — the family name is not the ru
 test('every offboard setpoint rides the streaming band, not just the position pair', async () => {
   // A SET_POSITION_TARGET_ prefix left SET_ATTITUDE_TARGET and
   // SET_ACTUATOR_CONTROL_TARGET on the control band, where a 50 Hz stream
-  // competes with arm/RTL for the queue.
+  // competes with arm/RTL for the queue. Measured at the connection: the band
+  // each fan-out send is handed.
   for (const name of [
     'SET_POSITION_TARGET_LOCAL_NED',
     'SET_POSITION_TARGET_GLOBAL_INT',
     'SET_ATTITUDE_TARGET',
     'SET_ACTUATOR_CONTROL_TARGET',
   ]) {
-    const kind = classifyMessage(
-      { name, fields: { target_system: 1, target_component: 1 } },
-      'sequential'
-    ).kind;
-    assert.equal(kind.band, BAND.STREAMING, `${name} must ride the streaming band`);
-    assert.equal(kind.confirmation, 'none', `${name} carries no acknowledgement`);
+    const connection = connectionStub([peer(1)]);
+    await executeFanout({
+      mode: 'sequential',
+      selection: { mode: 'all' },
+      connection,
+      message: { name, fields: { target_system: 1, target_component: 1 } },
+      delivery: 'send',
+    });
+    assert.equal(connection.sends.length, 1, `${name} is sent once`);
+    assert.equal(connection.sends[0].options.band, BAND.STREAMING, `${name} must ride the streaming band`);
   }
 });
 

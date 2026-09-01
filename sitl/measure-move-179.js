@@ -25,7 +25,6 @@ const { buildCommandLong } = require(path.join(ROOT, 'lib/command/carrier'));
 const {
   buildMoveMessage,
   createMoveStream,
-  buildStopMessage,
   MAV_FRAME,
 } = require(path.join(ROOT, 'lib/move'));
 
@@ -325,7 +324,6 @@ async function probeHaltReplace(conn, sysid, results, frame) {
     minSpdAfter: minSpd,
     maxSpdAfter: maxSpd,
     samplesAfter: speeds.length,
-    stopMessageName: buildStopMessage(msgA).name,
     streamMessageName: msgA.name,
   });
 }
