@@ -158,6 +158,28 @@ test('members validator: per-row reasons, offsets-vs-position-patch conflict red
     'a position-field patch without offsets is legitimate');
 });
 
+test('members validation reads the open editable-list value', () => {
+  // Node-RED validates before oneditsave. A bad current row therefore has to
+  // reach the descriptor through its bound control instead of hiding behind
+  // the prior saved member list.
+  const defaults = loadNodeDefaults('mavlink-fanout', {}, {
+    dom: {
+      '#node-input-selectionMode': { val: 'list' },
+      '#node-input-members': { val: ['{"sysid":0}'] },
+    },
+    editStack: [{ id: 'fanout-1' }],
+  });
+  assert.match(
+    String(defaults.members.validate.call(
+      { id: 'fanout-1', selectionMode: 'list', members: [{ sysid: 1 }] },
+      [{ sysid: 1 }],
+      {}
+    )),
+    /sysid must be an integer 1-255/,
+    'the current invalid row owns the red ring'
+  );
+});
+
 test('selectionMode and executionMode red on membership, then on the Build pairing rules', () => {
   // §5's editor half: the runtime dispatches these tokens with affirmative
   // cases only, so a hand-edited stray must red at deploy — the audit's
