@@ -83,7 +83,6 @@
       "mavlink-command": "nodes/mavlink-command.js",
       "mavlink-move": "nodes/mavlink-move.js",
       "mavlink-param": "nodes/mavlink-param.js",
-      "mavlink-param2": "nodes/mavlink-param2.js",
       "mavlink-payload": "nodes/mavlink-payload.js",
       "mavlink-state": "nodes/mavlink-state.js",
       "mavlink-mission": "nodes/mavlink-mission.js",

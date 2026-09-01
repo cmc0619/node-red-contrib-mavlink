@@ -8,6 +8,11 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **Param id search uses Node-RED's own autocomplete widget.** The hand-rolled
+  results panel — its keyboard navigation, blur handling and CSS — is gone;
+  ranking by name and description is unchanged and now feeds the stock
+  widget. Same node type, same saved shape, nothing to redeploy.
+
 - **Local Identity heartbeat fields carry concrete editor defaults.** A node
   created and saved without touching Role could persist a blank HB Type, which
   the runtime silently replaced with the role preset. The editor default is
