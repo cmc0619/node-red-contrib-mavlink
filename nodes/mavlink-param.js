@@ -64,7 +64,7 @@ const PARAM_DEFS_UPDATE_ROUTE = '/mavlink/param/defs/update';
 /** Guard against double-registering the admin route (one per process). */
 let _paramDefsRouteRegistered = false;
 
-module.exports = function registerMavlinkParam(RED) {
+module.exports = function registerMavlinkParam(RED, type = 'mavlink-param') {
   if (!_paramDefsRouteRegistered && RED.httpAdmin && RED.auth) {
     RED.httpAdmin.get(
       PARAM_DEFS_ROUTE,
@@ -444,7 +444,7 @@ module.exports = function registerMavlinkParam(RED) {
     });
   }
 
-  RED.nodes.registerType('mavlink-param', MavlinkParamNode);
+  RED.nodes.registerType(type, MavlinkParamNode);
 };
 
 /**
