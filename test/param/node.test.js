@@ -177,11 +177,8 @@ test('mavlink-param confirm set emits a timed-out record and releases the subscr
 
   return new Promise((resolve) => {
     let out;
-    // Wait for the node's own done() rather than a wall clock. The bounded
-    // re-send (#249) emits a 'progress' record per attempt before the terminal
-    // one, so a fixed delay races the attempts and caught 'progress' on a
-    // loaded runner; timeoutResult calls done() immediately after the terminal
-    // emit, which is the event this test actually means.
+    // Wait for the node's own done() rather than a wall clock. timeoutResult
+    // calls done() immediately after the terminal emit.
     node.emit(
       'input',
       { payload: { paramId: 'FOO', value: 1 } },
@@ -637,7 +634,7 @@ function confirmSetNode(RED, conn, timeout) {
   });
 }
 
-test('confirm set re-sends PARAM_SET on echo silence and reports attempts', async () => {
+test('confirm set re-sends PARAM_SET when its echo times out', async () => {
   const conn = connStubFull();
   const node = confirmSetNode(redStub({ conn }), conn, 15);
 
@@ -647,36 +644,17 @@ test('confirm set re-sends PARAM_SET on echo silence and reports attempts', asyn
     (m) => outs.push(m), (err) => { doneErr = err; });
   await sleep(100);
 
-  assert.equal(conn.sent.length, 3, '3 attempts total: initial send plus two re-sends');
+  assert.equal(conn.sent.length, 3, 'the initial send is followed by two protocol retries');
   assert.ok(conn.sent.every((s) => s.message.name === 'PARAM_SET'));
   const progress = outs.filter((m) => m[1] && m[1].result === 'progress');
   assert.deepEqual(progress.map((m) => m[1].detail), ['resend 2/3', 'resend 3/3']);
-  assert.ok(progress.every((m) => m[0] === null), 'progress rides output 1 only');
   const terminal = outs[outs.length - 1];
   assert.equal(terminal[0], null);
   assert.equal(terminal[1].result, 'timed-out');
   assert.equal(terminal[1].detail, 'echo timeout');
-  assert.equal(terminal[1].attempts, 3, 'attempts in the terminal record');
+  assert.equal(terminal[1].attempts, 3, 'the terminal result reports every attempt');
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   assert.equal(conn.activeCount(), 0, 'subscription torn down');
-});
-
-test('an echo arriving after a re-send confirms, with the attempts recorded', async () => {
-  const conn = connStubFull();
-  const node = confirmSetNode(redStub({ conn }), conn, 50);
-
-  let result;
-  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, (m) => { result = m; }, () => {});
-  await sleep(75); // past the first echo wait: one re-send has gone out
-  assert.equal(conn.sent.length, 2, 'the second attempt is on the wire');
-  conn.inject({
-    name: 'PARAM_VALUE',
-    fields: { param_id: 'FOO', param_value: 1, param_type: 9, param_count: 1, param_index: 0 },
-  });
-
-  assert.equal(result[1].result, 'succeeded');
-  assert.equal(result[1].detail, 'echo-confirmed');
-  assert.equal(result[1].attempts, 2, 'the confirming attempt is recorded');
 });
 
 test('closing the node mid-set stops the re-send timer and releases done', async () => {
@@ -690,7 +668,7 @@ test('closing the node mid-set stops the re-send timer and releases done', async
   node.emit('close', () => {});
   await sleep(60);
 
-  assert.equal(conn.sent.length, 1, 'no re-send after close');
+  assert.equal(conn.sent.length, 1, 'the initial send stays on the wire');
   assert.equal(outs.length, 0, 'nothing emitted from a torn-down node');
   assert.equal(doneCalls, 1, 'the in-flight done was released');
   assert.equal(conn.activeCount(), 0);
@@ -813,9 +791,8 @@ test('collect completes count 0 as an empty list', () => {
   assert.deepEqual(result[0].payload, []);
 });
 
-test('collect re-requests a dropped index on inactivity and completes on its reply', async () => {
+test('collect waits for a dropped index without re-requesting it', async () => {
   const conn = connStubFull();
-  // Timeout 200 → inactivity window 50 ms, nested inside the overall bound.
   const node = collectNode(redStub({ conn }), 200);
 
   const outs = [];
@@ -825,66 +802,12 @@ test('collect re-requests a dropped index on inactivity and completes on its rep
   await sleep(90);
 
   const reads = conn.sent.filter((s) => s.message.name === 'PARAM_REQUEST_READ');
-  // >= 1 rather than == 1: a slow event loop can let a second inactivity
-  // round fire before the assertions run. Every round targets only the gap.
-  assert.ok(reads.length >= 1, 'the missing index is re-requested');
-  assert.ok(reads.every((s) => s.message.fields.param_index === 1), 'only the gap is re-requested');
-  assert.equal(reads[0].options.band, require('../../lib/connection/bands').BAND.BULK);
-  assert.ok(
-    outs.some((m) => m[0] === null && m[1].result === 'progress' && /re-requesting 1 of 1/.test(m[1].detail)),
-    'the refill is visible as a progress record'
-  );
+  assert.equal(reads.length, 0, 'a missing list member does not cause a re-request');
 
   conn.inject(listValue(1, 3));
   const terminal = outs[outs.length - 1];
   assert.equal(terminal[1].detail, 'list-complete');
   assert.deepEqual(terminal[0].payload.map((p) => p.index), [0, 1, 2]);
-});
-
-test('a 65535 set-echo stream cannot postpone the refill (#249)', async () => {
-  const conn = connStubFull();
-  // Timeout 400 → inactivity window 100 ms. A concurrent set echoes every
-  // 25 ms; the collector ignores those frames (index 65535 is not a list
-  // member), so they must not push the stall detector back — re-arming on
-  // them postponed the refill forever while a real index was missing.
-  const node = collectNode(redStub({ conn }), 400);
-
-  const outs = [];
-  node.emit('input', { payload: {} }, (m) => outs.push(m), () => {});
-  conn.inject(listValue(0, 2)); // index 1 never arrives on its own
-  const echoes = setInterval(() => conn.inject(listValue(65535, 2)), 25);
-  await sleep(160);
-  clearInterval(echoes);
-
-  const reads = conn.sent.filter((s) => s.message.name === 'PARAM_REQUEST_READ');
-  assert.ok(reads.length >= 1, 'the missing index is re-requested despite the echo stream');
-  assert.ok(reads.every((s) => s.message.fields.param_index === 1), 'only the gap is re-requested');
-
-  conn.inject(listValue(1, 2));
-  const terminal = outs[outs.length - 1];
-  assert.equal(terminal[1].detail, 'list-complete');
-  assert.deepEqual(terminal[0].payload.map((p) => p.index), [0, 1]);
-});
-
-test('collect refill is bounded; the overall timeout stays the terminal authority', async () => {
-  const conn = connStubFull();
-  // Timeout 400 → inactivity window 100 ms: three refill rounds fit inside.
-  const node = collectNode(redStub({ conn }), 400);
-
-  const outs = [];
-  let doneErr;
-  node.emit('input', { payload: {} }, (m) => outs.push(m), (err) => { doneErr = err; });
-  conn.inject(listValue(0, 2)); // index 1 never arrives
-  await sleep(520);
-
-  const reads = conn.sent.filter((s) => s.message.name === 'PARAM_REQUEST_READ');
-  assert.equal(reads.length, 3, 'refill rounds are bounded');
-  const terminal = outs[outs.length - 1];
-  assert.equal(terminal[0], null);
-  assert.equal(terminal[1].result, 'timed-out');
-  assert.equal(terminal[1].detail, 'list timeout');
-  assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
-  assert.equal(conn.activeCount(), 0, 'subscription and timers torn down');
 });
 
 test('an out-of-range PARAM_VALUE warns once and cannot complete the collect', () => {

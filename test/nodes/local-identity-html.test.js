@@ -217,6 +217,9 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
         node(id) {
           return nodeLookup[id] || null;
         },
+        eachConfig(fn) {
+          Object.entries(nodeLookup).forEach(([id, node]) => fn({ id, ...node }));
+        },
         registerType(type, definition) {
           if (type === 'mavlink-local-identity') {
             identityDefinition = definition;
@@ -609,6 +612,17 @@ test('identity oneditprepare loads MAV_TYPE by enum name, not numeric value', ()
   assert.match(html, /saved:\s*\$hbType\.val\(\)\s*\|\|\s*node\.heartbeatType/);
   assert.match(html, /saved:\s*\$hbAp\.val\(\)\s*\|\|\s*node\.heartbeatAutopilot/);
   assert.match(html, /saved:\s*\$compid\.val\(\)\s*\|\|\s*node\.sourceComponentId/);
+});
+
+test('role refuses making a Companion that is bound to two Connections', () => {
+  const context = loadHelpers({}, {
+    c1: { type: 'mavlink-connection', localIdentity: 'comp', additionalIdentities: [] },
+    c2: { type: 'mavlink-connection', localIdentity: 'gcs', additionalIdentities: ['comp'] },
+  });
+  const validate = context.identityDefinition.defaults.role.validate;
+
+  assert.match(String(validate.call({ id: 'comp' }, 'companion', {})), /one Connection/);
+  assert.equal(validate.call({ id: 'comp' }, 'gcs', {}), true);
 });
 
 test('companion reshapes the rows: SysID hidden, CompID still shown', () => {
