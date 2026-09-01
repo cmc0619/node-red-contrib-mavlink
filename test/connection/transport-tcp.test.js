@@ -8,7 +8,6 @@ const {
   TcpTransport,
   TCP_NO_DESTINATION,
   TCP_PEER_GONE,
-  TCP_CLOSED_DURING_OPEN,
 } = require('../../lib/connection/transport/tcp');
 
 /** @returns {Promise<void>} */
@@ -564,7 +563,7 @@ test('close() during a client connect settles the pending open()', async () => {
     closedBack = true;
   });
 
-  await assert.rejects(opening, (err) => err.code === TCP_CLOSED_DURING_OPEN);
+  await assert.rejects(opening, (err) => err.code === 'TCP_CLOSED_DURING_OPEN');
   assert.equal(closedBack, true, 'close() must still complete its callback');
   assert.equal(socket.destroyed, true);
 });
@@ -576,7 +575,7 @@ test('close() during a server bind settles the pending open()', async () => {
   const opening = transport.open(); // MockServer emits 'listening' on a queued timeout
   transport.close(() => {});
 
-  await assert.rejects(opening, (err) => err.code === TCP_CLOSED_DURING_OPEN);
+  await assert.rejects(opening, (err) => err.code === 'TCP_CLOSED_DURING_OPEN');
   await tick(); // the late 'listening' on the already-settled promise must be harmless
 });
 

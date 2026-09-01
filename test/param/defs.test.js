@@ -7,11 +7,13 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
-  paramDefsPath,
   parsePdefJson,
   readParamDefs,
   updateParamDefs,
 } = require('../../lib/param/defs');
+
+/** Where a profile's definitions land under userDir — the on-disk contract readParamDefs reads back. */
+const holdingFile = (userDir, profileId) => path.join(userDir, 'mavlink', 'param-defs', `${profileId}.json`);
 
 const canonicalArduPilotPdef = JSON.parse(fs.readFileSync(
   path.join(__dirname, 'fixtures', 'apm.pdef-canonical.json'),
@@ -170,16 +172,9 @@ test('parsePdefJson ignores entries with no recognisable parameter shape', () =>
   assert.deepEqual([...map.keys()], ['GOOD']);
 });
 
-test('holding-file path is deterministic under userDir and keyed only by profile ID', () => {
-  assert.equal(
-    paramDefsPath('C:\\node-red', 'profile-1'),
-    path.join('C:\\node-red', 'mavlink', 'param-defs', 'profile-1.json')
-  );
-});
-
-test('holding-file path rejects profile IDs that could escape the holding directory', () => {
-  assert.throws(() => paramDefsPath('C:\\node-red', '../outside'), /unsupported characters/i);
-  assert.throws(() => paramDefsPath('C:\\node-red', 'folder\\outside'), /unsupported characters/i);
+test('a profile ID that could escape the holding directory is refused before any file is touched', async () => {
+  await assert.rejects(readParamDefs('C:\\node-red', '../outside'), /unsupported characters/i);
+  await assert.rejects(readParamDefs('C:\\node-red', 'folder\\outside'), /unsupported characters/i);
 });
 
 test('readParamDefs returns an empty map only when the holding file is absent', async (t) => {
@@ -188,12 +183,12 @@ test('readParamDefs returns an empty map only when the holding file is absent', 
   const map = await readParamDefs(userDir, 'profile-no-seed');
 
   assert.equal(map.size, 0);
-  assert.equal(fs.existsSync(paramDefsPath(userDir, 'profile-no-seed')), false);
+  assert.equal(fs.existsSync(holdingFile(userDir, 'profile-no-seed')), false);
 });
 
 test('readParamDefs reads the profile holding file without invoking fetch', async (t) => {
   const userDir = tempUserDir(t);
-  const file = paramDefsPath(userDir, 'profile-local');
+  const file = holdingFile(userDir, 'profile-local');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(documentFor('LOCAL_ONLY', 'Read from disk.')));
   const previousFetch = globalThis.fetch;
@@ -227,7 +222,7 @@ test('explicit updates overwrite one stable profile holding file across URL chan
     { fetchFn }
   );
   const stored = await readParamDefs(userDir, 'profile-stable');
-  const files = fs.readdirSync(path.dirname(paramDefsPath(userDir, 'profile-stable')));
+  const files = fs.readdirSync(path.dirname(holdingFile(userDir, 'profile-stable')));
 
   assert.equal(first.count, 1);
   assert.equal(second.count, 1);
@@ -261,7 +256,7 @@ test('explicit update rejects a document with no definitions', async (t) => {
     }),
     /no parameter definitions/i
   );
-  assert.equal(fs.existsSync(paramDefsPath(userDir, 'profile-empty-doc')), false);
+  assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), false);
 });
 
 test('a failed update preserves the last good profile holding file', async (t) => {
@@ -278,14 +273,14 @@ test('a failed update preserves the last good profile holding file', async (t) =
   );
 
   const stored = await readParamDefs(userDir, 'profile-preserve');
-  const files = fs.readdirSync(path.dirname(paramDefsPath(userDir, 'profile-preserve')));
+  const files = fs.readdirSync(path.dirname(holdingFile(userDir, 'profile-preserve')));
   assert.deepEqual([...stored.keys()], ['LAST_GOOD']);
   assert.deepEqual(files, ['profile-preserve.json']);
 });
 
 test('a filesystem failure after the temporary write removes the sibling temporary file', async (t) => {
   const userDir = tempUserDir(t);
-  const target = paramDefsPath(userDir, 'profile-rename-failure');
+  const target = holdingFile(userDir, 'profile-rename-failure');
   fs.mkdirSync(target, { recursive: true });
 
   await assert.rejects(
@@ -306,7 +301,7 @@ test(
   { skip: process.platform !== 'win32' },
   async (t) => {
     const userDir = tempUserDir(t);
-    const target = paramDefsPath(userDir, 'profile-readonly');
+    const target = holdingFile(userDir, 'profile-readonly');
     await updateParamDefs(userDir, 'profile-readonly', 'https://example.test/good.json', {
       fetchFn: async () => documentFor('LAST_GOOD'),
     });
@@ -335,8 +330,8 @@ test(
 
 test('corrupt local JSON and invalid local documents propagate instead of appearing absent', async (t) => {
   const userDir = tempUserDir(t);
-  const corruptFile = paramDefsPath(userDir, 'profile-corrupt');
-  const emptyFile = paramDefsPath(userDir, 'profile-empty');
+  const corruptFile = holdingFile(userDir, 'profile-corrupt');
+  const emptyFile = holdingFile(userDir, 'profile-empty');
   fs.mkdirSync(path.dirname(corruptFile), { recursive: true });
   fs.writeFileSync(corruptFile, '{not json');
   fs.writeFileSync(emptyFile, '{}');

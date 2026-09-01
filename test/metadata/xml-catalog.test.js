@@ -7,7 +7,6 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { XmlCatalog, compileXmlFromFile } = require('../../lib/metadata');
-const { extractIncludes, normalizeFileName } = require('../../lib/metadata/xml-catalog');
 
 /**
  * Downloadable XML catalog + on-disk custom compile (DESIGN.md §4). The network
@@ -59,15 +58,29 @@ function tmpBase() {
 
 /* ---------- helpers ---------- */
 
-test('extractIncludes strips comments and returns include names', () => {
-  const xml = XML('<!-- <include>ignored.xml</include> --><include> common.xml </include>');
-  assert.deepEqual(extractIncludes(xml), ['common.xml']);
+test('an update follows real <include>s and ignores commented-out ones', async () => {
+  const src = stubSource({
+    'root.xml': XML(
+      '<!-- <include>ignored.xml</include> --><include> common.xml </include>' +
+        '<messages><message id="9000" name="EXTRA_MSG"><field type="uint8_t" name="a">a</field></message></messages>'
+    ),
+    'common.xml': MINIMAL,
+  });
+  const catalog = new XmlCatalog({
+    baseDir: tmpBase(), resolveCommit: src.resolveCommit, fetchFile: src.fetchFile, listFiles: src.listFiles,
+  });
+  await catalog.update({ repo: 'mavlink/mavlink', ref: 'master', files: ['root.xml'] });
+  assert.deepEqual(src.requested.map((r) => r.file), ['root.xml', 'common.xml'],
+    'the real include was fetched, the commented one never asked for');
 });
 
-test('normalizeFileName rejects traversal / non-xml names', () => {
-  assert.equal(normalizeFileName('common.xml'), 'common.xml');
-  assert.throws(() => normalizeFileName('../evil.xml'), /Unsafe or invalid/);
-  assert.throws(() => normalizeFileName('common.txt'), /Unsafe or invalid/);
+test('an update refuses file names that could escape or are not XML', async () => {
+  const src = stubSource({ 'root.xml': XML('<include>../evil.xml</include><messages/>'), 'common.txt': 'not xml' });
+  const build = () => new XmlCatalog({
+    baseDir: tmpBase(), resolveCommit: src.resolveCommit, fetchFile: src.fetchFile, listFiles: src.listFiles,
+  });
+  await assert.rejects(build().update({ repo: 'r', ref: 'master', files: ['root.xml'] }), /Unsafe or invalid/);
+  await assert.rejects(build().update({ repo: 'r', ref: 'master', files: ['common.txt'] }), /Unsafe or invalid/);
 });
 
 /* ---------- compileXmlFromFile ---------- */

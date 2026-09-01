@@ -426,7 +426,7 @@ test('snapshot is plain JSON-serializable data', () => {
 });
 
 test('AVAILABLE_MODES entries are cached incrementally and the mode ladder reads them', () => {
-  const { modeNameFor, modeNumberFor } = require('../../lib/vehicle/modes');
+  const { modeNameFor, setModeParams } = require('../../lib/vehicle/modes');
   const table = new PeerTable({ now: () => 0 });
   const events = [];
   for (const name of ['mode-changed', 'armed-changed']) table.on(name, (e) => events.push(e));
@@ -452,7 +452,7 @@ test('AVAILABLE_MODES entries are cached incrementally and the mode ladder reads
     modeIndex: 5, numberModes: 25, standardMode: 0, customMode: 4, properties: 0, name: 'Guided',
   });
   assert.equal(modeNameFor(4, { component }), 'Guided');
-  assert.equal(modeNumberFor('rtl', { component }), 6);
+  assert.deepEqual(setModeParams('rtl', { component, firmware: 'ardupilot' }), { 2: 6 });
   // A capability cache, not a transition source: no feed event fired.
   assert.deepEqual(events, []);
 });

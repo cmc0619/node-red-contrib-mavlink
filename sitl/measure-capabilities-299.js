@@ -16,10 +16,11 @@ const ROOT = path.resolve(__dirname, '..');
 const { Connection, BAND } = require(path.join(ROOT, 'lib/connection'));
 const { loadBundled } = require(path.join(ROOT, 'lib/metadata'));
 const { buildCommandLong } = require(path.join(ROOT, 'lib/command/carrier'));
-const {
-  CAP_PARAM_ENCODE_BYTEWISE,
-  CAP_PARAM_ENCODE_C_CAST,
-} = require(path.join(ROOT, 'lib/param'));
+// MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE / _C_CAST as AUTOPILOT_VERSION
+// reports them: the measurement decodes the vehicle's word with the protocol's
+// own bit values, not the driver's.
+const CAP_PARAM_ENCODE_BYTEWISE = 16;
+const CAP_PARAM_ENCODE_C_CAST = 131072;
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-cap-299-'));
 const OUT = path.join(WORK, 'capabilities-299-results.json');

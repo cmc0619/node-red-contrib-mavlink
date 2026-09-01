@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata');
-const { createWire, DEFAULT_MAX_DECODERS } = require('../../lib/connection/wire');
+const { createWire } = require('../../lib/connection/wire');
 
 const EP_A = { address: '10.0.0.1', port: 14550 };
 const EP_B = { address: '10.0.0.2', port: 14551 };
@@ -99,7 +99,6 @@ test('omit endpoint still decodes (serial / single-stream fallback)', () => {
 
 test('default max decoder cap is 100', () => {
   const wire = createWire({ bundle: loadBundled('minimal') });
-  assert.equal(DEFAULT_MAX_DECODERS, 100);
   assert.equal(wire.maxDecoderCount(), 100);
 });
 

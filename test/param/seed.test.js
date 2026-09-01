@@ -14,7 +14,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { defsFor, catalogLabel } = require('../../lib/param/seed');
-const { VEHICLE_FAMILIES } = require('../../lib/vehicle');
+// Every family the Vehicle Profile editor offers; each must reach its own document.
+const VEHICLE_FAMILIES = ['copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker', 'unknown'];
 
 /* ---------- family → document ---------- */
 

@@ -430,7 +430,7 @@ test('mavlink-param payload firmware overrides Build concrete dialect firmware',
 
 test('mavlink-param capabilities beat ardupilot firmware for bytewise encoding', () => {
   const { paramValueToWire } = require('../../lib/codec');
-  const { CAP_PARAM_ENCODE_BYTEWISE } = require('../../lib/param');
+  const CAP_PARAM_ENCODE_BYTEWISE = 16; // MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE
   const peerTable = {
     getComponent(sysid, compid) {
       if (Number(sysid) === 1 && Number(compid) === 1) {
@@ -469,7 +469,7 @@ test('mavlink-param capabilities beat ardupilot firmware for bytewise encoding',
 });
 
 test('mavlink-param msg.payload.paramEncoding overrides peer capabilities', () => {
-  const { CAP_PARAM_ENCODE_BYTEWISE } = require('../../lib/param');
+  const CAP_PARAM_ENCODE_BYTEWISE = 16; // MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE
   const peerTable = {
     getComponent() {
       return { capabilities: CAP_PARAM_ENCODE_BYTEWISE };

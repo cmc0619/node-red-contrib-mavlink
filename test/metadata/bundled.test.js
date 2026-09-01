@@ -10,7 +10,6 @@ const os = require('os');
 const {
   knownDialects,
   loadBundled,
-  resolveSeedFile,
   readManifest,
   seedSources,
   setCompiledCacheDir,
@@ -32,13 +31,11 @@ const CORE = [
 ];
 
 test('seed ships as a stamp-named gzip blob pointed at by active.json', () => {
-  const blob = resolveSeedFile();
-  assert.match(path.basename(blob), /^mavlink-\d{4}-\d{2}-\d{2}-[0-9a-f]+\.seed\.gz$/);
-  assert.ok(fs.existsSync(blob));
-  const active = JSON.parse(
-    fs.readFileSync(path.join(path.dirname(blob), 'active.json'), 'utf8')
-  );
-  assert.equal(active.file, path.basename(blob));
+  // The pointer file is the shipped contract: seed/active.json names the blob.
+  const seedDir = path.join(__dirname, '..', '..', 'seed');
+  const active = JSON.parse(fs.readFileSync(path.join(seedDir, 'active.json'), 'utf8'));
+  assert.match(active.file, /^mavlink-\d{4}-\d{2}-\d{2}-[0-9a-f]+\.seed\.gz$/);
+  assert.ok(fs.existsSync(path.join(seedDir, active.file)), 'the named blob ships');
   assert.equal(active.stamp, seedStamp());
   const manifest = readManifest();
   assert.equal(manifest.license, 'MIT');

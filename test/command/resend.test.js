@@ -14,7 +14,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { AckWaiter, MAV_RESULT } = require('../../lib/command');
-const { DEFAULT_IN_PROGRESS_CEILING } = require('../../lib/command/ack');
 
 function stubConn() {
   const handlers = [];
@@ -44,12 +43,6 @@ function makeWaiter(conn, opts) {
     ...opts,
   });
 }
-
-test('the ceiling constant is pinned to its literal', () => {
-  // Pinned to the literal — a constant compared to itself passes at any value
-  // (the DEFAULT_FRAME lesson, §14).
-  assert.equal(DEFAULT_IN_PROGRESS_CEILING, 6);
-});
 
 test('a silent window sends once, then settles the timeout shape', async () => {
   const conn = stubConn();

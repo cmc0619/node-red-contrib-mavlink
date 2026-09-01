@@ -14,7 +14,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { UdpTransport, isMulticastAddress } = require('../../lib/connection/transport/udp');
+const { UdpTransport } = require('../../lib/connection/transport/udp');
 const { mockDgram } = require('./helpers');
 
 /**
@@ -111,15 +111,27 @@ test('a group that cannot be joined fails the deploy loudly', async () => {
   assert.equal(sockets[0].closed, true, 'the port is released on the way out');
 });
 
-test('multicast is decided by the address, across both families', () => {
-  for (const address of ['224.0.0.1', '239.255.145.50', '232.1.2.3']) {
-    assert.equal(isMulticastAddress(address), true, `${address} is multicast`);
+test('multicast is decided by the address, across both families', async () => {
+  // Measured at the socket: a multicast group is joined, anything else is
+  // broadcast-flagged, and no address at all touches neither.
+  const opened = async (broadcastAddress) => {
+    const { transport, sockets } = build({ broadcastAddress });
+    await transport.open();
+    return sockets[0];
+  };
+  for (const address of ['224.0.0.1', '239.255.145.50', '232.1.2.3', 'ff02::1']) {
+    const socket = await opened(address);
+    assert.deepEqual(socket.memberships, [address], `${address} is joined as a multicast group`);
+    assert.equal(socket.broadcastFlag, null, `${address} is not broadcast-flagged`);
   }
-  for (const address of ['255.255.255.255', '192.168.1.255', '10.0.0.7', '223.0.0.1', '240.0.0.1']) {
-    assert.equal(isMulticastAddress(address), false, `${address} is not multicast`);
+  for (const address of ['255.255.255.255', '192.168.1.255', '10.0.0.7', '223.0.0.1', '240.0.0.1', 'fe80::1']) {
+    const socket = await opened(address);
+    assert.deepEqual(socket.memberships, [], `${address} joins no group`);
+    assert.equal(socket.broadcastFlag, true, `${address} is broadcast-flagged`);
   }
-  assert.equal(isMulticastAddress('ff02::1'), true, 'IPv6 multicast is ff00::/8');
-  assert.equal(isMulticastAddress('fe80::1'), false, 'link-local unicast is not multicast');
-  assert.equal(isMulticastAddress(undefined), false);
-  assert.equal(isMulticastAddress(''), false);
+  for (const address of [undefined, '']) {
+    const socket = await opened(address);
+    assert.deepEqual(socket.memberships, []);
+    assert.equal(socket.broadcastFlag, null, 'no broadcast address configures neither');
+  }
 });
