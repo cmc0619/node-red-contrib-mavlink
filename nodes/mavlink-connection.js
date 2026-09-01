@@ -215,8 +215,7 @@ module.exports = function registerMavlinkConnection(RED) {
   });
 };
 
-// Exposed for direct unit testing (test/nodes/connection-signing.test.js) —
-// same pattern as mavlink-vehicle.js's FIRMWARE_TYPES/VEHICLE_FAMILIES export.
+// Exposed for direct unit testing (test/nodes/connection-signing.test.js).
 module.exports.buildSigning = buildSigning;
 module.exports.makeRejectedHandler = makeRejectedHandler;
 module.exports.applyStatus = applyStatus;
