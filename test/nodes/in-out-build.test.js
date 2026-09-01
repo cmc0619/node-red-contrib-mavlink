@@ -1102,6 +1102,27 @@ test('mavlink-build Build tier: output 0 carries the built message envelope', ()
   assert.equal(out1.result, 'built');
 });
 
+test('mavlink-build sends input-triggered output through the supplied send', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1' });
+  Constructor.call(node, {
+    vehicle: 'v1',
+    dialect: '__vehicle',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: '{}',
+  });
+
+  const emitted = [];
+  node._handlers.input[0]({ payload: {} }, (msgs) => emitted.push(msgs), () => {});
+
+  assert.equal(emitted.length, 1, 'input-triggered output is correlated to the received message');
+  assert.equal(node._sends.length, 0, 'node.send is reserved for timer-triggered output');
+});
+
 test('mavlink-build Build tier: msg.payload overrides config fields', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
