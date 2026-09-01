@@ -232,6 +232,12 @@
           [$sysid, $north, $east, $up, $patch].forEach(function ($field) {
             $field.on('input change', syncMembers);
           });
+          // A freshly added row has fired no field handler yet, but it is
+          // already a member: without this sync the validator judges the
+          // pre-add mirror while oneditsave reads the live rows, and an
+          // untouched blank row saves as sysid 0 — a broadcast member the
+          // red ring never saw.
+          syncMembers();
         },
       });
       (node.members || []).forEach(function (member) {

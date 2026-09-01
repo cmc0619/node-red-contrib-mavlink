@@ -209,6 +209,24 @@ test('oneditsave consumes the members mirror before the properties pane reads it
     'the mirror is gone — the pane collection that runs next finds nothing to overwrite');
 });
 
+test('addItem syncs the mirror so an untouched new row cannot dodge validation', () => {
+  // A freshly added row has fired no field handler, so without a sync inside
+  // addItem the validator judges the pre-add mirror while oneditsave reads
+  // the live rows — an untouched blank row would save as sysid 0, a
+  // broadcast member the red ring never saw.
+  const start = html.indexOf('addItem: function (container, _index, member) {');
+  assert.ok(start >= 0, 'members editableList must define addItem');
+  let i = html.indexOf('{', start) + 1;
+  let depth = 1;
+  while (i < html.length && depth > 0) {
+    const c = html[i++];
+    if (c === '{') depth += 1;
+    else if (c === '}') depth -= 1;
+  }
+  assert.ok(html.slice(start, i).includes('syncMembers();'),
+    'addItem must sync the mirror before the new row can reach oneditsave unvalidated');
+});
+
 test('selectionMode and executionMode red on membership, then on the Build pairing rules', () => {
   // §5's editor half: the runtime dispatches these tokens with affirmative
   // cases only, so a hand-edited stray must red at deploy — the audit's
