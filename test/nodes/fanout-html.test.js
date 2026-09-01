@@ -180,12 +180,16 @@ test('members validation reads the open editable-list value', () => {
   );
 });
 
-test('oneditsave consumes the members mirror before the properties pane reads it', () => {
+test('oneditsave removes the members mirror so the properties pane finds nothing to copy', () => {
   // Node-RED's save order is oneditsave first, then the properties pane
   // copies every surviving #node-input-* field's val() over the node
   // property. The mirror's val() is the rows as JSON strings, so a mirror
   // that outlived oneditsave would replace the object array oneditsave just
-  // stored. This replays both halves: the save, then the pane's lookup.
+  // stored. This runs the save and checks the mirror is gone; the pane
+  // itself is Node-RED's code and is not replayed here — its skip of a
+  // property whose input matches nothing is read from editor-client 5.0.4
+  // (panes/properties.js apply: `input.val()` on an empty match is
+  // undefined, and `newValue != null` bails).
   const dom = {
     '#mav-fanout-members': {
       rows: [{
@@ -206,7 +210,7 @@ test('oneditsave consumes the members mirror before the properties pane reads it
   assert.equal(node.members.length, 1, 'one live row saves as one member');
   assert.equal(node.members[0].sysid, 7, 'saved members are the live rows as objects');
   assert.ok(!('#node-input-members' in dom),
-    'the mirror is gone — the pane collection that runs next finds nothing to overwrite');
+    'the mirror is gone, which is what the pane collection that runs next depends on');
 });
 
 test('addItem syncs the mirror so an untouched new row cannot dodge validation', () => {
