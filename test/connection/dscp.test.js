@@ -73,9 +73,9 @@ test('markSocket hands the marker the DSCP value shifted into the TOS byte', () 
   // EF (46) → 0xB8, CS5 (40) → 0xA0, AF11 (10) → 0x28: the six-bit code point
   // occupies the top of the byte, ECN bits clear.
   for (const [dscp, tos] of [[46, 184], [40, 160], [10, 40]]) {
-    let seen;
-    markSocket({}, dscp, { marker: (_socket, value) => { seen = value; return true; } });
-    assert.equal(seen, tos, `DSCP ${dscp} marks TOS ${tos}`);
+    const seen = [];
+    markSocket({}, dscp, { marker: (_socket, value) => { seen.push(value); return true; } });
+    assert.deepEqual(seen, [tos], `DSCP ${dscp} marks TOS ${tos}, once`);
   }
 });
 
