@@ -53,6 +53,18 @@
       };
     }
 
+    function companionRoleValidator(v, _opt) {
+      if (v !== 'companion') return true;
+      var identityId = this.id;
+      var bindings = 0;
+      RED.nodes.eachConfig(function (connection) {
+        if (connection.type !== 'mavlink-connection') return;
+        var identities = [connection.localIdentity].concat(connection.additionalIdentities || []);
+        if (identities.indexOf(identityId) !== -1) bindings += 1;
+      });
+      return bindings <= 1 || 'a Companion may have one Connection';
+    }
+
     /**
      * Role presets: suggested identity values per role. Switching roles
      * pre-fills blank fields; an explicitly customized value is never rewritten.
@@ -73,7 +85,7 @@
       category: 'config',
       defaults: {
         name:              { value: '' },
-        role:              { value: 'gcs', required: true },
+        role:              { value: 'gcs', required: true, validate: companionRoleValidator },
         /**
          * SysID is NOT `required`: the companion role derives it from the
          * vehicle, so blank is the correct saved state in that role, and its

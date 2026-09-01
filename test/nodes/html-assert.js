@@ -151,6 +151,9 @@ function loadNodeType(nodeName, nodeLookup = {}, opts = {}) {
         registerType(name, def) { registered[name] = def; },
         getType: (t) => (/^mavlink-/.test(t) ? function () {} : undefined),
         node: (id) => nodeLookup[id] || null,
+        eachConfig(fn) {
+          Object.entries(nodeLookup).forEach(([id, node]) => fn({ id, ...node }));
+        },
       },
     },
     $,

@@ -123,6 +123,41 @@ function boundValidate(conn, value) {
   );
 }
 
+test('a companion may be bound to only one Connection; GCS identities may be reused', () => {
+  const nodes = {
+    ...BOUND,
+    c2: {
+      type: 'mavlink-connection',
+      name: 'Backup radio',
+      localIdentity: 'id-comp',
+      additionalIdentities: [],
+    },
+  };
+  const defaults = loadNodeDefaults('mavlink-connection', nodes);
+
+  assert.match(
+    String(defaults.localIdentity.validate.call({ id: 'c1' }, 'id-comp', {})),
+    /Backup radio[\s\S]*one Connection/
+  );
+  assert.match(
+    String(defaults.additionalIdentities.validate.call(
+      { id: 'c1', vehicle: 'veh', localIdentity: 'id-gcs' },
+      ['id-comp'],
+      {}
+    )),
+    /Backup radio[\s\S]*one Connection/
+  );
+  assert.equal(
+    defaults.additionalIdentities.validate.call(
+      { id: 'c1', vehicle: 'veh', localIdentity: 'id-comp2' },
+      ['id-gcs'],
+      {}
+    ),
+    true,
+    'a GCS identity may remain bound to more than one Connection'
+  );
+});
+
 test('bound identities on distinct SysID/CompID pairs pass — no per-role limit', () => {
   // Two ground stations and two companions on one link. Nothing here counts
   // roles; the only rule is that each identity owns its pair.

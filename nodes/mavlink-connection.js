@@ -127,33 +127,18 @@ module.exports = function registerMavlinkConnection(RED) {
     // localIdentity is a required reference and additionalIdentities is the
     // editor's normalized list (oneditsave always writes it) — used as saved.
     const identityIds = [config.localIdentity, ...config.additionalIdentities];
-    node._identityNodes = [];
-
-    // identitySnapshot claims this connection's sysid on the shared Local
-    // Identity node, and everything after it in this constructor can still
-    // throw (enum resolution, signing config, the Connection itself). A
-    // constructor throw means the close handler below never registers, so the
-    // claim would outlive the failed deploy and block the next one until
-    // Node-RED restarts. Release on the way out instead.
-    function releaseClaims() {
-      for (const idNode of node._identityNodes) {
-        idNode.releaseVehicleSysid(node.id);
-      }
-    }
 
     // Built before the identity claims — a signing misconfig throws with
     // nothing to release yet — and kept: the rejected/status wiring below
     // needs hasKey and acceptInvalid (#243).
     const signing = buildSigning(config, node.credentials);
 
-    try {
-      const identities = identityIds.map((id) => {
-        const idNode = RED.nodes.getNode(id);
-        node._identityNodes.push(idNode);
-        return identitySnapshot(idNode, defaults, bundle, node.id);
-      });
+    const identities = identityIds.map((id) => {
+      const idNode = RED.nodes.getNode(id);
+      return identitySnapshot(idNode, defaults, bundle);
+    });
 
-      node.connection = new Connection({
+    node.connection = new Connection({
         disabled: false,
         transport: buildTransportConfig(config),
         vehicle: {
@@ -170,18 +155,14 @@ module.exports = function registerMavlinkConnection(RED) {
           staleMs: numberOr(config.staleMs, undefined),
           expireMs: numberOr(config.expireMs, undefined),
         },
-      }, {
+    }, {
         logger: {
           info: (m) => node.log(m),
           warn: (m) => node.warn(m),
           error: (m) => node.error(m),
         },
         resolveIdentity,
-      });
-    } catch (err) {
-      releaseClaims();
-      throw err;
-    }
+    });
 
     node.connection.on('state', (state) => applyStatus(node, state, signing.acceptInvalid));
     node.connection.on('rejected', makeRejectedHandler(node, signing));
@@ -205,7 +186,6 @@ module.exports = function registerMavlinkConnection(RED) {
     });
 
     node.on('close', (done) => {
-      releaseClaims();
       node.connection.close(done);
     });
   }
@@ -228,13 +208,10 @@ module.exports.applyStatus = applyStatus;
  * @param {object} idNode  the Local Identity node
  * @param {object} defaults  Vehicle Profile defaults
  * @param {object} bundle  the dialect bundle (for enum resolution)
- * @param {string} connectionId  this connection's node id (for sysid claims)
  * @returns {{id: string, sysid: number, compid: number, heartbeatIntervalMs: number, heartbeat: object}}
  */
-function identitySnapshot(idNode, defaults, bundle, connectionId) {
-  if (idNode.derivesSysidFromVehicle) {
-    idNode.bindVehicleSysid(defaults.defaultTargetSystem, connectionId);
-  }
+function identitySnapshot(idNode, defaults, bundle) {
+  if (idNode.derivesSysidFromVehicle) idNode.bindVehicleSysid(defaults.defaultTargetSystem);
   const wire = idNode.getIdentity();
   const hb = idNode.getHeartbeatFields();
   return {

@@ -36,6 +36,25 @@
     return Boolean(v);
   }
 
+  function companionBoundElsewhere(node, identityIds) {
+    var conflict = null;
+    RED.nodes.eachConfig(function (other) {
+      if (conflict || other.type !== 'mavlink-connection' || other.id === node.id) return;
+      var bound = [other.localIdentity].concat(other.additionalIdentities || []);
+      (identityIds || []).some(function (identityId) {
+        var identity = RED.nodes.node(identityId);
+        if (identity && identity.role === 'companion' && bound.indexOf(identityId) !== -1) {
+          conflict = other;
+          return true;
+        }
+        return false;
+      });
+    });
+    if (!conflict) return true;
+    return 'Companion identity is already bound to ‘' + (conflict.name || conflict.id)
+      + '’ — a Companion may have one Connection';
+  }
+
   // Ports are 16-bit, and 0 is a silent trap rather than a port: binding 0
   // asks the OS for a random port no vehicle can be pointed at, and a remote
   // or swarm port 0 reads as "no destination" on the send path (§14 audit:
@@ -106,7 +125,8 @@
       } },
       // Config-node references (§6 — everything enumerable is a dropdown).
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
-      localIdentity: { value: '', type: 'mavlink-local-identity', required: true },
+      localIdentity: { value: '', type: 'mavlink-local-identity', required: true,
+        validate: function (v, _opt) { return companionBoundElsewhere(this, [v]); } },
       // Every bound identity must send as its own (sysid, compid). Sharing the
       // pair is a wire collision the driver cannot report: the Connection runs
       // one heartbeat scheduler per identity, and ack attribution matches a
@@ -120,6 +140,8 @@
       // additionals are the rows an operator can actually change. Siblings are
       // read live through liveOr so the check is scoped to this dialog (#217).
       additionalIdentities: { value: [], validate: function (v, _opt) {
+        var elsewhere = companionBoundElsewhere(this, v);
+        if (elsewhere !== true) return elsewhere;
         var vehicleId = RED.mavlink.liveOr(this, '#node-config-input-vehicle', this.vehicle, '');
         var vehicleNode = vehicleId ? RED.nodes.node(vehicleId) : null;
         // No Vehicle resolved yet — its own required ring owns that, and a
