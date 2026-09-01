@@ -50,6 +50,13 @@ const {
 } = require('../lib/addressing');
 const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
+/**
+ * A confirm-tier PARAM_SET gets its initial send plus two retries. MAVLink
+ * common.xml message 23 says a sender that times out waiting for PARAM_VALUE
+ * should re-send PARAM_SET: https://github.com/mavlink/mavlink/blob/master/message_definitions/v1.0/common.xml#L5615-L5624
+ */
+const PARAM_SET_ATTEMPTS = 3;
+
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
 const PARAM_DEFS_UPDATE_ROUTE = '/mavlink/param/defs/update';
@@ -343,6 +350,7 @@ module.exports = function registerMavlinkParam(RED) {
             fn(finishDone);
           }
 
+          let attempt = 1;
           let collector = null;
           switch (mode) {
             case 'collect-list':
@@ -357,7 +365,7 @@ module.exports = function registerMavlinkParam(RED) {
               case 'confirm-set':
                 if (!matchesParamEcho(request, decoded)) return;
                 settle((finishDone) => {
-                  completeResult(node, send, 'succeeded', 'echo-confirmed', decoded);
+                  completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
                   finishDone();
                 });
                 break;
@@ -390,7 +398,30 @@ module.exports = function registerMavlinkParam(RED) {
           function armDeadline() {
             return setTimeout(() => {
               if (!pending || pending.gen !== myGen) return;
-              settle((finishDone) => timeoutResult(node, send, timeoutDetail, finishDone));
+              let extra;
+              switch (mode) {
+                case 'confirm-set':
+                  if (attempt < PARAM_SET_ATTEMPTS) {
+                    attempt += 1;
+                    applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
+                    send([null, makeStatusRecord(node.type, {
+                      result: 'progress',
+                      detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
+                    })]);
+                    try {
+                      connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
+                    } catch (err) {
+                      settle((finishDone) => failInput(node, send, err, finishDone));
+                      return;
+                    }
+                    pending.timer = armDeadline();
+                    return;
+                  }
+                  extra = { attempts: attempt };
+                  break;
+                default: break; // This space intentionally left blank (§5)
+              }
+              settle((finishDone) => timeoutResult(node, send, timeoutDetail, finishDone, extra));
             }, timeoutMs);
           }
 

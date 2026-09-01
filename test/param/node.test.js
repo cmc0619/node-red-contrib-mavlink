@@ -634,7 +634,7 @@ function confirmSetNode(RED, conn, timeout) {
   });
 }
 
-test('confirm set sends PARAM_SET once when its echo times out', async () => {
+test('confirm set re-sends PARAM_SET when its echo times out', async () => {
   const conn = connStubFull();
   const node = confirmSetNode(redStub({ conn }), conn, 15);
 
@@ -644,13 +644,15 @@ test('confirm set sends PARAM_SET once when its echo times out', async () => {
     (m) => outs.push(m), (err) => { doneErr = err; });
   await sleep(100);
 
-  assert.equal(conn.sent.length, 1, 'only the caller-requested PARAM_SET is sent');
+  assert.equal(conn.sent.length, 3, 'the initial send is followed by two protocol retries');
   assert.ok(conn.sent.every((s) => s.message.name === 'PARAM_SET'));
+  const progress = outs.filter((m) => m[1] && m[1].result === 'progress');
+  assert.deepEqual(progress.map((m) => m[1].detail), ['resend 2/3', 'resend 3/3']);
   const terminal = outs[outs.length - 1];
   assert.equal(terminal[0], null);
   assert.equal(terminal[1].result, 'timed-out');
   assert.equal(terminal[1].detail, 'echo timeout');
-  assert.equal(terminal[1].attempts, undefined, 'the result does not claim attempts');
+  assert.equal(terminal[1].attempts, 3, 'the terminal result reports every attempt');
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   assert.equal(conn.activeCount(), 0, 'subscription torn down');
 });
