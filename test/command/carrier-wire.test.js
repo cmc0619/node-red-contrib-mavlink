@@ -1,13 +1,12 @@
 'use strict';
 
 /**
- * mavlink-command carrier auto-resend tests (DESIGN.md §9 "resend in the other
- * form"; user requirement: warn on retry, fail loud if the second attempt also
- * fails, and only one carrier swap per transaction).
+ * mavlink-command on the wire: the configured carrier is the one sent, its
+ * positional params scale per carrier (DESIGN.md §9 "Coordinate frames"), and
+ * the COMMAND_ACK it earns — a wrong-carrier code included — is the result.
  *
- * The connection stub scripts one COMMAND_ACK per send in order, so a test can
- * make the first COMMAND_LONG ack COMMAND_INT_ONLY and then decide what the
- * COMMAND_INT resend acks. A minimal Node-RED stub drives the constructor.
+ * The connection stub scripts one COMMAND_ACK per send in order. A minimal
+ * Node-RED stub drives the constructor.
  */
 
 const { EventEmitter } = require('node:events');
@@ -125,83 +124,31 @@ function deploy(ackResults, config = {}, extraNodes = {}) {
   return { node, conn, warnings };
 }
 
-test('INT_ONLY then ACCEPTED: warns, resends as COMMAND_INT, continues', async () => {
-  const { node, conn, warnings } = deploy([
-    MAV_RESULT.COMMAND_INT_ONLY,
-    MAV_RESULT.ACCEPTED,
-  ]);
-
-  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
-
-  assert.equal(conn.sent.length, 2, 'exactly two sends: one LONG then one INT');
-  assert.equal(conn.sent[0].message.name, 'COMMAND_LONG');
-  assert.equal(conn.sent[1].message.name, 'COMMAND_INT');
-  // Global default frame → lat/lon scaled to degE7 on the INT carrier.
-  assert.equal(conn.sent[1].message.fields.x, 471000000);
-  assert.equal(conn.sent[1].message.fields.y, -1225000000);
-  assert.equal(conn.sent[1].message.fields.z, 100);
-
-  assert.equal(warnings.length, 1, 'warned once on the carrier swap');
-  assert.match(warnings[0], /resending as COMMAND_INT/);
-
-  assert.ok(sent, 'outputs fired');
-  assert.ok(sent[0], 'output 0 (continue) fired on success');
-  assert.equal(sent[1].result, 'accepted');
-  assert.match(sent[1].detail, /carrier swap/);
-});
-
-test('INT_ONLY twice: fails loud, no third send, output 0 stays silent', async () => {
-  const { node, conn, warnings } = deploy([
-    MAV_RESULT.COMMAND_INT_ONLY,
-    MAV_RESULT.COMMAND_INT_ONLY,
-  ]);
-
-  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
-
-  assert.equal(conn.sent.length, 2, 'only one carrier swap — no third attempt');
-  assert.equal(warnings.length, 1);
-  assert.equal(sent[0], null, 'output 0 must not fire when the swap also fails');
-  assert.equal(sent[1].result, 'command_int_only');
-  assert.match(sent[1].detail, /no carrier satisfies/);
-});
-
-test('INT_ONLY then DENIED: fails loud, noting the completed swap', async () => {
-  const { node, conn } = deploy([
-    MAV_RESULT.COMMAND_INT_ONLY,
-    MAV_RESULT.DENIED,
-  ]);
-
-  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
-
-  assert.equal(conn.sent.length, 2);
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'denied');
-  assert.match(sent[1].detail, /carrier swap/);
-});
-
-test('ACCEPTED on the first COMMAND_LONG: no swap, no warn', async () => {
+test('ACCEPTED on the first COMMAND_LONG: one send, no warn', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED]);
 
   const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
   assert.equal(conn.sent.length, 1, 'a single COMMAND_LONG send');
   assert.equal(conn.sent[0].message.name, 'COMMAND_LONG');
-  assert.equal(warnings.length, 0, 'no warning without a carrier swap');
+  assert.equal(warnings.length, 0);
   assert.ok(sent[0], 'output 0 fired');
   assert.equal(sent[1].result, 'accepted');
   assert.equal(sent[1].detail, null);
 });
 
-test('contradictory LONG_ONLY on the first LONG send fails loud without swapping', async () => {
-  const { node, conn, warnings } = deploy([MAV_RESULT.COMMAND_LONG_ONLY]);
+test('a wrong-carrier ack is the result: one send, reported on output 1 as-is', async () => {
+  const { node, conn, warnings } = deploy([MAV_RESULT.COMMAND_INT_ONLY]);
 
   const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
 
-  assert.equal(conn.sent.length, 1, 'no swap: the demanded carrier was already sent');
+  assert.equal(conn.sent.length, 1, 'the configured carrier is sent once; nothing is resent');
+  assert.equal(conn.sent[0].message.name, 'COMMAND_LONG');
   assert.equal(warnings.length, 0);
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'command_long_only');
-  assert.match(sent[1].detail, /already sent/);
+  assert.equal(sent[0], null, 'output 0 stays silent on a rejection');
+  assert.equal(sent[1].result, 'command_int_only');
+  assert.equal(sent[1].resultCode, MAV_RESULT.COMMAND_INT_ONLY);
+  assert.equal(sent[1].detail, null, 'the ack rides out unchanged');
 });
 
 test('INT-first: configured carrier int sends COMMAND_INT with degrees scaled to degE7', async () => {
@@ -216,67 +163,26 @@ test('INT-first: configured carrier int sends COMMAND_INT with degrees scaled to
   assert.equal(conn.sent[0].message.fields.x, -350000000);
   assert.equal(conn.sent[0].message.fields.y, 1490000000);
   assert.equal(conn.sent[0].message.fields.z, 100);
-  assert.equal(warnings.length, 0, 'no warning without a carrier swap');
-  assert.ok(sent[0], 'output 0 fired');
-  assert.equal(sent[1].result, 'accepted');
-  assert.equal(sent[1].detail, null, 'no swap note when the configured carrier was accepted');
-});
-
-test('INT-first LONG_ONLY: swaps back to COMMAND_LONG with unscaled degrees', async () => {
-  const { node, conn, warnings } = deploy(
-    [MAV_RESULT.COMMAND_LONG_ONLY, MAV_RESULT.ACCEPTED],
-    { sendAs: 'int' }
-  );
-
-  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
-
-  assert.equal(conn.sent.length, 2, 'exactly two sends: one INT then one LONG');
-  assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
-  assert.equal(conn.sent[1].message.name, 'COMMAND_LONG');
-  // The resend rebuilds from the canonical degree params — float degrees on
-  // the LONG carrier, not a degE7 leak.
-  assert.equal(conn.sent[1].message.fields.param5, 47.1);
-  assert.equal(conn.sent[1].message.fields.param6, -122.5);
-  assert.equal(conn.sent[1].message.fields.param7, 100);
-
-  assert.equal(warnings.length, 1, 'warned once on the carrier swap');
-  assert.match(warnings[0], /resending as COMMAND_LONG/);
-  assert.ok(sent[0], 'output 0 fired');
-  assert.equal(sent[1].result, 'accepted');
-  assert.match(sent[1].detail, /COMMAND_LONG carrier swap/);
-});
-
-test('INT-first contradictory INT_ONLY fails loud without swapping', async () => {
-  const { node, conn, warnings } = deploy(
-    [MAV_RESULT.COMMAND_INT_ONLY],
-    { sendAs: 'int' }
-  );
-
-  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
-
-  assert.equal(conn.sent.length, 1, 'no swap: the demanded carrier was already sent');
   assert.equal(warnings.length, 0);
-  assert.equal(sent[0], null);
-  assert.equal(sent[1].result, 'command_int_only');
-  assert.match(sent[1].detail, /already sent/);
+  assert.ok(sent[0], 'output 0 fired');
+  assert.equal(sent[1].result, 'accepted');
+  assert.equal(sent[1].detail, null);
 });
 
 test('msg.mavFrame selects a non-global frame so INT x/y scale by 1e4, not 1e7', async () => {
-  const { node, conn } = deploy(
-    [MAV_RESULT.COMMAND_INT_ONLY, MAV_RESULT.ACCEPTED]
-  );
+  const { node, conn } = deploy([MAV_RESULT.ACCEPTED], { sendAs: 'int' });
 
   const sent = await runInput(
     node,
     { payload: { 5: 10.4, 6: -3.6, 7: 12 }, mavFrame: 1 }, // LOCAL_NED
   );
 
-  assert.equal(conn.sent[1].message.name, 'COMMAND_INT');
-  assert.equal(conn.sent[1].message.fields.frame, 1);
+  assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
+  assert.equal(conn.sent[0].message.fields.frame, 1);
   // Local frame scales metres × 1e4, not degE7 — measured against PX4 SITL
   // (DESIGN.md §14). 10.4 m on the wire is 104000.
-  assert.equal(conn.sent[1].message.fields.x, 104000, 'metres × 1e4, not degE7-scaled');
-  assert.equal(conn.sent[1].message.fields.y, -36000);
+  assert.equal(conn.sent[0].message.fields.x, 104000, 'metres × 1e4, not degE7-scaled');
+  assert.equal(conn.sent[0].message.fields.y, -36000);
   assert.equal(sent[1].result, 'accepted');
 });
 

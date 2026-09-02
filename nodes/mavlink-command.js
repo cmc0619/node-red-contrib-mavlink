@@ -15,8 +15,7 @@
  * Carrier (§9 "Coordinate frames"): the editor defaults to COMMAND_INT and
  * the operator can pick COMMAND_LONG instead. Positional params are always
  * entered in decimal degrees; the INT carrier scales them to
- * degE7 on the wire. A wrong-carrier ack still triggers the one-shot auto
- * resend in the other form (§9 "resend in the other form").
+ * degE7 on the wire. The ack, whatever it says, is the result.
  *
  * Delivery tiers (§9 "Delivery tiers"):
  *   build    — construct the selected carrier message and emit on output 0;
@@ -36,7 +35,6 @@
 const {
   makeStatusRecord,
   MAV_RESULT,
-  RESULT_NAME,
   getPreset,
   buildParamArray,
   mergeParams,
@@ -47,7 +45,6 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
-  runWithCarrierSwap,
   intCoordKinds,
   resolveFrame,
   DEFAULT_TIMEOUT_MS,
@@ -427,17 +424,14 @@ module.exports = function registerMavlinkCommand(RED) {
         applyActionStatus(node, 'sending', `${displayName}\u2026`);
 
         /**
-         * Run one AckWaiter transaction in the given carrier and resolve with its
-         * outcome. Registers itself as the node's active waiter for cancellation.
-         *
-         * @param {'long'|'int'} carrier
-         * @returns {Promise<object>} AckResult
+         * Run one AckWaiter transaction in the configured carrier and resolve
+         * with its outcome.
          */
-        async function runWaiter(carrier) {
+        async function runWaiter() {
           const waiter = new AckWaiter({
             subscribe: (filter, handler) => connNode.subscribe(filter, handler),
             sendFn: (confirmation) => {
-              connNode.send(buildCarrierMessage(carrier, confirmation), { band: BAND.CONTROL, target, identityId });
+              connNode.send(buildCarrierMessage(configuredCarrier, confirmation), { band: BAND.CONTROL, target, identityId });
             },
             commandId,
             targetSystem: target.sysid,
@@ -468,40 +462,10 @@ module.exports = function registerMavlinkCommand(RED) {
           }
         }
 
-        // First attempt is the operator's configured carrier (§9): a required
-        // choice, so the wire format is stated intent — never a guess. The
-        // wrong-carrier rule — at most ONE swap per transaction, a second
-        // wrong-carrier ack failed loudly — has one owner in lib/command
-        // (runWithCarrierSwap), shared with mavlink-payload.
-        const swap = await runWithCarrierSwap({
-          carrier: configuredCarrier,
-          run: runWaiter,
-          onSwap: (outcome, _from, to) => {
-            node.warn(
-              `mavlink-command: ${displayName} rejected as ` +
-                `${RESULT_NAME[outcome.resultCode]} — resending as ` +
-                `COMMAND_${to === CARRIER.INT ? 'INT' : 'LONG'} (§9 carrier swap)`
-            );
-            applyActionStatus(node, 'sending', `retry ${to === CARRIER.INT ? 'INT' : 'LONG'} ${displayName}\u2026`);
-          },
-        });
-        const carrier = swap.carrier;
-        const ackOutcome = swap.outcome;
-        if (swap.wrongCarrier) {
-          const rec = makeRecord({
-            result: RESULT_NAME[ackOutcome.resultCode],
-            resultCode: ackOutcome.resultCode,
-            resultParam2: ackOutcome.resultParam2,
-            confirmedBy: 'ack',
-            retries: ackOutcome.retries,
-            elapsed: Date.now() - startMs,
-            detail: swap.wrongCarrier,
-          });
-          applyActionStatus(node, 'error', `wrong carrier ${displayName}`);
-          emitStatus(rec, send, false);
-          done();
-          return;
-        }
+        // The operator's configured carrier (§9): a required choice, so the
+        // wire format is stated intent — never a guess. The ack it earns,
+        // wrong-carrier codes included, is the result.
+        const ackOutcome = await runWaiter();
 
         // A redeploy cancelled the wait (close() cancels the waiter slot).
         // The node is being torn down, so finish quietly: emitting or raising
@@ -512,17 +476,11 @@ module.exports = function registerMavlinkCommand(RED) {
           return;
         }
 
-        // From here the outcome may be from either the configured or swapped
-        // carrier; note a completed swap in the success/failure detail below.
-        const carrierSwapped = carrier !== configuredCarrier;
-        const carrierLabel = `COMMAND_${carrier === CARRIER.INT ? 'INT' : 'LONG'}`;
-
         // Completion's TAKEOFF datum is frame-aware, but only COMMAND_INT carries
-        // a frame on the wire — COMMAND_LONG has none. After a possible INT→LONG
-        // carrier swap, the effective carrier decides whether a frame applies:
-        // pass it for INT, withhold it for LONG so completion uses the relative
-        // datum instead of AMSL math against a frame the vehicle never saw.
-        const completionFrame = carrier === CARRIER.INT ? frame : undefined;
+        // a frame on the wire — COMMAND_LONG has none: pass it for INT, withhold
+        // it for LONG so completion uses the relative datum instead of AMSL math
+        // against a frame the vehicle never saw.
+        const completionFrame = configuredCarrier === CARRIER.INT ? frame : undefined;
 
         // Timeout: check peer table for completion condition.
         if (ackOutcome.result === 'timeout') {
@@ -656,7 +614,7 @@ module.exports = function registerMavlinkCommand(RED) {
             confirmedBy: 'ack',
             retries: ackOutcome.retries,
             elapsed: Date.now() - startMs,
-            detail: carrierSwapped ? `accepted after ${carrierLabel} carrier swap (§9)` : null,
+            detail: null,
           });
           applyActionStatus(node, 'ok', `${displayName} accepted`);
           emitStatus(rec, send, true, rec);
@@ -672,9 +630,7 @@ module.exports = function registerMavlinkCommand(RED) {
           confirmedBy: ackOutcome.confirmedBy,
           retries: ackOutcome.retries,
           elapsed: Date.now() - startMs,
-          detail: carrierSwapped
-            ? `${ackOutcome.detail || RESULT_NAME[ackOutcome.resultCode] || 'failed'} (after ${carrierLabel} carrier swap, §9)`
-            : ackOutcome.detail,
+          detail: ackOutcome.detail,
         });
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);

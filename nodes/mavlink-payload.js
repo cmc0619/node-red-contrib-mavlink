@@ -11,7 +11,6 @@ const {
   sendFnFor,
   cancelSlot,
   resolveFrame,
-  runWithCarrierSwap,
   DEFAULT_TIMEOUT_MS,
   DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
@@ -83,97 +82,55 @@ module.exports = function registerMavlinkPayload(RED) {
           compidFromConfig: true,
         });
 
-        /** The recipe rendered for one carrier. Carrier is an input to the
-         *  builder, so a swap re-runs this rather than converting by hand. */
-        function buildFor(carrier) {
-          return buildPayloadMessage({
-            topic: payload.topic === undefined ? config.topic : payload.topic,
-            verb: payload.verb === undefined ? config.verb : payload.verb,
-            path: payload.path === undefined ? config.path : payload.path,
-            target,
-            values: payload.values === undefined ? config.values : payload.values,
-            // Required for command-backed verbs (§9): a non-member carrier
-            // selects no builder (§5), so the message ships undefined and
-            // craters at the tier that touches it.
-            carrier,
-            frame: resolveFrame(payload.mavFrame, config.frame),
-          });
-        }
-
-        const carrierChosen = payload.sendAs === undefined ? config.sendAs : payload.sendAs;
-        const builtCmd = buildFor(carrierChosen);
+        const builtCmd = buildPayloadMessage({
+          topic: payload.topic === undefined ? config.topic : payload.topic,
+          verb: payload.verb === undefined ? config.verb : payload.verb,
+          path: payload.path === undefined ? config.path : payload.path,
+          target,
+          values: payload.values === undefined ? config.values : payload.values,
+          // Required for command-backed verbs (§9): a non-member carrier
+          // selects no builder (§5), so the message ships undefined and
+          // craters at the tier that touches it.
+          carrier: payload.sendAs === undefined ? config.sendAs : payload.sendAs,
+          frame: resolveFrame(payload.mavFrame, config.frame),
+        });
 
         /**
-         * Send a command-backed verb and wait for its COMMAND_ACK under the §9
-         * wrong-carrier rule (lib/command runWithCarrierSwap) — the same owner
-         * mavlink-command runs through: at most one swap per message, and a
-         * second wrong-carrier ack (the same code again or a contradictory
-         * one) fails loud rather than ping-ponging.
-         *
-         * This matters more than it looks: the editor shows the Carrier control
-         * only for a verb whose command carries a location (gimbal ROI-set), and
-         * pins the other 13 command verbs to COMMAND_INT. An operator has no way
-         * to pick LONG for those, so on a LONG-only vehicle the swap is the only
-         * thing standing between them and a flat refusal.
+         * Send a command-backed verb and wait for its COMMAND_ACK. The ack,
+         * whatever it says, is the result (§9): a wrong-carrier code is reported
+         * like any other rejection and the flow decides what to send next.
          */
-        async function awaitAck(firstBuilt) {
-          // The recipe rendered for the attempt in flight; a swap re-renders it
-          // through buildFor, so the final attempt's shape reports the outcome.
-          let built = firstBuilt;
-          // A new input supersedes the previous input's wait. The two carrier
-          // attempts below are sequential, so this runs once per input.
+        async function awaitAck(built) {
+          // A new input supersedes the previous input's wait.
           waiterSlot.cancel();
-
-          /** One AckWaiter transaction for the currently rendered recipe. */
-          async function runWaiter() {
-            applyActionStatus(node, 'sending', `${built.message.name}…`);
-            const waiter = new AckWaiter({
-              subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
-              // Only the LONG carrier has a confirmation byte; COMMAND_INT must
-              // not grow one on retries (§9, lib/command sendFnFor).
-              sendFn: sendFnFor(connectionNode, built.message, { band: BAND.CONTROL, target, identityId }),
-              commandId: built.message.fields.command,
-              targetSystem: target.sysid,
-              targetComponent: target.compid,
-              // Ack attribution (§9): ignore an ack explicitly addressed to a
-              // different GCS on a shared link.
-              sourceIds: connectionNode.resolveSourceIds(identityId),
-              timeoutMs,
-              maxRetries,
-            });
-            waiterSlot.active = waiter;
-            try {
-              return await waiter.start();
-            } finally {
-              waiterSlot.release(waiter);
-            }
-          }
-
-          const swap = await runWithCarrierSwap({
-            carrier: carrierChosen,
-            run: (carrier) => {
-              if (carrier !== carrierChosen) built = buildFor(carrier);
-              return runWaiter();
-            },
-            onSwap: (outcome, _from, to) => {
-              node.warn(
-                `mavlink-payload: ${built.message.name} rejected as ` +
-                  `${outcome.result} — resending as COMMAND_${to.toUpperCase()} ` +
-                  '(§9 carrier swap)'
-              );
-            },
+          applyActionStatus(node, 'sending', `${built.message.name}…`);
+          const waiter = new AckWaiter({
+            subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
+            // Only the LONG carrier has a confirmation byte; COMMAND_INT must
+            // not grow one on retries (§9, lib/command sendFnFor).
+            sendFn: sendFnFor(connectionNode, built.message, { band: BAND.CONTROL, target, identityId }),
+            commandId: built.message.fields.command,
+            targetSystem: target.sysid,
+            targetComponent: target.compid,
+            // Ack attribution (§9): ignore an ack explicitly addressed to a
+            // different GCS on a shared link.
+            sourceIds: connectionNode.resolveSourceIds(identityId),
+            timeoutMs,
+            maxRetries,
           });
-          const outcome = swap.outcome;
+          waiterSlot.active = waiter;
+          let outcome;
+          try {
+            outcome = await waiter.start();
+          } finally {
+            waiterSlot.release(waiter);
+          }
           if (outcome.result === 'cancelled') {
             // A redeploy cancelled the wait (see the close handler). Finish
             // quietly on a node that is going away — raising here would
             // trip a Catch node wired for "payload failed → failsafe" on a
             // mere deploy, the rule mavlink-mission already follows.
             done();
-          } else if (swap.wrongCarrier) {
-            // No carrier satisfies the vehicle — fail loud with the swap
-            // owner's verdict as the detail (§9 user requirement).
-            failAck(node, send, built, { ...outcome, detail: swap.wrongCarrier }, msg, done);
           } else if (outcome.result === 'accepted') {
             completeAck(node, send, built, outcome);
             done();
