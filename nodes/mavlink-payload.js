@@ -119,12 +119,7 @@ module.exports = function registerMavlinkPayload(RED) {
             maxRetries,
           });
           waiterSlot.active = waiter;
-          let outcome;
-          try {
-            outcome = await waiter.start();
-          } finally {
-            waiterSlot.release(waiter);
-          }
+          const outcome = await waiter.start().finally(() => waiterSlot.release(waiter));
           if (outcome.result === 'cancelled') {
             // A redeploy cancelled the wait (see the close handler). Finish
             // quietly on a node that is going away — raising here would
