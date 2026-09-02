@@ -23,6 +23,7 @@ Module._load = function stubMappings(request, ...rest) {
 const register = require(path.resolve(__dirname, '../../../nodes/mavlink-vehicle.js'));
 const types = {};
 const RED = {
+  settings: {},
   log: { error() {} },
   httpAdmin: {
     get() {},

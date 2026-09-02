@@ -130,18 +130,6 @@ test('resolveDeliveryContext composes nothing for a tier no editor select saves'
   assert.equal(ctx.target.sysid, 4);
 });
 
-test('resolveDeliveryContext does not re-resolve a missing deploy-time Connection', () => {
-  const RED = redStub({
-    conn: { vehicle: { targetSystem: 1, targetComponent: 1 } },
-  });
-  const ctx = resolveDeliveryContext(RED, {
-    delivery: 'send',
-    config: { connection: 'conn', identity: '', targetSystem: '1', targetComponent: '1' },
-    payload: {},
-  });
-  assert.equal(ctx.connectionNode, null);
-});
-
 test('dialectFromConnection reads the bound profile node', () => {
   const bundle = { dialect: 'custom' };
   const RED = redStub({

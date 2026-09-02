@@ -56,7 +56,7 @@ let _xmlCatalogRouteRegistered = false;
  */
 function xmlCatalogBaseDir(RED) {
   const path = require('path');
-  const userDir = (RED && RED.settings && RED.settings.userDir) || process.cwd();
+  const userDir = RED.settings.userDir || process.cwd();
   return path.join(userDir, 'mavlink', 'xml');
 }
 
@@ -73,7 +73,7 @@ function xmlCatalogBaseDir(RED) {
  */
 function compiledCacheDir(RED) {
   const path = require('path');
-  const userDir = RED && RED.settings && RED.settings.userDir;
+  const userDir = RED.settings.userDir;
   return userDir ? path.join(userDir, 'mavlink', 'compiled') : null;
 }
 
