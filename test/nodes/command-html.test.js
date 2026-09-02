@@ -12,7 +12,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
 const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
