@@ -650,8 +650,19 @@
       $('#mav-cmd-search').autoComplete({ search: commandSearchOptions, minLength: 0 });
       $('#mav-cmd-search').on('change', function () {
         const hit = resolveCommand($(this).val());
-        if (hit) $('#node-input-advancedCommand').val(String(hit.value)).trigger('change');
+        if (hit && String(hit.value) !== $('#node-input-advancedCommand').val()) {
+          $('#node-input-advancedCommand').val(String(hit.value)).trigger('change');
+        }
         syncCommandSearchBox();
+      });
+      // The widget completes on Enter and Tab by writing the top row into the
+      // box without a change event (red.js autoComplete keydown; a mouse pick
+      // does fire one), so the box would show the new command while the select
+      // — the saved property — still held the old one, and Done would save the
+      // old one (CodeRabbit, #418). Keyup runs after that write, so the same
+      // resolve path lands the completion in the select.
+      $('#mav-cmd-search').on('keyup', function (evt) {
+        if (evt.key === 'Enter' || evt.key === 'Tab') $(this).trigger('change');
       });
 
       function refreshAdvancedCommands() {

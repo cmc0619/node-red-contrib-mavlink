@@ -903,6 +903,11 @@ test('the MAV_CMD search box is not a node property and the select still is', ()
   assert.ok(!html.includes('node-input-mav-cmd-search'), 'the box must not be copied into the node by the properties pane');
   assert.match(html, /\$\('#mav-cmd-search'\)\.autoComplete\(\{ search: commandSearchOptions, minLength: 0 \}\)/,
     'Node-RED\'s autoComplete owns the menu');
-  assert.match(html, /const hit = resolveCommand\(\$\(this\)\.val\(\)\);\s*if \(hit\) \$\('#node-input-advancedCommand'\)\.val\(String\(hit\.value\)\)\.trigger\('change'\)/,
+  assert.match(html, /const hit = resolveCommand\(\$\(this\)\.val\(\)\);\s*if \(hit && String\(hit\.value\) !== \$\('#node-input-advancedCommand'\)\.val\(\)\) \{\s*\$\('#node-input-advancedCommand'\)\.val\(String\(hit\.value\)\)\.trigger\('change'\)/,
     'a resolved entry lands in the select, which stays the saved property');
+  // Node-RED's autoComplete completes on Enter/Tab by writing the top row into
+  // the box with no change event (only a mouse pick fires one), so without this
+  // the select — the saved property — would keep the previous command.
+  assert.match(html, /\$\('#mav-cmd-search'\)\.on\('keyup', function \(evt\) \{\s*if \(evt\.key === 'Enter' \|\| evt\.key === 'Tab'\) \$\(this\)\.trigger\('change'\);/,
+    'a keyboard completion runs the same resolve path as a mouse pick');
 });
