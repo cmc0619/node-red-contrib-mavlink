@@ -18,7 +18,19 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const metadata = require('../../lib/metadata');
-const { isFalseTrueEnum } = require('../../lib/metadata/naming');
+
+/**
+ * The editor's checkbox rule (`RED.mavlink.isFalseTrueEnum` in
+ * resources/mavlink-editor.js): exactly two entries, *_FALSE=0 and *_TRUE=1.
+ *
+ * @param {Array<{name: string, value: number|string}>} entries
+ * @returns {boolean}
+ */
+function isFalseTrueEnum(entries) {
+  return entries.length === 2
+    && entries.some((e) => /(^|_)FALSE$/.test(e.name) && Number(e.value) === 0)
+    && entries.some((e) => /(^|_)TRUE$/.test(e.name) && Number(e.value) === 1);
+}
 
 /** Params that render a plain pulldown: enum-backed, not hidden, not a bitmask,
  *  not FALSE/TRUE (those are checkboxes). */

@@ -131,8 +131,8 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "timeout": "",
-    "maxRetries": "",
+    "timeout": "1500",
+    "maxRetries": "5",
     "x": 390,
     "y": 140,
     "wires": [
@@ -184,8 +184,8 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "timeout": "",
-    "maxRetries": "",
+    "timeout": "1500",
+    "maxRetries": "5",
     "x": 390,
     "y": 240,
     "wires": [
@@ -237,8 +237,8 @@
     "targetSystem": 1,
     "targetComponent": 1,
     "items": "",
-    "timeout": "",
-    "maxRetries": "",
+    "timeout": "1500",
+    "maxRetries": "5",
     "x": 390,
     "y": 340,
     "wires": [
@@ -290,8 +290,8 @@
     "targetSystem": 11,
     "targetComponent": 1,
     "items": "",
-    "timeout": "",
-    "maxRetries": "",
+    "timeout": "1500",
+    "maxRetries": "5",
     "x": 420,
     "y": 460,
     "wires": [

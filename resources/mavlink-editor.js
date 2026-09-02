@@ -416,8 +416,7 @@
    * Unchecked is 0, not "omit": `isFalseTrueEnum` only accepts FALSE=0/TRUE=1,
    * and the one magic boolean is 0/21196, so 0 *is* false on both paths. A
    * command param resolves absent to 0 anyway, but a generic message field
-   * does not — `lib/codec/message.js` skips names the values object lacks, so
-   * omitting would drop the field off the wire entirely.
+   * does not — an omitted core field fails the pack (DESIGN.md 14.55).
    *
    * @param {jQuery} $input
    * @returns {number}
@@ -606,9 +605,9 @@
   };
 
   /**
-   * Editor-side copy of lib/metadata/naming.js isFalseTrueEnum. Client HTML
-   * cannot require() the Node module, so keep this rule mirrored here.
-   * Exactly two entries: *_FALSE=0 and *_TRUE=1 (not mixed tables).
+   * Whether enum entries are a binary false/true pair suitable for a boolean
+   * control (DESIGN.md §6). Exactly two entries: *_FALSE=0 and *_TRUE=1 (not
+   * mixed tables such as GIMBAL_AXIS_CALIBRATION_REQUIRED).
    *
    * @param {Array<{name: string, value: number|string}>|null|undefined} entries
    * @returns {boolean}
@@ -1742,11 +1741,10 @@
   };
 
   /**
-   * Open-ended lower-bound check — the duration / retry-count shape. Blank
-   * passes (absence is the field's own business: the runtime side falls to
-   * its documented default); a present value must be a number at least `min`,
-   * a whole number when `opts.integer` is set. Fields where blank must fail
-   * keep their own one-line guard in front — this ring never owns presence.
+   * Open-ended lower-bound check — the duration / retry-count shape. The value
+   * must be a number at least `min`, a whole number when `opts.integer` is
+   * set. Blank reds: the editor owns the default (the field's `value:`), so
+   * the runtime reads the saved number and nothing falls back.
    *
    * @param {number} min
    * @param {{integer?: boolean}} [opts]
@@ -1755,9 +1753,8 @@
   RED.mavlink.validateAtLeast = function (min, opts) {
     const integer = Boolean(opts?.integer);
     return function (v, _opt) {
-      if (RED.mavlink.isBlank(v)) return true;
       const n = Number(v);
-      const numeric = integer ? Number.isInteger(n) : Number.isFinite(n);
+      const numeric = !RED.mavlink.isBlank(v) && (integer ? Number.isInteger(n) : Number.isFinite(n));
       if (numeric && n >= min) return true;
       return `must be ${integer ? 'a whole number' : 'a number'} >= ${min}`;
     };

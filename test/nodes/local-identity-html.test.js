@@ -253,7 +253,7 @@ test('enumOptionLabel mirrors the server-side NAME (value) format', () => {
   );
 });
 
-test('isFalseTrueEnum mirrors metadata false/true enum detection', () => {
+test('isFalseTrueEnum accepts only a two-entry FALSE=0 / TRUE=1 pair', () => {
   const context = loadHelpers();
 
   assert.equal(context.RED.mavlink.isFalseTrueEnum([

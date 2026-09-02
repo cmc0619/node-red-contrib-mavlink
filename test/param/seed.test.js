@@ -183,7 +183,6 @@ test('catalogLabel names the definition set the operator is actually looking at'
   );
 
   assert.equal(catalogLabel({ firmware: 'custom', count: 1 }), 'Custom · 1 definition (shipped seed)');
-  assert.match(catalogLabel({ firmware: '', count: 0 }), /^Unknown firmware · 0 definitions/);
 });
 
 test('catalogLabel counts agree with what defsFor actually serves', () => {

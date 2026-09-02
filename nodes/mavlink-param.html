@@ -126,10 +126,9 @@
         // The select offers exactly the shared table's names (valueKey 'name').
         validate: RED.mavlink.oneOf(RED.mavlink.PARAM_TYPE_OPTIONS.map((o) => o.name)),
       },
-      // Blank inherits the runtime's documented default; a present value is a
-      // wait window, and a negative one expires before the vehicle can answer
+      // The wait window; a negative one expires before the vehicle can answer
       // and reads as vehicle silence.
-      timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) },
+      timeout: { value: '10000', validate: RED.mavlink.validateAtLeast(0) },
     ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   };
 
@@ -295,7 +294,7 @@
        * truncation, and a negative value behaves as infinite two's complement
        * — so LOG_BITMASK's signed int32 spelling (-1 is every bit, per
        * readInt32LE) selects, masks, and round-trips with no sign juggling
-       * (Gitar, #296). lib/codec/mask.js is the runtime home of the same rule.
+       * (Gitar, #296).
        */
       let _valueBitEntries = [];
       let _valueDocMask = 0n;

@@ -81,6 +81,8 @@ test('enums merge across files; same-name same-value entries dedupe silently', (
   const names = bundle.enums.MAV_TYPE.entries.map((e) => e.name);
   assert.deepEqual(names, ['MAV_TYPE_GENERIC', 'MAV_TYPE_QUADROTOR']);
   assert.equal(bundle.enums.MAV_TYPE.entries[0].description, 'gen');
+  assert.deepEqual(bundle.enums.MAV_TYPE.byName, { MAV_TYPE_GENERIC: 0, MAV_TYPE_QUADROTOR: 2 });
+  assert.deepEqual(bundle.enums.MAV_TYPE.byValue, { 0: 'MAV_TYPE_GENERIC', 2: 'MAV_TYPE_QUADROTOR' });
   assert.deepEqual(bundle.overrides, []);
 });
 

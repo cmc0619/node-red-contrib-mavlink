@@ -256,21 +256,20 @@ test('selectionMode and executionMode red on membership, then on the Build pairi
   assert.equal(exec.call({ delivery: 'build' }, 'sequential', {}), true);
 });
 
-test('intervalMs and maxRetries: blank stays absent, present values carry range red rings', () => {
-  // Blank rides through numberOption as absence so lib/fanout's own defaults
-  // fire (blank ≠ 0 ≠ absent, Gitar #287); a present value is what the editor
-  // owns — min="0" is not enforced on save.
+test('intervalMs and maxRetries: blank reds, present values carry range red rings', () => {
+  // The editor owns the default (`value:`); a blank has no runtime reading
+  // and cannot be saved — min="0" is not enforced on save, so the ring is.
   const defaults = loadNodeDefaults('mavlink-fanout');
   const interval = defaults.intervalMs.validate;
   const retries = defaults.maxRetries.validate;
 
-  assert.equal(interval.call({}, '', {}), true, 'blank interval means the lib default');
+  assert.match(String(interval.call({}, '', {})), />= 0/, 'blank interval reds');
   assert.equal(interval.call({}, 0, {}), true, '0 is a legitimate no-pause interval');
   assert.equal(interval.call({}, 250, {}), true);
   assert.match(String(interval.call({}, -100, {})), />= 0/, 'negative pacing reds');
   assert.match(String(interval.call({}, 'abc', {})), />= 0/);
 
-  assert.equal(retries.call({}, '', {}), true, 'blank retries means the lib default');
+  assert.match(String(retries.call({}, '', {})), />= 0/, 'blank retries reds');
   assert.equal(retries.call({}, 0, {}), true);
   assert.equal(retries.call({}, 3, {}), true);
   assert.match(String(retries.call({}, -1, {})), />= 0/);

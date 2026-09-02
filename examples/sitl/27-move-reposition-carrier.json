@@ -179,7 +179,7 @@
     "speed": "",
     "radius": "",
     "changeMode": false,
-    "ackTimeout": "",
+    "ackTimeout": "10000",
     "targetSystem": 1,
     "targetComponent": 1,
     "north": "",

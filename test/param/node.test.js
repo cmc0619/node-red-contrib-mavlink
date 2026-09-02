@@ -841,6 +841,7 @@ function connStub(opts) {
     subs,
     // Wire-tier profile must carry firmware — runtime no longer invents ardupilot.
     vehicle: opts.vehicle || { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' },
+    peerTable: { getComponent: () => undefined },
     send() {},
     subscribe(filter, handler) {
       const entry = { filter, handler, active: true };
@@ -867,7 +868,7 @@ function connStubFull(opts) {
     subs,
     sent,
     vehicle: opts.vehicle || { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' },
-    peerTable: opts.peerTable || null,
+    peerTable: opts.peerTable || { getComponent: () => undefined },
     send(message, options) {
       sent.push({ message, options });
     },

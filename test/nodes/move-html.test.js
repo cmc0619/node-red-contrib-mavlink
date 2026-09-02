@@ -411,15 +411,17 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
       `${field} defaults blank with the blank-allowed numeric validator`
     );
   }
-  // ackTimeout is blank-allowed too, but 0 and negatives are not a shorter
-  // wait — they fire the ack timer before the vehicle can answer — so its
-  // validator requires a positive number rather than any number.
-  const ackValidator = /ackTimeout:\s*\{[\s\S]*?\n {6}\},/.exec(html);
-  assert.ok(ackValidator, 'ackTimeout validate function must be extractable');
-  assert.match(ackValidator[0], /value:\s*''/, 'ackTimeout defaults blank (inherit the 10 s default)');
-  assert.match(ackValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
-  assert.match(ackValidator[0], /Number\(v\) > 0/, 'zero and negatives are rejected');
-  assert.doesNotMatch(ackValidator[0], /RED\.validators\.number\(true\)/, 'the any-number validator is gone');
+  // ackTimeout carries the 10 s default in the editor; 0 and negatives are not
+  // a shorter wait — they fire the ack timer before the vehicle can answer —
+  // so its validator requires a positive number, and blank reds with them.
+  const defaults = loadNodeDefaults('mavlink-move');
+  assert.equal(defaults.ackTimeout.value, '10000', 'ackTimeout defaults to the 10 s window');
+  const ackVerdict = (v) => defaults.ackTimeout.validate.call({ id: 'm1' }, v, {});
+  assert.equal(ackVerdict('10000'), true);
+  assert.equal(ackVerdict(1), true, 'any positive wait passes');
+  for (const bad of ['', 0, -1, 'abc']) {
+    assert.match(String(ackVerdict(bad)), /greater than 0/, `${JSON.stringify(bad)} is not a valid timeout`);
+  }
   // Blank speed/radius/yaw encode the spec sentinels at runtime; the
   // placeholders say so instead of implying zero.
   assert.match(html, /id="node-input-speed"[^>]*placeholder="\(vehicle default\)"/, 'speed placeholder names the sentinel');
@@ -1140,7 +1142,7 @@ test('mavlink-move: sticks are required and bounded -1..1, thrust 0..1, in the e
   assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 0, {}), true, '0 is a commanded zero');
   assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 1, {}), true);
   assert.match(String(defaults.thrust.validate.call({ id: 'm1' }, 60, {})), /not a percentage/);
-  assert.match(String(defaults.buttons.validate.call({ id: 'm1' }, 70000, {})), /16-bit/);
+  assert.match(String(defaults.buttons.validate.call({ id: 'm1', action: 'manual' }, 70000, {})), /16-bit/);
 });
 
 test('mavlink-move: every `show` key actually reaches a toggle', () => {
@@ -1257,10 +1259,8 @@ test('mavlink-move: the Buttons multi-select composes the bitmask the operator u
   // Round-trips at the edges.
   assert.equal(helpers.bitsToButtons(helpers.buttonsToBits('65535')), '65535', 'all sixteen');
   assert.equal(helpers.buttonsToBits('1'), '0', 'Button 1 is bit 0');
-  // All-off composes blank, not '0' — an untouched dialog round-trips
-  // byte-identical to what it always saved, and blank is what the runtime
-  // reads as BUTTONS_NONE.
-  assert.equal(helpers.bitsToButtons(helpers.buttonsToBits('')), '', 'blank stays blank');
+  // All-off composes '0', the empty mask the editor saves by default.
+  assert.equal(helpers.bitsToButtons(helpers.buttonsToBits('0')), '0', 'no buttons is the empty mask');
   assert.equal(helpers.buttonsToBits('garbage'), '', 'a hand-edited non-number selects nothing');
   // Over-range too (Gitar, #305): 70000's low 16 bits used to tick while the
   // grid's warning called the mask invalid — now nothing is selected and the

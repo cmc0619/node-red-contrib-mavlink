@@ -175,7 +175,7 @@
     "props": [
       {
         "p": "payload.items",
-        "v": "[{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.397742,\"y\":8.545594,\"z\":0,\"autocontinue\":true},{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.398,\"y\":8.546,\"z\":20,\"autocontinue\":true},{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.399,\"y\":8.546,\"z\":20,\"autocontinue\":true}]",
+        "v": "[{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.397742,\"y\":8.545594,\"z\":0,\"current\":1,\"autocontinue\":1},{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.398,\"y\":8.546,\"z\":20,\"current\":0,\"autocontinue\":1},{\"command\":16,\"frame\":3,\"param1\":0,\"param2\":0,\"param3\":0,\"param4\":0,\"x\":47.399,\"y\":8.546,\"z\":20,\"current\":0,\"autocontinue\":1}]",
         "vt": "json"
       }
     ],
@@ -206,6 +206,7 @@
     "targetSystem": 2,
     "targetComponent": 1,
     "timeout": "10000",
+    "maxRetries": "5",
     "x": 450,
     "y": 400,
     "wires": [
@@ -255,6 +256,7 @@
     "targetSystem": 2,
     "targetComponent": 1,
     "timeout": "10000",
+    "maxRetries": "5",
     "x": 460,
     "y": 520,
     "wires": [

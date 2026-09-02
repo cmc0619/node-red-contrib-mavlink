@@ -46,9 +46,7 @@ const {
 } = require('../lib/delivery');
 const {
   resolveDeliveryContext,
-  numberOr,
 } = require('../lib/addressing');
-const { DEFAULT_TIMEOUT_MS } = require('../lib/command');
 
 /**
  * A confirm-tier PARAM_SET gets its initial send plus two retries. MAVLink
@@ -70,8 +68,7 @@ module.exports = function registerMavlinkParam(RED) {
       PARAM_DEFS_ROUTE,
       RED.auth.needsPermission('mavlink.read'),
       async (req, res) => {
-        const profileId = typeof req.query.vehicle === 'string'
-          ? req.query.vehicle.trim() : '';
+        const profileId = req.query.vehicle;
 
         // Firmware and vehicle family come from the query when the editor sent
         // them, and from the deployed profile otherwise.
@@ -82,9 +79,8 @@ module.exports = function registerMavlinkParam(RED) {
         // visible in the editor that sent the request. Preferring the query
         // also means an edited-but-undeployed firmware is honoured rather than
         // answered from the stale deployed value.
-        let firmware = typeof req.query.firmware === 'string' ? req.query.firmware.trim() : '';
-        let vehicleFamily = typeof req.query.vehicleFamily === 'string'
-          ? req.query.vehicleFamily.trim() : '';
+        let firmware = req.query.firmware;
+        let vehicleFamily = req.query.vehicleFamily;
         if (profileId && (!firmware || !vehicleFamily)) {
           const profile = RED.nodes.getNode(profileId);
           if (profile) {
@@ -162,9 +158,9 @@ module.exports = function registerMavlinkParam(RED) {
       PARAM_DEFS_UPDATE_ROUTE,
       RED.auth.needsPermission('mavlink.write'),
       async (req, res) => {
-        const body = req.body && typeof req.body === 'object' ? req.body : {};
-        const profileId = typeof body.vehicle === 'string' ? body.vehicle.trim() : '';
-        const url = typeof body.url === 'string' ? body.url.trim() : '';
+        const body = req.body;
+        const profileId = body.vehicle;
+        const url = body.url;
         if (!profileId) {
           return res.status(400).json({ ok: false, error: 'Vehicle Profile ID is required' });
         }
@@ -194,7 +190,7 @@ module.exports = function registerMavlinkParam(RED) {
      * callback or timeout only settles the node when its captured generation
      * still matches, so a superseded operation's late echo is ignored. `timer`
      * is the deadline.
-     * @type {{unsubscribe: (()=>void)|null, timer: any, done: Function,
+     * @type {{unsubscribe: ()=>void, timer: any, done: Function,
      *         gen: number}|null}
      */
     let pending = null;
@@ -211,8 +207,8 @@ module.exports = function registerMavlinkParam(RED) {
       if (!pending) return;
       const { unsubscribe, timer, done } = pending;
       pending = null;
-      if (unsubscribe) unsubscribe();
-      if (timer) clearTimeout(timer);
+      unsubscribe();
+      clearTimeout(timer);
       if (releaseDone) done();
     }
 
@@ -223,10 +219,9 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        // Blank keeps the library default; the editor's number validator owns
-        // the rest (§14: a finite-number check on operator input is a guardrail).
-        const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
-        const payload = msg.payload ?? {};
+        // The editor owns the default and the number ring.
+        const timeoutMs = Number(config.timeout);
+        const payload = msg.payload;
 
         // Concrete Build dialects carry firmware from the editor (no target rung).
         const {
@@ -492,21 +487,17 @@ function requestFrom(config, payload, { target, profile, capabilities }) {
 /**
  * Read AUTOPILOT_VERSION.capabilities for the addressed component, when known.
  *
- * @param {object|null|undefined} connectionNode
+ * @param {object} connectionNode
  * @param {{sysid: number, compid: number}} target
  * @returns {number|null}
  */
 function capabilitiesFromPeer(connectionNode, target) {
-  // Supported absence: peer table not attached yet. Missing component or
-  // capabilities → fall through to firmware (null).
-  const table = connectionNode.peerTable;
-  if (!table) return null;
-  const component = table.getComponent(Number(target.sysid), Number(target.compid));
+  // Missing component or capabilities → fall through to firmware (null).
+  const component = connectionNode.peerTable.getComponent(target.sysid, target.compid);
   if (!component || component.capabilities == null || component.capabilities === '') {
     return null;
   }
-  const caps = Number(component.capabilities);
-  return Number.isFinite(caps) ? caps : null;
+  return Number(component.capabilities);
 }
 
 function completeBuild(node, send, message) {

@@ -664,7 +664,7 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_UINT8', {}), true);
   assert.match(String(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_STRING', {})), /must be one of/);
 
-  assert.equal(defaults.timeout.validate.call({}, '', {}), true, 'blank inherits the runtime default');
+  assert.match(String(defaults.timeout.validate.call({}, '', {})), />= 0/, 'blank reds: the editor default owns absence');
   assert.equal(defaults.timeout.validate.call({}, '0', {}), true);
   assert.match(String(defaults.timeout.validate.call({}, '-5', {})), />= 0/,
     'a negative window expires before the vehicle can answer and reads as silence');

@@ -241,11 +241,11 @@
       .filter((v) => (n & (1 << Number(v))) !== 0).join(',');
   }
 
-  /** Bit indices → the mask the property holds; none composes blank, not 0. */
+  /** Bit indices → the mask the property holds; none composes 0, the empty mask. */
   function bitsToButtons(csv) {
     let n = 0;
     String(csv).split(',').forEach((v) => { if (v !== '') n |= (1 << Number(v)); });
-    return n === 0 ? '' : String(n);
+    return String(n);
   }
 
   /**
@@ -602,10 +602,15 @@
       stickY: { value: '', validate: stickValidator() },
       stickZ: { value: '', validate: stickValidator('z') },
       stickR: { value: '', validate: stickValidator() },
+      // 0 — no button pressed — is the saved default: the bitmask has a bit
+      // per button, so the empty mask is a real value and the runtime sends
+      // it as one. Manual is the only action that reads it, so only Manual
+      // reds a blank (the gate every action-scoped field uses).
       buttons: {
-        value: '',
+        value: 0,
         validate(v, _opt) {
-          if (RED.mavlink.isBlank(v)) return true;
+          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'manual') return true;
+          if (RED.mavlink.isBlank(v)) return false;
           return isValidButtonsMask(Number(v))
             || 'must be a 16-bit button bitmask (0-65535)';
         },
@@ -626,9 +631,8 @@
       // before the vehicle can answer, so the wait must be positive. Two args
       // so the reason renders (§14).
       ackTimeout: {
-        value: '',
+        value: '10000',
         validate(v, _opt) {
-          if (RED.mavlink.isBlank(v)) return true;
           return (Number.isFinite(Number(v)) && Number(v) > 0)
             || 'must be a number of milliseconds greater than 0';
         },
@@ -778,7 +782,7 @@
       if (!RED.mavlink.isBlank(node.ackTimeout) || !RED.mavlink.isBlank(node.radius)
         || !RED.mavlink.isBlank(node.turnRate) || !RED.mavlink.isBlank(node.throttle)
         || !RED.mavlink.isBlank(node.rollRate) || !RED.mavlink.isBlank(node.pitchRate)
-        || !RED.mavlink.isBlank(node.buttons)
+        || (node.action === 'manual' && String(node.buttons) !== '0')
         || node.relative || node.changeMode) {
         $('#move-advanced').show();
         $('#move-advanced-toggle').text('▾ Advanced');
@@ -1383,7 +1387,7 @@
   <p>Builds or sends vehicle movement commands. The operator picks an intent — <b>Action</b> × <b>Delivery</b> — and the wire message, frame number, and type_mask follow as code; you never enter a bitmask. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. Yaw and yaw rate are entered in degrees (deg, deg/s) and converted exactly once to the radians on the wire.</p>
   <p><b>Go to</b> is the one-shot GCS-style guided goto. On Build, Send, and Send &amp; confirm it rides <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the acked command path; on Stream it rides <code>SET_POSITION_TARGET_GLOBAL_INT</code> at rate, the same intent streamed. The <b>Altitude reference</b> is the only frame choice: <i>Above home</i> (frame 3), <i>Absolute (MSL)</i> (frame 0), or <i>Above terrain</i> (frame 10). Above terrain means height above the ground at the target, resolved by the vehicle from its own terrain data; it is ArduPilot only, and a vehicle without terrain data refuses the command. Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored, planes), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). Ground speed, Loiter radius, and Change mode are command-path params — they hide on Stream delivery, and the runtime refuses their payload overrides on a streamed setpoint.</p>
   <p><b>Change mode</b> (Advanced) sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, and the flag is the gate on both stacks (measured): the goto is accepted iff the flag is set or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers denied (2). It flies the vehicle into guided mode — a mode change, and therefore an explicit opt-in (checkbox, or boolean <code>msg.payload.changeMode</code>).</p>
-  <p>On <b>Send &amp; confirm</b> delivery (Go to, Turn and Speed — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (blank = 10 s) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
+  <p>On <b>Send &amp; confirm</b> delivery (Go to, Turn and Speed — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> retries with back-off before failing. <b>ACK timeout</b> (10 s by default) bounds the wait. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
   <p><i>Offset from here</i> is <code>MAV_FRAME_LOCAL_OFFSET_NED</code> (7): the position triplet is a world-axis offset added to wherever the vehicle currently is, so <b>Metres up</b> 10 with the other two blank climbs 10 m from here. Unlike World, a blank axis is legal and means a zero offset — no movement — rather than a coordinate, so single-axis moves are the normal use. This is the frame QGroundControl itself sends for a guided altitude change on ArduPilot, and the <b>only</b> local frame <b>ArduPlane</b> accepts at all (it reads the vertical component and ignores the rest) — World and Body do nothing on a fixed wing. ArduCopter, Rover and Sub apply all three axes. Velocity and acceleration are unaffected by the offset: on this frame they are plain NED rates, identical to World. <b>PX4 accepts frame 7 and never acts on it</b> (measured), so the option is not offered when the Vehicle Profile says PX4. <b>Stream</b> delivery is not offered either — each setpoint is resolved against the vehicle's position at that moment, so a repeating offset walks the vehicle away instead of holding a target.</p>
   <p>Every Steer field is optional, because filling fields IS the mode: the type_mask derives from which groups carry values — position, velocity, acceleration, any combination of them (feed-forward), or yaw / yaw rate alone. Blank means mask-ignored; a value (including 0) means commanded. The editor requires at least one field, because an all-blank steer is the all-ignore packet PX4 logs as invalid.</p>

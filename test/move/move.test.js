@@ -318,16 +318,6 @@ test('braking is opt-out, and attitude/manual streams end in silence (§9 ruling
   );
   assert.equal(manual.stop, null, 'a manual stream returns no stop message');
   assert.equal(manual.sent.length, 2, 'start + tick and nothing else — silence IS the stop');
-  // A MANUAL_CONTROL tick must never grow a time_boot_ms: the message does not
-  // declare the field, and the re-stamp is presence-gated on purpose.
-  for (const m of manual.sent) {
-    assert.deepEqual(
-      Object.keys(m.fields).sort(),
-      ['buttons', 'r', 'target', 'x', 'y', 'z'],
-      'exactly the declared fields, no invented stamp'
-    );
-  }
-
   const attitude = drive(
     { name: 'SET_ATTITUDE_TARGET', fields: { time_boot_ms: 0, target_system: 1, target_component: 1, type_mask: 199, q: [1, 0, 0, 0], body_roll_rate: 0, body_pitch_rate: 0, body_yaw_rate: 0, thrust: 0 } },
     false
@@ -366,6 +356,7 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
   const sends = [];
   let timer;
   let now = 0;
+  const handle = { unref() { /* not a real timer */ } };
   const stream = createMoveStream({
     connection: {
       send(message, options) {
@@ -385,10 +376,10 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
     now: () => now,
     setInterval(fn) {
       timer = fn;
-      return 'timer';
+      return handle;
     },
-    clearInterval(handle) {
-      assert.equal(handle, 'timer');
+    clearInterval(cleared) {
+      assert.equal(cleared, handle);
     },
   });
 

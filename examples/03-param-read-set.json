@@ -143,6 +143,7 @@
     "name": "Set (echo confirm)",
     "connection": "ex03-connection",
     "delivery": "confirm",
+    "timeout": "10000",
     "action": "set",
     "firmware": "ardupilot",
     "targetSystem": 1,

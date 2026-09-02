@@ -42,7 +42,6 @@ const {
 } = require('../lib/mission');
 const {
   resolveDeliveryContext,
-  numberOr,
 } = require('../lib/addressing');
 
 module.exports = function registerMavlinkMission(RED) {
@@ -96,7 +95,7 @@ module.exports = function registerMavlinkMission(RED) {
         return;
       }
 
-      const payload = msg.payload ?? {};
+      const payload = msg.payload;
       // Only an absent override selects the configured value; numeric 0 and
       // every other explicit value ride unchanged.
       const missionTypeKey = payload.missionType === undefined
@@ -119,10 +118,9 @@ module.exports = function registerMavlinkMission(RED) {
       // (missionTypeValue §5) — never absent-decoded-as-0 at the vehicle.
       const missionType = missionTypeValue(missionTypeKey);
 
-      // Blank keeps the library default; the editor's number validator owns
-      // the rest (§14: a finite-number check on operator input is a guardrail).
-      const timeoutMs = numberOr(config.timeout, undefined);
-      const maxRetries = numberOr(config.maxRetries, undefined);
+      // The editor owns the defaults and the number rings.
+      const timeoutMs = Number(config.timeout);
+      const maxRetries = Number(config.maxRetries);
 
       // Upload item source: msg.payload.items overrides configured items —
       // presence fallback (§5), not a truthy test. Family and broadcast

@@ -62,7 +62,8 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 
 **Mission** `action`: `download` \| `upload` \| `clear`; `missionType`: `mission` \|
 `fence` \| `rally`. Upload items arrive on `msg.payload` as an array of
-`{command, frame, param1..4, x, y, z, autocontinue}`.
+`{command, frame, param1..4, x, y, z, current, autocontinue}`; every field rides as
+given, none is defaulted at runtime.
 
 **State** `mode`: `feed` (edge events) or snapshot (input-triggered). Feed `events`:
 `peer-new`, `component-new`, `heartbeat`, `stale`, `expired`, `endpoint-added`,

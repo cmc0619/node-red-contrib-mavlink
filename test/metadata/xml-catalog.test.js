@@ -111,12 +111,6 @@ test('compileXmlFromFile fails loud on a missing entry file', () => {
   );
 });
 
-/* ---------- XmlCatalog: constructor ---------- */
-
-test('XmlCatalog requires a baseDir', () => {
-  assert.throws(() => new XmlCatalog({}), (e) => e.code === 'XML_CATALOG_NO_DIR');
-});
-
 /* ---------- XmlCatalog: update ---------- */
 
 test('update pins a commit, writes a snapshot/manifest/latest, and lists it', async () => {

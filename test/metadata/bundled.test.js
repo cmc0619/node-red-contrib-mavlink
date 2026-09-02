@@ -100,7 +100,7 @@ test('XML field enums survive compile — HEARTBEAT.type -> MAV_TYPE', () => {
   assert.equal(type.enum, 'MAV_TYPE');
   assert.equal(type.type, 'uint8_t');
   const custom = fields.find((f) => f.name === 'custom_mode');
-  assert.equal(custom.enum, null);
+  assert.equal(custom.enum, undefined);
 });
 
 test('bitmask detection: MAV_MODE_FLAG is a bitmask, MAV_TYPE is not', () => {
@@ -123,7 +123,7 @@ test('command-param enums come from XML — DO_CHANGE_SPEED / ARM / REPOSITION',
   );
   const repo = common.commands.MAV_CMD_DO_REPOSITION;
   assert.equal(repo.params.find((p) => p.index === 2).enum, 'MAV_DO_REPOSITION_FLAGS');
-  assert.equal(repo.params.find((p) => p.index === 5).enum, null);
+  assert.equal(repo.params.find((p) => p.index === 5).enum, undefined);
 });
 
 test('never assume a dialect includes common.xml — icarous is self-contained', () => {
@@ -177,7 +177,9 @@ test('a compiled dialect is cached on disk and records the XML it came from', ()
     assert.equal(entry.stamp, manifest.stamp);
     assert.equal(entry.commit, manifest.commit);
     assert.equal(entry.commitDate, manifest.commitDate);
-    assert.deepEqual(entry.bundle, bundle);
+    // The cache is a JSON round-trip: attributes the XML never had are absent
+    // keys on disk, undefined in the compiled bundle.
+    assert.deepEqual(entry.bundle, JSON.parse(JSON.stringify(bundle)));
 
     // A second process would read the entry rather than recompile. Nothing
     // invalidates it — only clearCompiledCache() removes an entry.

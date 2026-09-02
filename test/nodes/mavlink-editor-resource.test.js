@@ -1119,8 +1119,8 @@ test('booleanEnumInput accepts an explicit true value for a no-enum param', () =
 test('a checkbox always writes a value — unchecked is false, not missing', () => {
   const RED = loadResourceWithElements();
   // A command param resolves absent to 0, but a generic message field does
-  // not: lib/codec/message.js skips names the values object lacks, so an
-  // omitted field leaves the wire entirely. One behaviour for both.
+  // not: an omitted core field fails the pack (DESIGN.md 14.55) and an omitted
+  // extension rides as 0. One behaviour for both.
   const entries = [
     { name: 'MAV_BOOL_FALSE', value: 0 },
     { name: 'MAV_BOOL_TRUE', value: 1 },
@@ -1433,11 +1433,11 @@ test('validateRange accepts blank and any finite value in bounds, refuses outsid
   assert.match(String(heading('abc')), /between 0 and 360/, 'non-numeric');
 });
 
-test('validateAtLeast: blank passes, a present value must clear the floor', () => {
+test('validateAtLeast: blank reds, a present value must clear the floor', () => {
   const { RED } = loadResource();
   // The duration shape: milliseconds, decimals allowed, 0 legal.
   const ms = RED.mavlink.validateAtLeast(0);
-  assert.equal(ms(''), true, 'blank falls to the runtime default, as elsewhere');
+  assert.match(String(ms('')), />= 0/, 'blank reds: the editor default owns absence');
   assert.equal(ms(0), true, 'the floor');
   assert.equal(ms(2500.5), true, 'fractional milliseconds ride');
   assert.match(String(ms(-1)), />= 0/, 'a negative duration reds');
@@ -1445,7 +1445,7 @@ test('validateAtLeast: blank passes, a present value must clear the floor', () =
 
   // The retry-count shape: whole numbers only.
   const retries = RED.mavlink.validateAtLeast(0, { integer: true });
-  assert.equal(retries(''), true);
+  assert.match(String(retries('')), />= 0/);
   assert.equal(retries(3), true);
   assert.match(String(retries(1.5)), /whole number/, 'a fractional count reds');
   assert.match(String(retries(-1)), />= 0/, 'a negative count reds');
