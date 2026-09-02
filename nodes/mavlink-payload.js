@@ -40,7 +40,7 @@ const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
 function enumsForFields(bundle, fields) {
   const out = {};
   for (const meta of Object.values(fields)) {
-    const name = meta && meta.enum;
+    const name = meta.enum;
     if (!name || out[name]) continue;
     const found = bundle.enums && bundle.enums[name];
     if (found) out[name] = found.entries || [];
