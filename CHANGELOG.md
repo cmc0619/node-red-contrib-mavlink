@@ -8,6 +8,11 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **Move's Buttons row is one multi-select.** The sixteen generated checkboxes
+  are replaced by Node-RED's typedInput multi-select over the same sixteen
+  bits; the saved value is still the uint16 mask, composed on every change,
+  blank for none. Same node type, same saved shape, nothing to redeploy.
+
 - **Advanced MAV_CMD can be typed.** A search box above the command select
   takes a name, with or without the `MAV_CMD_` prefix, or the number, and
   offers matches with their descriptions as you type; a typed exact name or
