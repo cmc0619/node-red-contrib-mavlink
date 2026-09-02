@@ -1115,6 +1115,14 @@ cannot be produced by any editor UI — the Disable checkbox's own label records
 Node-RED cannot disable config nodes.
 *Check:* `rg -n 'applyConnectionStatus' lib nodes test` — no matches.
 
+**14.138 The Connection discards frames from source sysid 0 before dispatch, as an exception to §4.** ✔ (owner ruling, 2026-09-02)
+System 0 is the broadcast destination, never a source identity: a peer table cannot learn
+it and a subscription cannot address it, so `Connection._onFrame` drops such a frame before
+peer learning or subscription dispatch — `mavlink-in` and State never see it. §4's "only
+runtime doorguard" sentence stands for every other discard; this is the one wire-frame drop
+that lives in the Connection, because the peer table it protects lives there.
+*Check:* `rg -n 'frame.sysid === 0' lib/connection/runtime.js` — one match, in `_onFrame`.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
