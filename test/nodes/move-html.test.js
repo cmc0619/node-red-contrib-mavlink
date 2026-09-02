@@ -414,12 +414,14 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
   // ackTimeout carries the 10 s default in the editor; 0 and negatives are not
   // a shorter wait — they fire the ack timer before the vehicle can answer —
   // so its validator requires a positive number, and blank reds with them.
-  const ackValidator = /ackTimeout:\s*\{[\s\S]*?\n {6}\},/.exec(html);
-  assert.ok(ackValidator, 'ackTimeout validate function must be extractable');
-  assert.match(ackValidator[0], /value:\s*'10000'/, 'ackTimeout defaults to the 10 s window');
-  assert.doesNotMatch(ackValidator[0], /isBlank/, 'blank is not a valid timeout');
-  assert.match(ackValidator[0], /Number\(v\) > 0/, 'zero and negatives are rejected');
-  assert.doesNotMatch(ackValidator[0], /RED\.validators\.number\(true\)/, 'the any-number validator is gone');
+  const defaults = loadNodeDefaults('mavlink-move');
+  assert.equal(defaults.ackTimeout.value, '10000', 'ackTimeout defaults to the 10 s window');
+  const ackVerdict = (v) => defaults.ackTimeout.validate.call({ id: 'm1' }, v, {});
+  assert.equal(ackVerdict('10000'), true);
+  assert.equal(ackVerdict(1), true, 'any positive wait passes');
+  for (const bad of ['', 0, -1, 'abc']) {
+    assert.match(String(ackVerdict(bad)), /greater than 0/, `${JSON.stringify(bad)} is not a valid timeout`);
+  }
   // Blank speed/radius/yaw encode the spec sentinels at runtime; the
   // placeholders say so instead of implying zero.
   assert.match(html, /id="node-input-speed"[^>]*placeholder="\(vehicle default\)"/, 'speed placeholder names the sentinel');
