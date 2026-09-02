@@ -91,6 +91,7 @@
     "name": "Set WPNAV_SPEED=500",
     "connection": "ex16-connection",
     "delivery": "confirm",
+    "timeout": "10000",
     "action": "set",
     "firmware": "ardupilot",
     "targetSystem": 1,
