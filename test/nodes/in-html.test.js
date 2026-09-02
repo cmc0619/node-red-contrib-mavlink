@@ -70,7 +70,7 @@ test('message rows survive an async catalog load', () => {
   );
   // paintRow captures the row's current value itself, so the fill is told what
   // to select rather than reading the live control a second time.
-  assert.match(html, /var want = saved !== undefined \? saved : \$sel\.val\(\)/, 'the live selection is carried across a repaint');
+  assert.match(html, /const want = saved !== undefined \? saved : \$sel\.val\(\)/, 'the live selection is carried across a repaint');
   assert.match(html, /RED\.mavlink\.fillEnumSelect\(/, 'unknown saved values use shared fillEnumSelect sentinel');
 });
 

@@ -348,7 +348,7 @@ test('Connection editor offers UDP, TCP, and serial without “not yet” stubs'
   );
   assert.match(
     html,
-    /serialPath:[\s\S]*validate:[\s\S]*mode !== 'serial'[\s\S]*!RED\.mavlink\.isBlank\(v\)/,
+    /serialPath:[\s\S]*validate\([\s\S]*mode !== 'serial'[\s\S]*!RED\.mavlink\.isBlank\(v\)/,
     'serial path is required in serial mode'
   );
 });

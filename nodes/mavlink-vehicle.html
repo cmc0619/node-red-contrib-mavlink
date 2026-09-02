@@ -18,12 +18,12 @@
         // Comma-joined `dialect@revision` picks from the Components
         // multi-select; each token needs both halves to resolve a bundle.
         additionalDialects:    { value: '',
-          validate: function (v, _opt) {
+          validate(v, _opt) {
             if (RED.mavlink.isBlank(v)) return true;
             // Exactly one @ per token: dialectPicks slices on the separator,
             // so a second one would silently mis-split the pick.
-            return String(v).split(',').every(function (token) {
-              var parts = token.trim().split('@');
+            return String(v).split(',').every((token) => {
+              const parts = token.trim().split('@');
               return parts.length === 2 && parts[0].trim() !== '' && parts[1].trim() !== '';
             }) || 'must be comma-separated dialect@revision picks';
           }
@@ -32,10 +32,10 @@
         defaultTargetSystem:   { value: 1, validate: RED.mavlink.validateUint8(0) },
         defaultTargetComponent:{ value: 1, validate: RED.mavlink.validateUint8(0) }
       },
-      label: function () {
+      label() {
         return this.name || 'MAVLink Vehicle Profile';
       },
-      oneditprepare: function () {
+      oneditprepare() {
         const node = this;
 
         // Advanced-section disclosure. Bound here, not in a <script> nested
@@ -80,19 +80,19 @@
         }
 
         function populateDialects(prefer) {
-          const names = library.map(function (d) { return d.name; });
+          const names = library.map((d) => d.name);
           $dialect.empty();
           if (!names.length) {
-            ['ardupilotmega', 'common', 'minimal'].forEach(function (d) {
+            ['ardupilotmega', 'common', 'minimal'].forEach((d) => {
               $('<option>').val(d).text(d).appendTo($dialect);
             });
           } else {
-            names.forEach(function (d) {
+            names.forEach((d) => {
               $('<option>').val(d).text(d).appendTo($dialect);
             });
           }
           const want = prefer || node.dialect || 'ardupilotmega';
-          if (!$dialect.find('option[value="' + want + '"]').length) {
+          if (!$dialect.find(`option[value="${want}"]`).length) {
             $('<option>').val(want).text(want).appendTo($dialect);
           }
           $dialect.val(want);
@@ -114,21 +114,21 @@
           const primary = dialectRow($dialect.val());
           const chain = (primary && primary.files) || [];
           const saved = String($('#node-config-input-additionalDialects').val() || '')
-            .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            .split(',').map((s) => s.trim()).filter(Boolean);
           $components.empty();
-          library.forEach(function (d) {
+          library.forEach((d) => {
             if (primary && d.name === primary.name) return;
             if (chain.indexOf(d.entry) !== -1) return;
-            (d.versions || []).forEach(function (v) {
-              const value = d.name + '@' + v.id;
-              $('<option>').val(value).text(d.name + ' · ' + v.label).appendTo($components);
+            (d.versions || []).forEach((v) => {
+              const value = `${d.name}@${v.id}`;
+              $('<option>').val(value).text(`${d.name} · ${v.label}`).appendTo($components);
             });
           });
           // A saved pick the library no longer offers stays selectable rather
           // than vanishing silently from a deployed profile.
-          saved.forEach(function (value) {
-            if (!$components.find('option[value="' + value + '"]').length) {
-              $('<option>').val(value).text(value + ' (not in library)').appendTo($components);
+          saved.forEach((value) => {
+            if (!$components.find(`option[value="${value}"]`).length) {
+              $('<option>').val(value).text(`${value} (not in library)`).appendTo($components);
             }
           });
           $components.val(saved);
@@ -145,14 +145,14 @@
           const row = dialectRow($dialect.val());
           const versions = (row && row.versions) ? row.versions.slice() : [{ id: 'seed', label: 'Seed (shipped)' }];
           $revision.empty();
-          versions.forEach(function (v) {
+          versions.forEach((v) => {
             $('<option>').val(v.id).text(v.label)
               .attr('data-kind', v.kind || '')
               .attr('data-entry', v.entryFile || '')
               .appendTo($revision);
           });
           const want = prefer || 'seed';
-          if ($revision.find('option[value="' + want + '"]').length) {
+          if ($revision.find(`option[value="${want}"]`).length) {
             $revision.val(want);
           } else {
             $revision.val(versions[0].id);
@@ -161,19 +161,19 @@
 
         function loadLibrary(done) {
           $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog'))
-            .done(function (data) {
+            .done((data) => {
               library = (data && data.dialects) || [];
               $status.text(library.length ? '' : 'Dialect library empty — Update catalog when online.');
               if (done) done();
             })
-            .fail(function () {
+            .fail(() => {
               library = [];
               $status.text('Dialect library unavailable.');
               if (done) done();
             });
         }
 
-        $dialect.on('change', function () {
+        $dialect.on('change', () => {
           populateRevisions('seed');
           populateComponents();
           reloadCompIds();
@@ -183,39 +183,39 @@
 
         $components.on('change', syncComponentsHidden);
 
-        var AP_PDEF_BASE = 'https://autotest.ardupilot.org/Parameters/';
+        const AP_PDEF_BASE = 'https://autotest.ardupilot.org/Parameters/';
 
         function paramDefsUrlFor(firmware, family) {
           if (firmware === 'px4') return PX4_PARAM_URL;
-          var doc = firmware === 'ardupilot' && ARDUPILOT_VEHICLE_DOC[family];
-          return doc ? AP_PDEF_BASE + doc + '/apm.pdef.json' : '';
+          const doc = firmware === 'ardupilot' && ARDUPILOT_VEHICLE_DOC[family];
+          return doc ? `${AP_PDEF_BASE + doc}/apm.pdef.json` : '';
         }
 
         function suggestParamDefsUrl() {
-          var fw = $firmware.val();
-          var url = paramDefsUrlFor(fw, $vehicleFamily.val());
+          const fw = $firmware.val();
+          const url = paramDefsUrlFor(fw, $vehicleFamily.val());
           $('#mav-param-defs-section').toggle(url !== '');
-          var current = $paramDefsUrl.val().trim();
+          const current = $paramDefsUrl.val().trim();
           if (current && current.indexOf(AP_PDEF_BASE) !== 0 && current !== PX4_PARAM_URL) return;
           $paramDefsUrl.val(url);
         }
 
-        $firmware.on('change', function () {
+        $firmware.on('change', () => {
           const want = FIRMWARE_DIALECT[$firmware.val()];
-          if (want && $dialect.find('option[value="' + want + '"]').length) {
+          if (want && $dialect.find(`option[value="${want}"]`).length) {
             $dialect.val(want);
             populateRevisions('seed');
           }
           suggestParamDefsUrl();
         });
 
-        $vehicleFamily.on('change', function () {
+        $vehicleFamily.on('change', () => {
           suggestParamDefsUrl();
         });
 
         suggestParamDefsUrl();
 
-        $('#mav-catalog-update').on('click', function (e) {
+        $('#mav-catalog-update').on('click', (e) => {
           e.preventDefault();
           $status.text('Downloading MAVLink XML from mavlink/mavlink...');
           $.ajax({
@@ -224,25 +224,25 @@
             contentType: 'application/json',
             data: JSON.stringify({})
           })
-            .done(function () {
+            .done(() => {
               $status.text('Catalog updated.');
               const keepDialect = $dialect.val();
               const keepRev = $revision.val();
-              loadLibrary(function () {
+              loadLibrary(() => {
                 populateDialects(keepDialect);
                 populateRevisions(keepRev);
               });
             })
-            .fail(function (xhr) {
+            .fail((xhr) => {
               const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'download failed';
-              $status.text('Update failed: ' + msg);
+              $status.text(`Update failed: ${msg}`);
             });
         });
 
         /* Local and offline, unlike Update catalog: recompiles the dialects
            this install has cached. Nothing expires on its own, so this is the
            only way a compiled dialect is replaced after the seed moves. */
-        $('#mav-dialect-rebuild').on('click', function (e) {
+        $('#mav-dialect-rebuild').on('click', (e) => {
           e.preventDefault();
           $status.text('Rebuilding compiled dialects...');
           $.ajax({
@@ -251,55 +251,53 @@
             contentType: 'application/json',
             data: JSON.stringify({})
           })
-            .done(function (data) {
-              $status.text('Rebuilt — ' + ((data && data.cleared) || 0) + ' cached dialect(s) dropped. Redeploy to recompile.');
+            .done((data) => {
+              $status.text(`Rebuilt — ${(data && data.cleared) || 0} cached dialect(s) dropped. Redeploy to recompile.`);
             })
-            .fail(function (xhr) {
+            .fail((xhr) => {
               const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'rebuild failed';
-              $status.text('Rebuild failed: ' + msg);
+              $status.text(`Rebuild failed: ${msg}`);
             });
         });
 
-        $('#mav-catalog-compare').on('click', function (e) {
+        $('#mav-catalog-compare').on('click', (e) => {
           e.preventDefault();
           const dialect = $dialect.val();
           const rev = $revision.val();
           const opt = $revision.find('option:selected');
-          const entry = opt.attr('data-entry') || (dialect + '.xml');
+          const entry = opt.attr('data-entry') || (`${dialect}.xml`);
           if (!rev || rev === 'seed') {
             $status.text('Pick a downloaded date to compare against the seed.');
             return;
           }
-          $status.text('Comparing ' + entry + ' with seed...');
+          $status.text(`Comparing ${entry} with seed...`);
           $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog/compare'), { file: entry, snapshot: rev })
-            .done(function (data) {
+            .done((data) => {
               const c = data && data.comparison;
               if (!c) {
                 $status.text('No comparison available.');
                 return;
               }
               if (c.error) {
-                $status.text(entry + ': ' + c.error);
+                $status.text(`${entry}: ${c.error}`);
                 return;
               }
               if (!c.bundledExists) {
-                $status.text(entry + ': not present in the seed (new dialect).');
+                $status.text(`${entry}: not present in the seed (new dialect).`);
                 return;
               }
               if (!c.comparable || !c.diff) {
-                $status.text(entry + ': seed exists (deeper diff unavailable).');
+                $status.text(`${entry}: seed exists (deeper diff unavailable).`);
                 return;
               }
               const d = c.diff;
               $status.text(
-                entry + ' vs seed — messages: +' + d.addedMessages.length + ' / -' + d.removedMessages.length +
-                ' / changed ' + d.changedMessages.length + '; enums: +' + d.addedEnums.length +
-                ' / -' + d.removedEnums.length + '.'
+                `${entry} vs seed — messages: +${d.addedMessages.length} / -${d.removedMessages.length} / changed ${d.changedMessages.length}; enums: +${d.addedEnums.length} / -${d.removedEnums.length}.`
               );
             })
-            .fail(function (xhr) {
+            .fail((xhr) => {
               const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'comparison failed';
-              $status.text('Comparison failed: ' + msg);
+              $status.text(`Comparison failed: ${msg}`);
             });
         });
 
@@ -317,16 +315,16 @@
             url: RED.mavlink.adminApiUrl('/mavlink/param/defs/update'),
             method: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ vehicle: node.id, url: url })
+            data: JSON.stringify({ vehicle: node.id, url })
           })
-            .done(function (data) {
-              $paramDefsStatus.text('Updated ' + data.count + ' parameter definitions.');
+            .done((data) => {
+              $paramDefsStatus.text(`Updated ${data.count} parameter definitions.`);
             })
-            .fail(function (xhr) {
+            .fail((xhr) => {
               const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'update failed';
-              $paramDefsStatus.text('Update failed: ' + msg);
+              $paramDefsStatus.text(`Update failed: ${msg}`);
             })
-            .always(function () {
+            .always(() => {
               $update.prop('disabled', false);
             });
         });
@@ -338,7 +336,7 @@
            every catalog-source change, same rule the other dialogs follow. */
         function reloadCompIds() {
           const $compid = $('#node-config-input-defaultTargetComponent');
-          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], (catalog) => {
             RED.mavlink.fillCompIdSelect(
               $compid,
               (catalog.enums || {}).MAV_COMPONENT || [],
@@ -347,7 +345,7 @@
           });
         }
 
-        loadLibrary(function () {
+        loadLibrary(() => {
           populateDialects(node.dialect);
           reloadCompIds();
         });

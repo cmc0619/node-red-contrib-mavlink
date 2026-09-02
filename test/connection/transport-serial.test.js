@@ -202,13 +202,13 @@ test('close closes the port and emits close', async () => {
 test('missing optional serialport dependency rejects with a clear error', async () => {
   const transport = new SerialTransport({ path: '/dev/ttyUSB0' });
   const originalLoad = Module._load;
-  Module._load = function patchedLoad(request) {
+  Module._load = function patchedLoad(request, ...rest) {
     if (request === 'serialport') {
       const err = new Error("Cannot find module 'serialport'");
       err.code = 'MODULE_NOT_FOUND';
       throw err;
     }
-    return originalLoad.apply(this, arguments);
+    return originalLoad.call(this, request, ...rest);
   };
 
   try {

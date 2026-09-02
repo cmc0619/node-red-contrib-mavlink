@@ -117,7 +117,7 @@ test('every mavlink-vehicle in an example serializes dialectRevision', () => {
   assert.deepEqual(
     missing,
     [],
-    'omitted dialectRevision → Vehicle Profile has no loaded dialect:\n' + missing.join('\n')
+    `omitted dialectRevision → Vehicle Profile has no loaded dialect:\n${  missing.join('\n')}`
   );
 });
 

@@ -77,7 +77,7 @@ module.exports = function registerMavlinkMission(RED) {
      */
     const activeByKey = new Map();
 
-    node.on('input', function handleInput(msg, send, done) {
+    node.on('input', (msg, send, done) => {
       // A sync throw from an input handler is logged by Node-RED but never
       // completes the message — done() is not called and output 1 stays
       // silent. Everything below that can throw (items JSON, a wire tier

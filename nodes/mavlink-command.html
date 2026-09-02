@@ -52,11 +52,11 @@
     // (fresh node — no connection, no dialect), while the preset list is
     // target-free and must load for exactly those opens.
     const seq = ++_presets.seq;
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), function (data) {
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), (data) => {
       if (seq !== _presets.seq) return;
       _currentPresetGroups = data.groups || [];
       cb(_currentPresetGroups);
-    }).fail(function () {
+    }).fail(() => {
       if (seq !== _presets.seq) return;
       _currentPresetGroups = [];
       cb(_currentPresetGroups);
@@ -316,7 +316,7 @@
       // has its own field and rule.
       preset: {
         value: 'arm',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'preset') return true;
           return Object.prototype.hasOwnProperty.call(PRESET_PARAMS, v)
             || 'is not a preset this palette offers — pick one from the list';
@@ -329,7 +329,7 @@
       // the reason renders.
       advancedCommand:   {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode, 'preset') !== 'advanced') return true;
           return !RED.mavlink.isBlank(v) || 'is required in Advanced mode — pick a command';
         },
@@ -371,7 +371,7 @@
       // Two args so the reasons render (§14).
       params: {
         value: '{}',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           // The blob must parse in both modes — Advanced included, where the
           // runtime reads it through the same JSON.parse and a corrupt blob
           // is drift the editor can already see at deploy. The preset rules
@@ -420,7 +420,7 @@
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-rocket',
     paletteLabel: 'command',
-    label: function () {
+    label() {
       if (this.name) return this.name;
       if (this.mode === 'advanced') {
         const id = this.advancedCommand;
@@ -429,7 +429,7 @@
       return this.preset || 'command';
     },
 
-    oneditprepare: function () {
+    oneditprepare() {
       const node = this;
       // The request sequences outlive a dialog (script scope), and a closed
       // dialog may have left a fetch in flight for a different dialect or
@@ -448,7 +448,7 @@
 
         // Shared Build-tier rows (dialect / vehicle / connection).
         RED.mavlink.applyBuildTierRowVisibility({
-          isBuild: isBuild,
+          isBuild,
           dialect: dialectVal,
           dialectRow: '#row-cmd-dialect',
           vehicleRow: '#row-cmd-vehicle',
@@ -467,7 +467,7 @@
 
         // Wire + companion → target derived; Build always shows (must stamp).
         RED.mavlink.applyCompanionTargetVisibility({
-          isBuild: isBuild,
+          isBuild,
           identityId: $('#node-input-identity').val(),
           combinedTargetRow: '#row-cmd-target',
         });
@@ -512,7 +512,7 @@
         // callback runs after the initial applyMode() left the dialog empty —
         // without this the exposed params stay stale until the user re-picks.
         sel.val(node.preset || 'arm');
-        loadCommandsCatalog(_cmdCatalogSites.presetDropdown, function (catalog) {
+        loadCommandsCatalog(_cmdCatalogSites.presetDropdown, (catalog) => {
           applyPresetOptionTips(sel, catalog);
           sel.trigger('change');
         });
@@ -530,7 +530,7 @@
         const sel = $sel && $sel.length ? $sel : $('#node-input-preset');
         if (!sel.length || !catalog) return;
         const byId = {};
-        (catalog.commands || []).forEach(function (c) {
+        (catalog.commands || []).forEach((c) => {
           byId[String(c.value)] = c.description || '';
         });
         sel.find('option').each(function () {
@@ -563,7 +563,7 @@
        */
       function refreshPresetTipsAndParams() {
         invalidateRenderedParams();
-        loadCommandsCatalog(_cmdCatalogSites.presetTips, function (catalog) {
+        loadCommandsCatalog(_cmdCatalogSites.presetTips, (catalog) => {
           if ($('#node-input-mode').val() !== 'preset') return;
           applyPresetOptionTips(null, catalog);
           refreshParamFields();
@@ -572,7 +572,7 @@
 
       loadPresets(buildPresetDropdown);
 
-      $('#node-input-preset').on('change', function () {
+      $('#node-input-preset').on('change', () => {
         refreshParamFields();
         refreshDelivery();
       });
@@ -601,14 +601,14 @@
 
       function refreshAdvancedCommands() {
         invalidateRenderedParams();
-        loadCommandsCatalog(_cmdCatalogSites.advancedList, function (catalog) {
+        loadCommandsCatalog(_cmdCatalogSites.advancedList, (catalog) => {
           if ($('#node-input-mode').val() !== 'advanced') return;
           buildAdvancedDropdown(catalog);
           refreshParamFields();
         });
       }
 
-      $('#node-input-advancedCommand').on('change', function () {
+      $('#node-input-advancedCommand').on('change', () => {
         refreshParamFields();
         refreshDelivery();
       });
@@ -637,7 +637,7 @@
         refreshCompletionRow();
       }
 
-      $('#node-input-connection').on('change', function () {
+      $('#node-input-connection').on('change', () => {
         outdateCommandCatalog();
         presetMessagesCatalog = null;
         refreshDelivery();
@@ -650,7 +650,7 @@
         if ($('#node-input-mode').val() === 'preset') refreshPresetTipsAndParams();
       });
 
-      $('#node-input-vehicle').on('change', function () {
+      $('#node-input-vehicle').on('change', () => {
         // Vehicle Profile change invalidates build-tier catalogs.
         if ($('#node-input-delivery').val() === 'build') {
           outdateCommandCatalog();
@@ -661,7 +661,7 @@
         }
       });
 
-      $('#node-input-delivery').on('change', function () {
+      $('#node-input-delivery').on('change', () => {
         refreshCompletionRow();
         refreshVisibility();
         // Tier switch may change catalog source (build→vehicle, wire→connection).
@@ -699,7 +699,7 @@
       // and refetch every catalog this dialog reads — on open that doubles
       // every fetch this dialog makes.
       let lastDialect = String(node.dialect || '');
-      $dialect.on('change', function () {
+      $dialect.on('change', () => {
         const dialect = String($dialect.val() || '');
         if (dialect === lastDialect) return;
         lastDialect = dialect;
@@ -718,7 +718,7 @@
 
       function loadPresetMessages(cb) {
         const target = RED.mavlink.resolveCatalogTarget();
-        loadMessagesCatalog(function (catalog) {
+        loadMessagesCatalog((catalog) => {
           const currentTarget = RED.mavlink.resolveCatalogTarget();
           if (currentTarget.key !== target.key) return;
           presetMessagesCatalog = catalog || { messages: [] };
@@ -727,7 +727,7 @@
       }
 
       function needsPresetMessages(specs) {
-        return specs.some(function (spec) { return !!spec.messages; });
+        return specs.some((spec) => !!spec.messages);
       }
 
       function presetMessagesReady() {
@@ -735,15 +735,13 @@
       }
 
       function messageEntries(catalog) {
-        return ((catalog && catalog.messages) || []).map(function (msg) {
-          return {
+        return ((catalog && catalog.messages) || []).map((msg) => ({
             name: msg.name,
             value: msg.id,
             // label optional — fillEnumSelect falls back to enumOptionLabel
             label: msg.label,
             description: msg.description || null,
-          };
-        });
+          }));
       }
 
       /** Look up a preset's numeric MAV_CMD id from the loaded presets API. */
@@ -760,13 +758,9 @@
 
       function catalogParamByIndex(catalog, commandId, index) {
         if (!catalog || commandId == null) return null;
-        const cmd = (catalog.commands || []).find(function (c) {
-          return String(c.value) === String(commandId);
-        });
+        const cmd = (catalog.commands || []).find((c) => String(c.value) === String(commandId));
         if (!cmd) return null;
-        return (cmd.params || []).find(function (p) {
-          return Number(p.index) === Number(index);
-        }) || null;
+        return (cmd.params || []).find((p) => Number(p.index) === Number(index)) || null;
       }
 
       /**
@@ -776,8 +770,8 @@
        * @returns {string}
        */
       function advancedParamLabel(spec) {
-        let label = spec.label || spec.description || ('param ' + spec.index);
-        if (spec.units) label += ' (' + spec.units + ')';
+        let label = spec.label || spec.description || (`param ${spec.index}`);
+        if (spec.units) label += ` (${spec.units})`;
         return label;
       }
 
@@ -797,7 +791,7 @@
           className: 'param-input',
           attrName: 'data-idx',
           attrValue: spec.index,
-          commandId: commandId,
+          commandId,
           // DO_SET_MODE's custom_mode carries no `enum=` — its table is chosen
           // by airframe, not by command — so the profile names one here. Same
           // curated-by-(command, index) shape as the magic-boolean table, and
@@ -823,7 +817,7 @@
             RED.mavlink.fillEnumSelect(sel, entries, {
               allowEmpty: true,
               emptyLabel: '\u2014 message \u2014',
-              saved: saved,
+              saved,
             });
             return sel;
           }
@@ -901,7 +895,7 @@
             return;
           }
           container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
-          loadCommandsCatalog(_cmdCatalogSites.advancedParams, function (catalog) {
+          loadCommandsCatalog(_cmdCatalogSites.advancedParams, (catalog) => {
             // The selection can move while the fetch is out, and the paths
             // that move it off this form (mode flip, MAV_CMD cleared) render
             // their own placeholder without fetching \u2014 so this site's seq
@@ -913,14 +907,12 @@
               container.append($('<div class="form-row"><em>Could not load command parameters for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
               return;
             }
-            const cmd = (catalog.commands || []).find(function (c) {
-              return String(c.value) === String(cmdId);
-            });
+            const cmd = (catalog.commands || []).find((c) => String(c.value) === String(cmdId));
             if (!cmd) {
               container.append($('<div class="form-row"><em>Command not in this dialect.</em></div>'));
               return;
             }
-            const visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
+            const visible = (cmd.params || []).filter((p) => !p.hidden);
             if (visible.length === 0) {
               container.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
               node._mavParamsRendered = true;
@@ -972,7 +964,7 @@
           // (Codex #36).
           const commandId = presetCommandId(presetId);
           container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
-          loadCommandsCatalog(_cmdCatalogSites.presetParams, function (catalog) {
+          loadCommandsCatalog(_cmdCatalogSites.presetParams, (catalog) => {
             // The preset can move to a zero-param or message-waiting form
             // while the fetch is out, and those paths render without
             // fetching \u2014 so this site's seq alone does not outdate the
@@ -999,7 +991,7 @@
       refreshVisibility();
     },
 
-    oneditsave: function () {
+    oneditsave() {
       // Scrape only a rendered form. If Done lands while the catalog is still
       // loading (or an error placeholder is showing), the container holds no
       // inputs — scraping it would silently wipe the saved params (Codex #36).
@@ -1017,7 +1009,7 @@
       $('#node-input-params').val(JSON.stringify(params));
     },
 
-    oneditcancel: function () {},
+    oneditcancel() {},
   });
 }());
 </script>

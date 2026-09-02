@@ -33,7 +33,7 @@ test('events is a multi-select, not a CSV text field (§6)', () => {
 });
 
 test('STATE_EVENTS in the editor matches lib/state DEFAULT_EVENTS', () => {
-  const match = script.match(/var STATE_EVENTS = (\[[\s\S]*?\]);/);
+  const match = script.match(/const STATE_EVENTS = (\[[\s\S]*?\]);/);
   assert.ok(match, 'STATE_EVENTS array must be declared in the editor script');
   const editorEvents = vm.runInNewContext(match[1], {});
   assert.deepEqual([...editorEvents], [...DEFAULT_EVENTS]);

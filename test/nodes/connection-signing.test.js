@@ -63,7 +63,7 @@ test('a raw hex key becomes the key bytes verbatim — no hashing', () => {
 });
 
 test('raw key hex is case-insensitive and tolerates surrounding whitespace', () => {
-  const hex = 'AbCdEf'.repeat(10) + 'AbCd'; // 64 chars mixed case
+  const hex = `${'AbCdEf'.repeat(10)  }AbCd`; // 64 chars mixed case
   const signing = buildSigning({ linkId: 0 }, { signingKeyHex: `  ${hex}  ` });
   assert.equal(signing.key.toString('hex'), hex.toLowerCase());
 });
@@ -77,7 +77,7 @@ test('the two key rules live in the editor, not in buildSigning (§0)', () => {
     require('node:path').join(__dirname, '..', '..', 'nodes', 'mavlink-connection.html'),
     'utf8'
   );
-  const block = html.slice(html.indexOf('signingKeyHex: {'), html.indexOf('label: function ()'));
+  const block = html.slice(html.indexOf('signingKeyHex: {'), html.indexOf('label() {'));
   assert.match(block, /64 hex characters/, 'the format rule reds in the editor');
   assert.match(block, /cannot be set alongside a passphrase/, 'and so does the exclusivity');
   // Saved password credentials surface as has_* booleans, so both spellings

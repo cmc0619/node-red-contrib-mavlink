@@ -138,7 +138,7 @@ async function measureMcastMembership(results) {
   }, AP_SYSID);
   await conn.start();
   await sleep(2000);
-  let peer = null;
+  let peer;
   try {
     peer = await waitPeer(conn, AP_SYSID);
   } catch (err) {
@@ -253,7 +253,7 @@ async function measurePx4SubnetBroadcast(results) {
   }, PX4_SYSID);
   await conn.start();
   await sleep(3000);
-  let peer = null;
+  let peer;
   try {
     peer = await waitPeer(conn, PX4_SYSID);
   } catch (err) {
@@ -284,7 +284,7 @@ async function main() {
   const skipPx4 = process.env.SWARM_SKIP_PX4 === '1';
 
   if (!skipMcast) {
-    const { conn, peerSeen } = await measureMcastMembership(results);
+    const { conn } = await measureMcastMembership(results);
     await measureBroadcastArm(conn, results);
     await measureSelfEcho(conn, results);
     if (conn) await new Promise((resolve) => conn.close(() => resolve()));

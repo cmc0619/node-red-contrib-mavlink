@@ -93,7 +93,7 @@ test('mavlink-move editor reshapes fields by action and delivery (§6)', () => {
   assert.match(html, /vNorth:\s*state\.groups\.velocity/, 'velocity fields gated on the velocity group');
   assert.match(html, /aNorth:\s*state\.groups\.accel/, 'accel fields gated on the acceleration group');
   assert.match(html, /yawRate:\s*state\.groups\.yaw \|\| state\.isAttitude/, 'yaw rate rides the yaw group or Attitude');
-  assert.match(html, /var isCommandPath = isGoto && !isStream/, 'the command path is goto off Stream');
+  assert.match(html, /const isCommandPath = isGoto && !isStream/, 'the command path is goto off Stream');
   // Ground speed is shared by Go to's DO_REPOSITION param and the Speed
   // action's own — one spelling for one operator concept (§14).
   assert.match(html, /speed:\s*state\.isCommandPath \|\| state\.isSpeed/, 'ground speed on goto command path and on Speed');
@@ -164,7 +164,7 @@ test('mavlink-move Action surface: goto default, both actions offered, retired f
 
 test('mavlink-move delivery options are rebuilt per action — confirm is goto-only (§9)', () => {
   assert.match(html, /function refreshDeliveryOptions/, 'the delivery select is rebuilt, not just toggled');
-  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
   assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
   const steer = /steer:\s*\[[\s\S]*?\n {8}\]/.exec(map[0]);
   assert.ok(steer, 'steer option list must be extractable');
@@ -780,7 +780,7 @@ test('mavlink-move: Offset is offered as a Steer reference and the markup carrie
     /<option value="offset">Offset from here \(relative\)<\/option>/,
     'the static template offers Offset'
   );
-  assert.match(html, /var REFERENCE_OPTIONS = \[/, 'the reference list is rebuildable, like delivery');
+  assert.match(html, /const REFERENCE_OPTIONS = \[/, 'the reference list is rebuildable, like delivery');
   assert.match(html, /function refreshReferenceOptions/, 'the list is rebuilt per firmware');
   // The rebuild has to run before anything reads the reference back, because
   // the delivery list depends on it.
@@ -789,10 +789,10 @@ test('mavlink-move: Offset is offered as a Steer reference and the markup carrie
   // ordering-by-convention: there is no second read to get wrong.
   assert.match(
     html,
-    /var reference = refreshReferenceOptions\(gate\) \|\| 'world'/,
+    /const reference = refreshReferenceOptions\(gate\) \|\| 'world'/,
     'the reference in force is the rebuild\'s own answer'
   );
-  const rebuilt = html.indexOf('var reference = refreshReferenceOptions(gate)');
+  const rebuilt = html.indexOf('const reference = refreshReferenceOptions(gate)');
   // The trailing `;` picks the call site — the declaration a few lines above
   // carries the same argument list and would otherwise match first.
   const used = html.indexOf('refreshDeliveryOptions(action, reference, gate);');
@@ -929,7 +929,7 @@ test('mavlink-move: terrain altRef reds on a PX4 profile rather than being silen
   );
   // The dropdown half: the rebuilt list withholds terrain per firmware, and
   // the static markup offers it so the two copies cannot drift.
-  assert.match(html, /var ALTREF_OPTIONS = \[/, 'the altRef list is rebuilt per firmware');
+  assert.match(html, /const ALTREF_OPTIONS = \[/, 'the altRef list is rebuilt per firmware');
   assert.match(html, /<option value="terrain">/, 'terrain is offered in the static markup');
   assert.match(
     html,
@@ -972,7 +972,7 @@ test('mavlink-move: Offset cannot be set to the stream tier', () => {
 test('mavlink-move: Turn and Speed are offered, with the command tiers only', () => {
   assert.match(html, /option value="turn"/, 'turn action offered');
   assert.match(html, /option value="speed"/, 'speed action offered');
-  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
   assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
   for (const action of ['turn', 'speed']) {
     const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
@@ -1074,7 +1074,7 @@ test('mavlink-move: a command action cannot be set to the stream tier', () => {
 test('mavlink-move: Attitude and Manual are offered with the setpoint tiers', () => {
   assert.match(html, /option value="attitude"/, 'attitude offered');
   assert.match(html, /option value="manual"/, 'manual offered');
-  const map = /var DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
+  const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
   for (const action of ['attitude', 'manual']) {
     const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
     assert.ok(list, `${action} option list must be extractable`);
@@ -1166,7 +1166,7 @@ test('mavlink-move: every `show` key actually reaches a toggle', () => {
   // markup toggles nothing at all, silently — so that is what is asserted.
   assert.match(
     html,
-    /Object\.keys\(show\)\.forEach\(function \(key\) \{[\s\S]{0,220}?\$\('#row-move-' \+ key\)\.toggle\(!!show\[key\]\);/,
+    /Object\.keys\(show\)\.forEach\(\(key\) => \{[\s\S]{0,220}?\$\(`#row-move-\$\{key\}`\)\.toggle\(!!show\[key\]\);/,
     'every key of the map is toggled by construction'
   );
   assert.match(
@@ -1185,7 +1185,7 @@ test('mavlink-move: every `show` key actually reaches a toggle', () => {
   // The allowlist in the source must agree with the one asserted here.
   assert.match(
     html,
-    /var HELPER_ROWS = \['targetSystem', 'targetComponent'\];/,
+    /const HELPER_ROWS = \['targetSystem', 'targetComponent'\];/,
     'the skip list is exactly the rows the companion helper owns'
   );
 
@@ -1239,7 +1239,7 @@ test('mavlink-move: the Buttons multi-select composes the bitmask the operator u
   // multi-select is a view over the same hidden canonical field — the config
   // value, its validator, and msg.payload.buttons are all unchanged — so this
   // extracts and executes the pure helpers that translate between the two.
-  const options = /var BUTTON_OPTIONS = \[\];\n\s*for \(var bit = 0; bit < 16; bit\+\+\) BUTTON_OPTIONS\.push\([^\n]*\);\n/.exec(html);
+  const options = /const BUTTON_OPTIONS = \[\];\n\s*for \(let bit = 0; bit < 16; bit\+\+\) BUTTON_OPTIONS\.push\([^\n]*\);\n/.exec(html);
   const toBits = /function buttonsToBits\(value\) \{[\s\S]*?\n {2}\}/.exec(html);
   const toMask = /function bitsToButtons\(csv\) \{[\s\S]*?\n {2}\}/.exec(html);
   const maskPred = /function isValidButtonsMask\(n\) \{[\s\S]*?\n {2}\}/.exec(html);
@@ -1425,7 +1425,7 @@ test('mavlink-move: a fixed wing collapses Steer to the one frame it reads', () 
   // sending.
   assert.match(
     html,
-    /var planeSteer = isSteer && gate\.gated && gate\.family === 'plane'\s*\n\s*&& reference === 'offset';/,
+    /const planeSteer = isSteer && gate\.gated && gate\.family === 'plane'\s*\n\s*&& reference === 'offset';/,
     'the collapse keys on the frame in force'
   );
   // And it forces the Position group open rather than only showing it: an
@@ -1447,7 +1447,7 @@ test('mavlink-move: the rebuilt Action list and the static markup cannot drift',
   // Two copies of the action list now exist — the <option> markup a browser
   // renders before oneditprepare runs, and ACTION_OPTIONS which replaces it.
   // A value in one and not the other is a silently unreachable action.
-  const table = /var ACTION_OPTIONS = \[[\s\S]*?\n {6}\];/.exec(html);
+  const table = /const ACTION_OPTIONS = \[[\s\S]*?\n {6}\];/.exec(html);
   assert.ok(table, 'ACTION_OPTIONS must be extractable');
   const rebuilt = [...table[0].matchAll(/\['([a-z]+)',/g)].map((m) => m[1]);
   const markup = [...html.matchAll(/<option value="([a-z]+)">[^<]*\(/g)].map((m) => m[1]);
@@ -1493,13 +1493,13 @@ test('mavlink-move: clearing a group clears its fields, so the form and the mask
   // screen to explain it.
   assertChangeHandlerContains(
     html,
-    "$('#move-group-' + entry[0])",
-    "$('#node-input-' + name).val('')",
+    "$(`#move-group-${entry[0]}`)",
+    "$(`#node-input-${name}`).val('')",
     'clearing a box clears the group it discloses'
   );
   assertChangeHandlerContains(
     html,
-    "$('#move-group-' + entry[0])",
+    "$(`#move-group-${entry[0]}`)",
     'refreshVisibility()',
     'and repaints, so the rows follow'
   );
@@ -1511,7 +1511,7 @@ test('mavlink-move: the disclosure is seeded from the fields, not from a saved f
   assert.match(html, /function seedDisclosure/, 'the seed exists');
   assert.match(
     html,
-    /return !RED\.mavlink\.isBlank\(node\[name\]\)/,
+    /=> !RED\.mavlink\.isBlank\(node\[name\]\)/,
     'a group is open iff one of its fields carries a value'
   );
   assert.match(html, /if \(!any\) seeded\.position = true;/, 'an empty Steer node opens on Position');

@@ -10,7 +10,7 @@
         // select, so the ring cannot drift from what the dialog offers.
         band: {
           value: '2',
-          validate: RED.mavlink.oneOf(RED.mavlink.BAND_OPTIONS.map(function (o) { return o.value; })),
+          validate: RED.mavlink.oneOf(RED.mavlink.BAND_OPTIONS.map((o) => o.value)),
         },
       },
       inputs: 1,
@@ -18,13 +18,13 @@
       outputLabels: ['continue', 'status'],
       icon: 'font-awesome/fa-arrow-up',
       paletteLabel: 'out',
-      label: function () {
+      label() {
         return this.name || 'mavlink out';
       },
-      labelStyle: function () {
+      labelStyle() {
         return this.name ? 'node_label_italic' : '';
       },
-      oneditprepare: function () {
+      oneditprepare() {
         RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
         RED.mavlink.fillBandSelect($('#node-input-band'), String(this.band));
       },

@@ -96,7 +96,7 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
 test('Advanced mode populates commands before loading their parameter fields', () => {
   assert.match(
     html,
-    /function refreshAdvancedCommands\(\) \{[\s\S]*loadCommandsCatalog\(_cmdCatalogSites\.advancedList, function \(catalog\) \{[\s\S]*buildAdvancedDropdown\(catalog\);[\s\S]*refreshParamFields\(\);/
+    /function refreshAdvancedCommands\(\) \{[\s\S]*loadCommandsCatalog\(_cmdCatalogSites\.advancedList, \(catalog\) => \{[\s\S]*buildAdvancedDropdown\(catalog\);[\s\S]*refreshParamFields\(\);/
   );
 });
 
@@ -104,7 +104,7 @@ test('initial preset load paints option tips before triggering the parameter ref
   const builder = sliceBetween('function buildPresetDropdown(groups)', '/**\n       * Dialect-sourced titles');
   assert.match(
     builder,
-    /loadCommandsCatalog\(_cmdCatalogSites\.presetDropdown, function \(catalog\) \{[\s\S]*applyPresetOptionTips\(sel, catalog\);[\s\S]*sel\.trigger\('change'\);/
+    /loadCommandsCatalog\(_cmdCatalogSites\.presetDropdown, \(catalog\) => \{[\s\S]*applyPresetOptionTips\(sel, catalog\);[\s\S]*sel\.trigger\('change'\);/
   );
 });
 
@@ -129,7 +129,7 @@ test('advanced params render through the shared paramControl ladder (14.32)', ()
   assert.match(renderer, /className:\s*'param-input'/, 'controls carry the class the scrape reads');
   assert.match(renderer, /attrName:\s*'data-idx'/, 'the scrape keys off data-idx');
   assert.match(renderer, /attrValue:\s*spec\.index/);
-  assert.match(renderer, /commandId:\s*commandId/, 'the magic-boolean lookup keys off the threaded id');
+  assert.match(renderer, /\bcommandId,/, 'the magic-boolean lookup keys off the threaded id');
   assert.match(
     renderer,
     /enumName:\s*spec\.enum \|\| RED\.mavlink\.customModeEnum\(commandId, spec\.index\)/,

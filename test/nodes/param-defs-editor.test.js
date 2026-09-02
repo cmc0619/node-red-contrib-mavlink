@@ -21,7 +21,7 @@ const { makeDom, FakeElement, FakeDeferred } = require('../helpers/fake-dom');
 
 test('Vehicle parameter Update is single-flight and restores both result states', () => {
   const start = vehicleHtml.indexOf("$('#mav-param-defs-update').on('click'");
-  const end = vehicleHtml.indexOf('        loadLibrary(function ()', start);
+  const end = vehicleHtml.indexOf('        loadLibrary(() =>', start);
   assert.ok(start >= 0 && end > start, 'Vehicle parameter Update handler is present');
 
   const button = new FakeElement();
@@ -68,7 +68,7 @@ test('Vehicle parameter Update is single-flight and restores both result states'
 });
 
 test('Param definition GET failures clear stale UI and render server and fallback errors', () => {
-  const start = paramHtml.indexOf('var _paramDefs = {};');
+  const start = paramHtml.indexOf('let _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
   assert.ok(start >= 0 && end > start, 'Param definition loader is present');
 
@@ -144,7 +144,7 @@ test('Param definition GET failures clear stale UI and render server and fallbac
  * typed a real param id and nothing happened.
  */
 test('Param definition loader explains every path on which it does not ask', () => {
-  const start = paramHtml.indexOf('var _paramDefs = {};');
+  const start = paramHtml.indexOf('let _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
   assert.ok(start >= 0 && end > start, 'Param definition loader is present');
 
@@ -206,7 +206,7 @@ test('Param definition loader explains every path on which it does not ask', () 
  * `autocompleteOptions` hands the widget, so that is what is exercised here.
  */
 function mountParamSearch(defs, initialValue) {
-  const start = paramHtml.indexOf('var _paramDefs = {};');
+  const start = paramHtml.indexOf('let _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
   assert.ok(start >= 0 && end > start, 'Param definition loader is present');
 
@@ -342,7 +342,7 @@ const VALUE_DEFS = {
 
 function mountValueField(defs, values) {
   const applied = [];
-  const start = paramHtml.indexOf('var _paramDefs = {};');
+  const start = paramHtml.indexOf('let _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
   assert.ok(start >= 0 && end > start, 'Param definition loader is present');
   const seed = Object.assign({

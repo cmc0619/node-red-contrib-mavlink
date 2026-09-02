@@ -2,7 +2,7 @@
   (function () {
   // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
   // (§6 Firmware XOR); Param's mode field is `delivery`.
-  var paramDefaults = Object.assign(
+  const paramDefaults = Object.assign(
     {
       name: { value: '' },
       identity: { value: '' },
@@ -38,8 +38,8 @@
        */
       paramId: {
         value: '',
-        validate: function (v, _opt) {
-          var action = RED.mavlink.liveOr(this, '#node-input-action', this && this.action, 'read');
+        validate(v, _opt) {
+          const action = RED.mavlink.liveOr(this, '#node-input-action', this && this.action, 'read');
           if (action === 'request-list' || indexAddressed(this)) return true;
           if (RED.mavlink.isBlank(v)) {
             return 'is required — a set or a read by name identifies the parameter by its '
@@ -66,7 +66,7 @@
        */
       paramIndex: {
         value: -1,
-        validate: function (v, opt) {
+        validate(v, opt) {
           if (!indexAddressed(this)) return true;
           // The shared range check passes blank as "inherit / optional", which
           // every target-id field wants and this one does not: in index mode
@@ -91,7 +91,7 @@
          * exactly the old numeric check, and a parameter absent from the seed
          * is never rejected for being unknown.
          */
-        validate: function (v) {
+        validate(v) {
           // Only PARAM_SET carries param_value, and only a set shows the row.
           // Configure a set with an out-of-range value, switch to Read one,
           // and without this the node stays red over a field that is no longer
@@ -101,10 +101,10 @@
             return true;
           }
           if (RED.mavlink.isBlank(v)) return true;
-          var n = Number(v);
+          const n = Number(v);
           if (!Number.isFinite(n)) return false;
-          var defs = _paramDefsByKey[paramDefsKey(this)];
-          var def = defs && defs[editedParamId(this)];
+          const defs = _paramDefsByKey[paramDefsKey(this)];
+          const def = defs && defs[editedParamId(this)];
           if (!def) return true;
           if (def.bits) {
             // A documented bitmask's legal values are its flags, not a scalar
@@ -125,7 +125,7 @@
       paramType: {
         value: 'MAV_PARAM_TYPE_REAL32',
         // The select offers exactly the shared table's names (valueKey 'name').
-        validate: RED.mavlink.oneOf(RED.mavlink.PARAM_TYPE_OPTIONS.map(function (o) { return o.name; })),
+        validate: RED.mavlink.oneOf(RED.mavlink.PARAM_TYPE_OPTIONS.map((o) => o.name)),
       },
       // Blank inherits the runtime's documented default; a present value is a
       // wait window, and a negative one expires before the vehicle can answer
@@ -146,7 +146,7 @@
    * ArduPilot, so opening a PX4 node and then deploying an ArduPilot one with
    * 2000 would fail validation on a value that firmware accepts.
    */
-  var _paramDefsByKey = {};
+  const _paramDefsByKey = {};
 
   /**
    * Which definition set a node uses. The shared resolver already answers this
@@ -161,7 +161,7 @@
    * @returns {string}
    */
   function paramDefsKey(source) {
-    return RED.mavlink.resolveCatalogTarget({ source: source }).key;
+    return RED.mavlink.resolveCatalogTarget({ source }).key;
   }
 
   /**
@@ -203,9 +203,9 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-sliders',
-    label: function () { return this.name || 'mavlink param'; },
-    oneditprepare: function () {
-      var node = this;
+    label() { return this.name || 'mavlink param'; },
+    oneditprepare() {
+      const node = this;
 
       /* ── Connection and vehicle pickers ───────────────────────── */
       RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
@@ -236,12 +236,12 @@
        * configuration needs.
        */
       function applyActionRows() {
-        var action = $('#node-input-action').val() || 'read';
-        var namesOne = action !== 'request-list';
-        var byIndex = indexAddressed(node);
-        var toggle = RED.mavlink.toggleRow;
+        const action = $('#node-input-action').val() || 'read';
+        const namesOne = action !== 'request-list';
+        const byIndex = indexAddressed(node);
+        const toggle = RED.mavlink.toggleRow;
 
-        var showName = namesOne && !byIndex;
+        const showName = namesOne && !byIndex;
         toggle('#row-param-lookup', action === 'read');
         toggle('#row-paramId', showName);
         toggle('#row-paramIndex', namesOne && byIndex);
@@ -255,13 +255,13 @@
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
       function refreshVisibility() {
-        var delivery = $('#node-input-delivery').val() || 'build';
-        var isBuild = (delivery === 'build');
-        var dialect = $('#node-input-dialect').val() || node.dialect || '';
+        const delivery = $('#node-input-delivery').val() || 'build';
+        const isBuild = (delivery === 'build');
+        const dialect = $('#node-input-dialect').val() || node.dialect || '';
 
         RED.mavlink.applyBuildTierRowVisibility({
-          isBuild: isBuild,
-          dialect: dialect,
+          isBuild,
+          dialect,
           dialectRow: '#row-dialect',
           vehicleRow: '#row-vehicle',
           firmwareRow: '#row-firmware',
@@ -278,7 +278,7 @@
 
         /* role-driven rows: companion hides both target rows */
         RED.mavlink.applyCompanionTargetVisibility({
-          isBuild: isBuild,
+          isBuild,
           identityId: $('#node-input-identity').val() || '',
           targetSystemRow: '#row-targetSystem',
           targetComponentRow: '#row-targetComponent',
@@ -286,9 +286,9 @@
       }
 
       /* ── Param definition catalog ─────────────────────────────── */
-      var _paramDefs = {};
-      var _defsLoaded = false;
-      var _defsNotice = '';
+      let _paramDefs = {};
+      let _defsLoaded = false;
+      let _defsNotice = '';
       /**
        * The documented flag entries ({value} per bit) and their OR-ed mask for
        * the parameter the Value field is shaped for. Bit math rides the shared
@@ -299,20 +299,20 @@
        * readInt32LE) selects, masks, and round-trips with no sign juggling
        * (Gitar, #296). lib/codec/mask.js is the runtime home of the same rule.
        */
-      var _valueBitEntries = [];
-      var _valueDocMask = 0n;
+      let _valueBitEntries = [];
+      let _valueDocMask = 0n;
 
       /**
        * A saved box value as a BigInt, or null when it carries no bits to
        * preserve (blank defers to msg.payload; a non-integer has no bits).
        */
       function bitmaskBoxValue(raw) {
-        var text = String(raw === undefined || raw === null ? '' : raw).trim();
+        const text = String(raw === undefined || raw === null ? '' : raw).trim();
         if (text === '') return null;
         try {
           return BigInt(text);
         } catch (_e) {
-          var n = Number(text);
+          const n = Number(text);
           return Number.isInteger(n) ? BigInt(n) : null;
         }
       }
@@ -323,7 +323,7 @@
        * definitions that look wrong for every parameter at once, and the
        * visible symptom is a Type field that will not narrow.
        */
-      var _defsCatalog = '';
+      let _defsCatalog = '';
 
       /**
        * Give up on loading definitions, saying why. Every path out of
@@ -364,9 +364,9 @@
        * @returns {string}
        */
       function paramDefsTargetError(target) {
-        var delivery = $('#node-input-delivery').val() || 'build';
+        const delivery = $('#node-input-delivery').val() || 'build';
         if (delivery === 'build') {
-          var dialect = $('#node-input-dialect').val() || '';
+          const dialect = $('#node-input-dialect').val() || '';
           if (!dialect) return 'Pick a dialect to load parameter definitions.';
           if (dialect === '__vehicle') {
             return target.vehicleId
@@ -375,9 +375,9 @@
           }
           return target.firmware ? '' : 'Pick a firmware to load parameter definitions.';
         }
-        var connectionId = $('#node-input-connection').val() || '';
+        const connectionId = $('#node-input-connection').val() || '';
         if (!connectionId) return 'Pick a Connection to load parameter definitions.';
-        var connectionNode = RED.nodes.node(connectionId);
+        const connectionNode = RED.nodes.node(connectionId);
         if (!connectionNode) return 'The selected Connection could not be resolved.';
         if (!target.vehicleId) {
           return 'This Connection has no Vehicle Profile, which is where parameter definitions live.';
@@ -390,15 +390,15 @@
        * wire tiers read it through the selected connection's profile.
        */
       function loadParamDefs() {
-        var target = RED.mavlink.resolveCatalogTarget();
-        var missing = paramDefsTargetError(target);
+        const target = RED.mavlink.resolveCatalogTarget();
+        const missing = paramDefsTargetError(target);
         if (missing) { noParamDefs(missing); return; }
 
         // Cache under the key this request was built from, not whatever the
         // fields say when it lands.
-        var key = target.key;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), target.query, function (data) {
-          var defs = data.defs || {};
+        const key = target.key;
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), target.query, (data) => {
+          const defs = data.defs || {};
           _paramDefsByKey[key] = defs;
           // The dialog paints only the target it now shows: a response for a
           // key the fields have moved off is cached above and nothing more —
@@ -411,7 +411,7 @@
           _defsLoaded = true;
           rebuildParamIndex();
           refreshParamInfo();
-        }).fail(function (xhr) {
+        }).fail((xhr) => {
           _paramDefsByKey[key] = {};
           if (currentDefsKey() !== key) return;
           _paramDefs = {};
@@ -425,25 +425,25 @@
       }
 
       /** Ids in display order, rebuilt whenever definitions change. */
-      var _paramIds = [];
+      let _paramIds = [];
       /**
        * Uppercased description per id. `searchParams` runs on every keystroke
        * over as many as 6827 definitions, and a short prefix sends nearly all
        * of them to the description branch — uppercasing there allocated a
        * string per parameter per keypress.
        */
-      var _paramText = {};
-      var MAX_HITS = 50;
+      let _paramText = {};
+      const MAX_HITS = 50;
 
       function rebuildParamIndex() {
         _paramIds = Object.keys(_paramDefs).sort();
         _paramText = {};
-        for (var n = 0; n < _paramIds.length; n++) {
-          var entry = _paramDefs[_paramIds[n]];
+        for (let n = 0; n < _paramIds.length; n++) {
+          const entry = _paramDefs[_paramIds[n]];
           _paramText[_paramIds[n]] = entry && entry.description
             ? entry.description.toUpperCase() : '';
         }
-        var hasDefs = _paramIds.length > 0;
+        const hasDefs = _paramIds.length > 0;
         $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && !!_defsNotice);
         if (!hasDefs && _defsLoaded && _defsNotice) {
           $('#mav-param-defs-tip-text').text(_defsNotice);
@@ -457,16 +457,16 @@
        * Exact and prefix name matches still sort above body text.
        */
       function searchParams(query) {
-        var q = String(query || '').trim().toUpperCase();
-        var exact = [];
-        var prefix = [];
-        var contains = [];
-        var described = [];
-        for (var i = 0; i < _paramIds.length; i++) {
-          var id = _paramIds[i];
+        const q = String(query || '').trim().toUpperCase();
+        const exact = [];
+        const prefix = [];
+        const contains = [];
+        const described = [];
+        for (let i = 0; i < _paramIds.length; i++) {
+          const id = _paramIds[i];
           if (!q) { prefix.push(id); if (prefix.length >= MAX_HITS) break; continue; }
           if (id === q) { exact.push(id); continue; }
-          var at = id.indexOf(q);
+          const at = id.indexOf(q);
           if (at === 0) { prefix.push(id); continue; }
           if (at > 0) { contains.push(id); continue; }
           if (_paramText[id].indexOf(q) !== -1) described.push(id);
@@ -475,11 +475,11 @@
       }
 
       function autocompleteOptions(query) {
-        return searchParams(query).map(function (id) {
-          var def = _paramDefs[id] || {};
-          var detail = def.description || '';
-          if (def.unit) detail = detail ? detail + '  \u00b7  ' + def.unit : def.unit;
-          var $label = $('<div></div>');
+        return searchParams(query).map((id) => {
+          const def = _paramDefs[id] || {};
+          let detail = def.description || '';
+          if (def.unit) detail = detail ? `${detail}  \u00b7  ${def.unit}` : def.unit;
+          const $label = $('<div></div>');
           $label.append($('<strong></strong>').text(id));
           if (detail) $label.append($('<span></span>').css('margin-left', '0.5em').text(detail));
           return { value: id, label: $label };
@@ -494,8 +494,8 @@
        * can win the row by running last.
        */
       function applyTypeRowVisibility() {
-        var action = $('#node-input-action').val() || 'read';
-        var decorative = RED.mavlink.resolveCatalogTarget().firmware === 'ardupilot';
+        const action = $('#node-input-action').val() || 'read';
+        const decorative = RED.mavlink.resolveCatalogTarget().firmware === 'ardupilot';
         RED.mavlink.toggleRow('#row-paramType', action === 'set' && !decorative);
       }
 
@@ -506,11 +506,11 @@
        * the same definition (usually none, mid-typing) can skip the rebuild
        * of the Type and Value selects instead of redoing it per keypress.
        */
-      var _infoDef;
+      let _infoDef;
 
       function refreshParamInfo() {
-        var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
-        var def = _paramDefs[id];
+        const id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        const def = _paramDefs[id];
         _infoDef = def;
 
         // Hover text, not a row. Description, unit and range are reference —
@@ -520,20 +520,19 @@
         //
         // The Value box gets its own hover from applyFieldMeta; setting one
         // here too would be two mechanisms for one attribute.
-        var parts = [];
+        const parts = [];
         if (def) {
           if (def.description) parts.push(def.description);
-          if (def.unit) parts.push('Unit: ' + def.unit);
+          if (def.unit) parts.push(`Unit: ${def.unit}`);
           if (def.min !== undefined || def.max !== undefined) {
-            parts.push('Range: ' + (def.min !== undefined ? def.min : '?') +
-              ' – ' + (def.max !== undefined ? def.max : '?'));
+            parts.push(`Range: ${def.min !== undefined ? def.min : '?'} – ${def.max !== undefined ? def.max : '?'}`);
           }
         }
         // The catalog line leads, and stands alone before a parameter is
         // picked -- that is exactly when "which definitions are these?" is
         // worth answering and there is nothing else to say.
-        var hover = parts.length ? parts.join(' | ') : '';
-        if (_defsCatalog) hover = hover ? _defsCatalog + '\n' + hover : _defsCatalog;
+        let hover = parts.length ? parts.join(' | ') : '';
+        if (_defsCatalog) hover = hover ? `${_defsCatalog}\n${hover}` : _defsCatalog;
         if (hover) $('#node-input-paramId').attr('title', hover);
         else $('#node-input-paramId').removeAttr('title');
 
@@ -561,8 +560,8 @@
         // but nothing else in this palette disables a field that `defaults`
         // saves, so whether Node-RED round-trips one is unverified here — and a
         // Type that silently saves empty is the §14 failure with extra steps.
-        var $type = $('#node-input-paramType');
-        var published = def && def.type;
+        const $type = $('#node-input-paramType');
+        const published = def && def.type;
         // Option values are the MAV_PARAM_TYPE *name*, which is what the node
         // saves and the runtime reads. `saved` is passed explicitly so the
         // narrowed list does not get the previous pick appended back as a
@@ -570,7 +569,7 @@
         RED.mavlink.fillEnumSelect(
           $type,
           published
-            ? RED.mavlink.PARAM_TYPE_OPTIONS.filter(function (o) { return o.name === def.type; })
+            ? RED.mavlink.PARAM_TYPE_OPTIONS.filter((o) => o.name === def.type)
             : RED.mavlink.PARAM_TYPE_OPTIONS,
           { valueKey: 'name', saved: published ? def.type : $type.val(), triggerChange: false }
         );
@@ -582,11 +581,11 @@
         // it instead. The select stays in the DOM, hidden and holding the
         // value — it is still the field Node-RED saves, the same mechanism as
         // the hidden `lookup` input the Identify-by radios drive.
-        var $typeShown = $('#mav-param-type-display');
+        const $typeShown = $('#mav-param-type-display');
         applyTypeRowVisibility();
         if (published) {
-          var option = RED.mavlink.PARAM_TYPE_OPTIONS.filter(function (o) { return o.name === def.type; })[0];
-          $typeShown.text((option ? option.label : def.type) + ' — published by the firmware').show();
+          const option = RED.mavlink.PARAM_TYPE_OPTIONS.filter((o) => o.name === def.type)[0];
+          $typeShown.text(`${option ? option.label : def.type} — published by the firmware`).show();
           $type.hide();
         } else {
           $typeShown.hide();
@@ -597,7 +596,7 @@
       }
 
       /** Sentinel option that hands the operator back the free-text box. */
-      var VALUE_CUSTOM = '__custom';
+      const VALUE_CUSTOM = '__custom';
 
       /**
        * Shape the Value field to the parameter being set.
@@ -614,11 +613,11 @@
        * @param {?object} def
        */
       function refreshValueField(def) {
-        var action = $('#node-input-action').val() || 'read';
-        var $value = $('#node-input-value');
-        var $select = $('#mav-param-value-select');
-        var hasBits = !!(action === 'set' && def && def.bits && def.bits.length);
-        var hasValues = !hasBits && !!(action === 'set' && def && def.values && def.values.length);
+        const action = $('#node-input-action').val() || 'read';
+        const $value = $('#node-input-value');
+        const $select = $('#mav-param-value-select');
+        const hasBits = !!(action === 'set' && def && def.bits && def.bits.length);
+        const hasValues = !hasBits && !!(action === 'set' && def && def.values && def.values.length);
 
         // Shared helper (§6): sets the hover text on the input *and* its label,
         // and maintains the units hint. A private span here would be a second
@@ -649,16 +648,16 @@
           // value still defers to msg.payload, and undocumented remainder
           // bits stay reachable and survive picker changes.
           $select.attr('multiple', 'multiple').attr('size', Math.min(8, def.bits.length));
-          for (var b = 0; b < def.bits.length; b++) {
-            var bit = def.bits[b];
-            var flag = String(Math.pow(2, bit.bit));
+          for (let b = 0; b < def.bits.length; b++) {
+            const bit = def.bits[b];
+            const flag = String(Math.pow(2, bit.bit));
             $select.append(
-              $('<option></option>').val(flag).text(bit.label + ' (bit ' + bit.bit + ')')
+              $('<option></option>').val(flag).text(`${bit.label} (bit ${bit.bit})`)
             );
             _valueBitEntries.push({ value: flag });
             _valueDocMask = _valueDocMask | BigInt(flag);
           }
-          var saved = bitmaskBoxValue($value.val());
+          const saved = bitmaskBoxValue($value.val());
           $select.val(saved === null
             ? []
             : RED.mavlink.selectedBitmaskValues(saved.toString(), _valueBitEntries));
@@ -675,10 +674,8 @@
 
         // Numeric, not string: a saved `1.0` is the documented `1`, and the
         // select's option values are numeric strings.
-        var current = String($value.val() === undefined ? '' : $value.val()).trim();
-        var known = current !== '' && def.values.some(function (entry) {
-          return Number(current) === Number(entry.value);
-        });
+        const current = String($value.val() === undefined ? '' : $value.val()).trim();
+        const known = current !== '' && def.values.some((entry) => Number(current) === Number(entry.value));
 
         // Shared filler (§6): option values stay numeric strings, `title`
         // carries the dialect description, and the tip sync comes with it.
@@ -686,13 +683,11 @@
         // "NAME (value)" from it rather than showing a bare name.
         RED.mavlink.fillEnumSelect(
           $select,
-          def.values.map(function (entry) {
-            return {
+          def.values.map((entry) => ({
               name: entry.label,
               value: entry.value,
               description: entry.description,
-            };
-          }),
+            })),
           // `triggerChange` off: the helper fires change after selecting its
           // fallback entry, and this select's handler writes the picked value
           // into the box — which would overwrite a custom value with the first
@@ -730,13 +725,13 @@
         delete _paramDefsByKey[currentDefsKey()];
       }
 
-      $('#node-input-delivery').on('change', function () {
+      $('#node-input-delivery').on('change', () => {
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-connection').on('change', function () {
+      $('#node-input-connection').on('change', () => {
         clearParamDefs();
         RED.mavlink.refreshIdentitySelect(node);
         // The Identity row's visibility turns on how many identities the new
@@ -745,30 +740,30 @@
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-dialect').on('change', function () {
+      $('#node-input-dialect').on('change', () => {
         clearParamDefs();
         refreshVisibility();
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-vehicle').on('change', function () {
+      $('#node-input-vehicle').on('change', () => {
         clearParamDefs();
         loadParamDefs();
         RED.mavlink.reloadTargetCompId(node);
       });
       // The radios are the control, `#node-input-lookup` is the saved value.
-      $('input[name=mav-param-lookup]').on('change', function () {
+      $('input[name=mav-param-lookup]').on('change', () => {
         $('#node-input-lookup').val(
           $('input[name=mav-param-lookup]:checked').val() || 'name'
         );
         applyActionRows();
       });
 
-      $('#node-input-firmware').on('change', function () {
+      $('#node-input-firmware').on('change', () => {
         clearParamDefs();
         loadParamDefs();
       });
-      $('#node-input-identity').on('change', function () {
+      $('#node-input-identity').on('change', () => {
         refreshVisibility();
       });
 
@@ -779,11 +774,11 @@
       // fetched both catalogs twice per open.
       RED.mavlink.populateDialectSelect($('#node-input-dialect'), { saved: node.dialect || '' });
 
-      $('#node-input-paramId').on('input change', function () {
+      $('#node-input-paramId').on('input change', () => {
         // Same read refreshParamInfo opens with; equal definition = equal
         // render, so only a keystroke that lands on (or leaves) a definition
         // rebuilds the selects. The results panel below still updates.
-        var id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        const id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
         if (_paramDefs[id] === _infoDef) return;
         refreshParamInfo();
       });
@@ -793,12 +788,12 @@
       });
       // The action decides which message is built, so it decides which rows
       // exist at all — not just how the Value field is shaped.
-      $('#node-input-action').on('change', function () {
+      $('#node-input-action').on('change', () => {
         applyActionRows();
         refreshParamInfo();
       });
-      $('#mav-param-value-select').on('change', function () {
-        var $box = $('#node-input-value');
+      $('#mav-param-value-select').on('change', () => {
+        const $box = $('#node-input-value');
         if ($('#mav-param-value-select').attr('multiple') !== undefined) {
           // Bitmask mode: the picker owns the documented bits, the box keeps
           // any undocumented remainder the operator set by hand. The result
@@ -806,8 +801,8 @@
           // params ride the wire as at most int32, so a freshly picked bit 31
           // must leave as the negative writeInt32LE accepts — a positive
           // 2147483648 would throw at Set (Gitar, #296 round 2).
-          var pickedMask = RED.mavlink.bitmaskFromSelection($('#mav-param-value-select').val());
-          var current = bitmaskBoxValue($box.val());
+          const pickedMask = RED.mavlink.bitmaskFromSelection($('#mav-param-value-select').val());
+          const current = bitmaskBoxValue($box.val());
           // A box value outside signed int32 cannot ride the wire, and the
           // fold below would silently rewrite it to one that can (CodeRabbit,
           // #296). Leave it alone: validate() has the field red, which is
@@ -820,12 +815,12 @@
           // "whatever the flow sends". This is why bitmaskFromSelection
           // reports no-selection as null instead of 0.
           if (pickedMask === null && current === null) return;
-          var remainder = current === null ? 0n : (current & ~_valueDocMask);
-          var result = remainder | BigInt(pickedMask === null ? 0 : pickedMask);
+          const remainder = current === null ? 0n : (current & ~_valueDocMask);
+          const result = remainder | BigInt(pickedMask === null ? 0 : pickedMask);
           $box.val(BigInt.asIntN(32, result).toString());
           return;
         }
-        var picked = $('#mav-param-value-select').val();
+        const picked = $('#mav-param-value-select').val();
         if (picked === VALUE_CUSTOM) {
           // Reveal the box rather than clearing it: whatever was there is more
           // likely the value they wanted than an empty field.
@@ -834,14 +829,14 @@
         }
         $box.val(picked).toggle(false);
       });
-      $('#node-input-value').on('input', function () {
+      $('#node-input-value').on('input', () => {
         // Bitmask mode: a hand-edited box is the new truth. Switches still
         // showing the old mask would fold a deselected documented bit straight
         // back in on the next pick (Codex, #296) — re-derive the selection
         // exactly the way reopening the dialog does.
-        var $select = $('#mav-param-value-select');
+        const $select = $('#mav-param-value-select');
         if ($select.attr('multiple') === undefined) return;
-        var saved = bitmaskBoxValue($('#node-input-value').val());
+        const saved = bitmaskBoxValue($('#node-input-value').val());
         $select.val(saved === null
           ? []
           : RED.mavlink.selectedBitmaskValues(saved.toString(), _valueBitEntries));
@@ -856,8 +851,7 @@
         { valueKey: 'name', saved: node.paramType, triggerChange: false });
       // Node-RED has already filled the hidden field from the saved property;
       // the radios are ours to check off it.
-      $('input[name=mav-param-lookup][value="' +
-        ($('#node-input-lookup').val() || 'name') + '"]').prop('checked', true);
+      $(`input[name=mav-param-lookup][value="${$('#node-input-lookup').val() || 'name'}"]`).prop('checked', true);
       applyActionRows();
       refreshVisibility();
     }

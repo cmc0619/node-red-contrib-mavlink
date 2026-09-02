@@ -21,7 +21,7 @@ const vm = require('node:vm');
 function assertChangeHandlerContains(html, binder, needle, msg) {
   const escaped = binder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const startRe = new RegExp(
-    `${escaped}\\.on\\('change(?:\\.[^']*)?',\\s*function\\s*\\(\\)\\s*\\{`
+    `${escaped}\\.on\\('change(?:\\.[^']*)?',\\s*(?:function\\s*\\(\\)|\\(\\)\\s*=>)\\s*\\{`
   );
   const m = startRe.exec(html);
   assert.ok(m, msg || `change handler for ${binder} must exist`);

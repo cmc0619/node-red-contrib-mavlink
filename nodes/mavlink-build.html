@@ -1,17 +1,17 @@
 <script type="text/javascript">
   (function () {
-    var TIER_OPTIONS = [
+    const TIER_OPTIONS = [
       { value: 'build', label: 'Build' },
       { value: 'send',  label: 'Send' },
     ];
 
-    var COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
+    const COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
 
     /** Messages / commands catalog request sequences (DESIGN.md §6 shared loadCatalog). */
-    var _msgCatalog = { seq: 0 };
-    var _cmdCatalog = { seq: 0 };
+    const _msgCatalog = { seq: 0 };
+    const _cmdCatalog = { seq: 0 };
     /** Catalog the loader last handed this dialog — paint from this. */
-    var _currentMsgCatalog = null;
+    let _currentMsgCatalog = null;
 
     // Catalog source follows the shared role × tier matrix (DESIGN.md §6). The
     // Build node's tier field is `tier`; the dialect picker governs on Build,
@@ -36,29 +36,29 @@
 
     /** Collect typed values from live `.mav-field-input` controls (oneditsave + live sync). */
     function collectFieldInputsFromDom($root) {
-      var fields = {};
+      const fields = {};
       $root.find('.mav-field-input').each(function () {
-        var name = $(this).attr('data-field');
+        const name = $(this).attr('data-field');
         if (!name) return;
-        var kind = $(this).attr('data-kind') || 'number';
+        const kind = $(this).attr('data-kind') || 'number';
         if (kind === 'boolean') {
           fields[name] = RED.mavlink.booleanEnumValue($(this));
           return;
         }
-        var raw = $(this).val();
+        const raw = $(this).val();
         if (kind === 'bitmask') {
           fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
           return;
         }
         if (kind === 'bitmask-mask') {
-          var mask = RED.mavlink.bitmaskFromSelection(raw);
+          const mask = RED.mavlink.bitmaskFromSelection(raw);
           if (mask !== null) fields[name] = mask;
           return;
         }
         if (raw === '' || raw === null || raw === undefined) return;
         if (kind === 'array') {
-          fields[name] = String(raw).split(/[,\s]+/).filter(function (p) { return p !== ''; }).map(function (p) {
-            var n = Number(p);
+          fields[name] = String(raw).split(/[,\s]+/).filter((p) => p !== '').map((p) => {
+            const n = Number(p);
             return Number.isNaN(n) ? p : n;
           });
           return;
@@ -68,11 +68,11 @@
           return;
         }
         if (kind === 'enum') {
-          var asNum = Number(raw);
+          const asNum = Number(raw);
           fields[name] = !Number.isNaN(asNum) && String(asNum) === String(raw) ? asNum : raw;
           return;
         }
-        var n = Number(raw);
+        const n = Number(raw);
         fields[name] = !Number.isNaN(n) ? n : raw;
       });
       return fields;
@@ -81,7 +81,7 @@
     // Dialect + Vehicle validators are the shared Build-tier rule (§6); the
     // Build node's mode field is `tier`. Connection stays local because it is
     // required on wire tiers only — the inverse of the dialect rule.
-    var buildDefaults = Object.assign(
+    const buildDefaults = Object.assign(
       {
         name:        { value: '' },
         // A name this dialect cannot resolve — blank, or a name the catalog
@@ -96,7 +96,7 @@
         // open-and-save (#198). Surviving is right; deploying is not.
         messageName: {
           value: 'HEARTBEAT',
-          validate: function (v, _opt) {
+          validate(v, _opt) {
             if (RED.mavlink.isBlank(v)) return 'is required — pick a message from the dialect';
             if (RED.mavlink.isMissingFromDialect(this, '#node-input-messageName', v)) {
               return 'is not in this dialect — pick a message the Connection speaks';
@@ -108,10 +108,10 @@
           value: '{}',
           // Two args so a returned reason counts as invalid rather than being
           // coerced truthy (§14).
-          validate: function (v, _opt) {
+          validate(v, _opt) {
             if (RED.mavlink.isBlank(v)) return true;
             try {
-              var parsed = JSON.parse(v);
+              const parsed = JSON.parse(v);
               if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
                 return 'must be a JSON object';
               }
@@ -125,13 +125,13 @@
         // list, so the red ring cannot drift from what the dialog offers.
         tier: {
           value: 'send',
-          validate: RED.mavlink.oneOf(TIER_OPTIONS.map(function (o) { return o.value; })),
+          validate: RED.mavlink.oneOf(TIER_OPTIONS.map((o) => o.value)),
         },
         // The vocabulary is the shared BAND_OPTIONS list that paints the
         // select, so the ring cannot drift from what the dialog offers.
         band: {
           value: '2',
-          validate: RED.mavlink.oneOf(RED.mavlink.BAND_OPTIONS.map(function (o) { return o.value; })),
+          validate: RED.mavlink.oneOf(RED.mavlink.BAND_OPTIONS.map((o) => o.value)),
         },
         // A typo here fails silently rather than loudly: Number('10OO') is NaN,
         // NaN > 0 is false, and the repeat timer simply never arms — the node
@@ -151,33 +151,33 @@
       outputLabels: ['continue', 'status'],
       icon: 'font-awesome/fa-wrench',
       paletteLabel: 'build',
-      label: function () {
+      label() {
         return this.name || this.messageName || 'mavlink build';
       },
-      labelStyle: function () {
+      labelStyle() {
         return this.name ? 'node_label_italic' : '';
       },
-      oneditprepare: function () {
-        var node = this;
-        var container = $('#node-input-fields-container');
-        var savedFields = {};
+      oneditprepare() {
+        const node = this;
+        const container = $('#node-input-fields-container');
+        let savedFields = {};
         try { savedFields = JSON.parse(node.fields || '{}'); } catch (_e) { savedFields = {}; }
         /** Tracks MAV_CMD identity across param rebuilds; `undefined` = not initialized. */
-        var lastBuildCommandId = undefined;
-        var COMMAND_PARAM_KEYS = [
+        let lastBuildCommandId = undefined;
+        const COMMAND_PARAM_KEYS = [
           'param1', 'param2', 'param3', 'param4', 'param5', 'param6', 'param7', 'x', 'y', 'z',
         ];
 
         function clearCommandParamWireFields() {
-          COMMAND_PARAM_KEYS.forEach(function (key) { delete savedFields[key]; });
+          COMMAND_PARAM_KEYS.forEach((key) => { delete savedFields[key]; });
         }
 
         RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
-        var $tier = $('#node-input-tier');
+        const $tier = $('#node-input-tier');
         $tier.empty();
-        TIER_OPTIONS.forEach(function (opt) {
+        TIER_OPTIONS.forEach((opt) => {
           $('<option>').val(opt.value).text(opt.label).appendTo($tier);
         });
         $tier.val(node.tier || 'send');
@@ -188,7 +188,7 @@
         );
 
         function updateVisibility() {
-          var dialectVal = $('#node-input-dialect').val() || node.dialect || '';
+          const dialectVal = $('#node-input-dialect').val() || node.dialect || '';
           RED.mavlink.applyBuildTierRowVisibility({
             isBuild: $tier.val() === 'build',
             dialect: dialectVal,
@@ -197,7 +197,7 @@
             connectionRow: '#mav-connection-row'
           });
         }
-        $tier.on('change', function () {
+        $tier.on('change', () => {
           clearCatalogs();
           updateVisibility();
           reloadCatalogs();
@@ -209,8 +209,8 @@
         }
 
         function fieldLabel(spec) {
-          var label = spec.name || 'field';
-          if (spec.units) label += ' (' + spec.units + ')';
+          let label = spec.name || 'field';
+          if (spec.units) label += ` (${spec.units})`;
           return label;
         }
 
@@ -231,15 +231,15 @@
           if (msgName === 'COMMAND_INT' && index >= 5 && index <= 7) {
             return ['x', 'y', 'z'][index - 5];
           }
-          return 'param' + index;
+          return `param${index}`;
         }
 
         function fieldInput(spec, enums) {
-          var saved = savedFields[spec.name];
+          const saved = savedFields[spec.name];
           // §6: CompID dropdown. XML leaves target_component without enum= —
           // use the shared reloadCompIdSelect (same helper as Command/Payload/…).
           if (spec.name === 'target_component') {
-            var $comp = $('<select class="mav-field-input"></select>')
+            const $comp = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
               .attr('data-kind', 'enum')
               .attr('title', spec.description || '');
@@ -250,35 +250,33 @@
             return $comp;
           }
           if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
-            var entries = enums[spec.enum];
-            var falseTrue = RED.mavlink.isFalseTrueEnum(entries);
+            const entries = enums[spec.enum];
+            const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
             if (falseTrue) {
               return RED.mavlink.booleanEnumInput(entries, {
-                saved: saved,
+                saved,
                 title: spec.description || '',
                 className: 'mav-field-input',
               }).attr('data-field', spec.name);
             }
-            var multi = spec.display === 'bitmask';
-            var sel = $('<select class="mav-field-input"></select>')
+            const multi = spec.display === 'bitmask';
+            const sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
               .attr('data-kind', multi ? 'bitmask' : 'enum')
               .attr('title', multi ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             else sel.append($('<option></option>').val('').text('\u2014'));
-            entries.forEach(function (entry) {
-              var $opt = $('<option></option>').val(entry.name).text(entry.label);
+            entries.forEach((entry) => {
+              const $opt = $('<option></option>').val(entry.name).text(entry.label);
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
             if (multi) {
-              var selected = Array.isArray(saved) ? saved.map(String) : (saved !== undefined && saved !== null && saved !== '' ? [String(saved)] : []);
+              const selected = Array.isArray(saved) ? saved.map(String) : (saved !== undefined && saved !== null && saved !== '' ? [String(saved)] : []);
               sel.val(selected);
             } else if (saved !== undefined && saved !== null && saved !== '') {
               // Accept saved numeric value or entry name.
-              var match = entries.find(function (e) {
-                return String(e.value) === String(saved) || e.name === saved;
-              });
+              const match = entries.find((e) => String(e.value) === String(saved) || e.name === saved);
               if (match) {
                 sel.val(match.name);
               } else {
@@ -300,11 +298,11 @@
               .val(saved !== undefined && saved !== null ? saved : '');
           }
           if (spec.arrayLength) {
-            var arrVal = Array.isArray(saved) ? saved.join(', ') : (saved !== undefined && saved !== null ? saved : '');
+            const arrVal = Array.isArray(saved) ? saved.join(', ') : (saved !== undefined && saved !== null ? saved : '');
             return $('<input type="text" class="mav-field-input" style="width:70%">')
               .attr('data-field', spec.name)
               .attr('data-kind', 'array')
-              .attr('title', (spec.description || '') + ' (comma-separated, length ' + spec.arrayLength + ')')
+              .attr('title', `${spec.description || ''} (comma-separated, length ${spec.arrayLength})`)
               .attr('placeholder', 'e.g. 0, 0, 0')
               .val(arrVal);
           }
@@ -315,7 +313,7 @@
               .attr('title', spec.description || '64-bit decimal string')
               .val(saved !== undefined && saved !== null ? String(saved) : '');
           }
-          var input = $('<input type="number" class="mav-field-input">')
+          const input = $('<input type="number" class="mav-field-input">')
             .attr('data-field', spec.name)
             .attr('data-kind', 'number')
             .attr('title', spec.description || '')
@@ -331,13 +329,13 @@
          * (or message) change does not discard in-session parameter values.
          */
         function syncSavedFieldsFromDom() {
-          var $root = $('#node-input-fields-container');
+          const $root = $('#node-input-fields-container');
           if (!$root.find('.mav-field-input').length) return;
-          var live = collectFieldInputsFromDom($root);
+          const live = collectFieldInputsFromDom($root);
           // Empty controls are omitted from `live` (save semantics). Delete those
           // keys from the working snapshot so a rebuild does not restore them.
           $root.find('.mav-field-input').each(function () {
-            var name = $(this).attr('data-field');
+            const name = $(this).attr('data-field');
             if (!name) return;
             if (Object.prototype.hasOwnProperty.call(live, name)) {
               savedFields[name] = live[name];
@@ -348,20 +346,20 @@
         }
 
         function commandParamInput(msgName, spec, enums) {
-          var key = wireFieldForCommandParam(msgName, spec.index);
-          var saved = savedFields[key];
+          const key = wireFieldForCommandParam(msgName, spec.index);
+          let saved = savedFields[key];
           // Switching the carrier message COMMAND_LONG → COMMAND_INT for the same
           // MAV_CMD resets lastBuildCommandId, so the param wipe is skipped and the
           // just-synced param5–7 are still the live values for x/y/z. Both forms hold
           // degrees here (the INT build scales), so the number carries across as-is.
           if ((saved === undefined || saved === null || saved === '') && msgName === 'COMMAND_INT' && spec.index >= 5) {
-            saved = savedFields['param' + spec.index];
+            saved = savedFields[`param${spec.index}`];
           }
           // The control ladder (checkbox / pulldown / bitmask / magic boolean /
           // number, with the #198 saved-value sentinel) is the shared builder;
           // Build contributes its collector attributes and the mask fold.
           return RED.mavlink.paramControl(spec, enums, {
-            saved: saved,
+            saved,
             className: 'mav-field-input',
             attrName: 'data-field',
             attrValue: key,
@@ -372,13 +370,13 @@
 
         function refreshCommandParams(msgName, cmdCatalog) {
           syncSavedFieldsFromDom();
-          var $slot = $('#mav-command-params');
+          const $slot = $('#mav-command-params');
           $slot.empty();
           if (!cmdCatalog) {
             $slot.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
             return;
           }
-          var cmdId = $('#mav-build-command-select').val() || '';
+          const cmdId = $('#mav-build-command-select').val() || '';
           // Same command rebuild keeps live edits; a different MAV_CMD must not
           // inherit paramN/x/y/z values that mean something else on the new command.
           if (lastBuildCommandId !== undefined && String(lastBuildCommandId) !== String(cmdId)) {
@@ -389,21 +387,19 @@
             $slot.append($('<div class="form-row"><em>Select a MAV_CMD to configure parameters.</em></div>'));
             return;
           }
-          var cmd = (cmdCatalog.commands || []).find(function (c) {
-            return String(c.value) === String(cmdId);
-          });
+          const cmd = (cmdCatalog.commands || []).find((c) => String(c.value) === String(cmdId));
           if (!cmd) {
             $slot.append($('<div class="form-row"><em>Command not in this dialect.</em></div>'));
             return;
           }
-          var visible = (cmd.params || []).filter(function (p) { return !p.hidden; });
+          const visible = (cmd.params || []).filter((p) => !p.hidden);
           if (!visible.length) {
             $slot.append($('<div class="form-row"><em>No exposed parameters for this command.</em></div>'));
             return;
           }
-          visible.forEach(function (spec) {
-            var label = spec.label || spec.description || ('param ' + spec.index);
-            if (spec.units) label += ' (' + spec.units + ')';
+          visible.forEach((spec) => {
+            let label = spec.label || spec.description || (`param ${spec.index}`);
+            if (spec.units) label += ` (${spec.units})`;
             $slot.append(formRow(label, commandParamInput(msgName, spec, cmdCatalog.enums || {})));
           });
         }
@@ -411,8 +407,8 @@
         function refreshFieldForm() {
           syncSavedFieldsFromDom();
           container.empty();
-          var catalog = _currentMsgCatalog;
-          var msgName = $('#node-input-messageName').val();
+          const catalog = _currentMsgCatalog;
+          const msgName = $('#node-input-messageName').val();
           if (!catalog) {
             container.append($('<div class="form-row"><em>Loading message fields\u2026</em></div>'));
             return;
@@ -420,35 +416,35 @@
           // Catalog empty/failed: leave Fields blank. Missing Connection /
           // Vehicle Profile already reds the node via defaults.validate —
           // a second prose error adds nothing (§2 / AGENTS.md).
-          var msg = (catalog.messages || []).find(function (m) { return m.name === msgName; });
+          const msg = (catalog.messages || []).find((m) => m.name === msgName);
           if (!msg) return;
 
           if (COMMAND_MESSAGES[msg.name]) {
             // COMMAND_LONG / COMMAND_INT: named command params, never Param 1–7 (§6).
             // COMMAND_INT location lives in x/y/z — hide those raw slots too.
             lastBuildCommandId = undefined;
-            (msg.fields || []).forEach(function (spec) {
+            (msg.fields || []).forEach((spec) => {
               if (isCommandParamSlot(spec.name) || spec.name === 'command') return;
               if (msg.name === 'COMMAND_INT' && (spec.name === 'x' || spec.name === 'y' || spec.name === 'z')) return;
               container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
             });
-            var cmdSel = $('<select id="mav-build-command-select" class="mav-field-input"></select>')
+            const cmdSel = $('<select id="mav-build-command-select" class="mav-field-input"></select>')
               .attr('data-field', 'command')
               .attr('data-kind', 'number');
             // The search box is not a field: no .mav-field-input, so the
             // collector never scrapes it; the select stays the saved value.
-            var cmdSearch = $('<input type="text" id="mav-build-command-search" placeholder="type a name or number">');
+            const cmdSearch = $('<input type="text" id="mav-build-command-search" placeholder="type a name or number">');
             container.append(formRow('command (MAV_CMD)', $('<div></div>').append(cmdSearch, cmdSel)));
             container.append($('<div id="mav-command-params"></div>'));
-            loadCommandsCatalog(function (cmdCatalog) {
-              var commands = cmdCatalog.commands || [];
-              var savedCmd = savedFields.command;
-              var prefer = '';
+            loadCommandsCatalog((cmdCatalog) => {
+              const commands = cmdCatalog.commands || [];
+              const savedCmd = savedFields.command;
+              let prefer = '';
               if (savedCmd !== undefined && savedCmd !== null && savedCmd !== '') {
                 prefer = String(savedCmd);
               } else if (commands.length) {
                 // Prefer ARM if present, else first command — never leave blank.
-                var arm = commands.find(function (c) { return c.value === 400; });
+                const arm = commands.find((c) => c.value === 400);
                 prefer = String((arm || commands[0]).value);
               }
               // Drop the placeholder empty option — fillEnumSelect rebuilds the list.
@@ -457,7 +453,7 @@
                 titleNamespace: 'mavcmd',
                 triggerChange: false
               });
-              cmdSel.off('change.mavcmdParams').on('change.mavcmdParams', function () {
+              cmdSel.off('change.mavcmdParams').on('change.mavcmdParams', () => {
                 refreshCommandParams(msg.name, cmdCatalog);
               });
               RED.mavlink.mountEnumSearch(cmdSearch, cmdSel, { prefix: 'MAV_CMD_' }).setEntries(commands);
@@ -466,26 +462,26 @@
             return;
           }
 
-          var fields = msg.fields || [];
+          const fields = msg.fields || [];
           if (!fields.length) {
             container.append($('<div class="form-row"><em>No fields for this message.</em></div>'));
             return;
           }
-          fields.forEach(function (spec) {
+          fields.forEach((spec) => {
             container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
           });
         }
 
         // Type a message by name or id; the select stays the saved property
         // (RED.mavlink.mountEnumSearch explains the shape).
-        var messageSearch = RED.mavlink.mountEnumSearch(
+        const messageSearch = RED.mavlink.mountEnumSearch(
           $('#mav-build-msg-search'), $('#node-input-messageName'), { valueKey: 'name', numberKey: 'id' }
         );
 
         function buildMessageDropdown(catalog) {
           _currentMsgCatalog = catalog;
-          var sel = $('#node-input-messageName');
-          var prefer = sel.val() || node.messageName || 'HEARTBEAT';
+          const sel = $('#node-input-messageName');
+          const prefer = sel.val() || node.messageName || 'HEARTBEAT';
           // Tip sync and the field-form rebuild must use different change
           // namespaces — fillEnumSelect's bindSelectTitleSync does
           // off('change.' + ns), which would erase the renderer if both used
@@ -504,7 +500,7 @@
         function reloadCatalogs() {
           _currentMsgCatalog = null;
           container.empty().append($('<div class="form-row"><em>Loading messages\u2026</em></div>'));
-          loadMessagesCatalog(function (catalog) {
+          loadMessagesCatalog((catalog) => {
             buildMessageDropdown(catalog);
           });
         }
@@ -513,14 +509,14 @@
           _currentMsgCatalog = null;
         }
 
-        $('#node-input-vehicle').on('change', function () {
+        $('#node-input-vehicle').on('change', () => {
           if ($tier.val() === 'build' && $('#node-input-dialect').val() === '__vehicle') {
             clearCatalogs();
             reloadCatalogs();
           }
         });
 
-        $('#node-input-connection').on('change', function () {
+        $('#node-input-connection').on('change', () => {
           if ($tier.val() !== 'build') {
             clearCatalogs();
             reloadCatalogs();
@@ -529,16 +525,16 @@
 
         // Shared helper keeps an empty unsaved dialect selected until the Build
         // validator accepts a concrete dialect or the Vehicle Profile escape.
-        var $dialect = $('#node-input-dialect');
-        $dialect.on('change', function () {
+        const $dialect = $('#node-input-dialect');
+        $dialect.on('change', () => {
           clearCatalogs();
           updateVisibility();
           reloadCatalogs();
         });
         RED.mavlink.populateDialectSelect($dialect, { saved: node.dialect || '' });
       },
-      oneditsave: function () {
-        var $root = $('#node-input-fields-container');
+      oneditsave() {
+        const $root = $('#node-input-fields-container');
         // If catalogs never populated controls, keep the previously saved JSON.
         if (!$root.find('.mav-field-input').length) return;
         $('#node-input-fields').val(JSON.stringify(collectFieldInputsFromDom($root)));

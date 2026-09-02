@@ -11,7 +11,7 @@
   // Serial baud rates, as strings because that is what a <select> saves. A
   // closed list, not a suggestion list: the standard rates are a fixed
   // vocabulary, so nothing outside them needs to stay typeable.
-  var SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
+  const SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
 
   // Remote host and port are a pair — both blank (listen-only) or both set.
   // The runtime trusts this: a half-configured remote never deploys, so the
@@ -28,21 +28,21 @@
   // first — own dialog only, and an emptied box is the operator's answer —
   // then either saved spelling.
   function signingSiblingPresent(node, selector, valueKey, hasKey) {
-    var $f = RED.mavlink.ownDialogField(node, selector);
+    const $f = RED.mavlink.ownDialogField(node, selector);
     if ($f) return !RED.mavlink.isBlank($f.val());
-    var creds = node.credentials || {};
-    var v = creds[valueKey];
+    const creds = node.credentials || {};
+    let v = creds[valueKey];
     if (v === undefined) v = creds[hasKey];
     return Boolean(v);
   }
 
   function companionBoundElsewhere(node, identityIds) {
-    var conflict = null;
-    RED.nodes.eachConfig(function (other) {
+    let conflict = null;
+    RED.nodes.eachConfig((other) => {
       if (conflict || other.type !== 'mavlink-connection' || other.id === node.id) return;
-      var bound = [other.localIdentity].concat(other.additionalIdentities || []);
-      (identityIds || []).some(function (identityId) {
-        var identity = RED.nodes.node(identityId);
+      const bound = [other.localIdentity].concat(other.additionalIdentities || []);
+      (identityIds || []).some((identityId) => {
+        const identity = RED.nodes.node(identityId);
         if (identity && identity.role === 'companion' && bound.indexOf(identityId) !== -1) {
           conflict = other;
           return true;
@@ -51,8 +51,7 @@
       });
     });
     if (!conflict) return true;
-    return 'Companion identity is already bound to ‘' + (conflict.name || conflict.id)
-      + '’ — a Companion may have one Connection';
+    return `Companion identity is already bound to ‘${conflict.name || conflict.id}’ — a Companion may have one Connection`;
   }
 
   function identityFree(conn, identityId) {
@@ -65,8 +64,8 @@
   // off the edit stack, nearest Connection first: an identity opened through
   // the pencil sits above it.
   function editingConnection() {
-    var stack = RED.editor.getEditStack();
-    for (var i = stack.length - 1; i >= 0; i--) {
+    const stack = RED.editor.getEditStack();
+    for (let i = stack.length - 1; i >= 0; i--) {
       if (stack[i].type === 'mavlink-connection') return stack[i];
     }
     return null;
@@ -86,14 +85,14 @@
       // The runtime hands bindHost/bindPort to the socket as saved, so both
       // must be present for the IP transports — blanking the host would bind
       // nothing nameable, not "all interfaces" (that is what 0.0.0.0 says).
-      bindHost: { value: '0.0.0.0', validate: function (v, _opt) {
-        var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
+      bindHost: { value: '0.0.0.0', validate(v, _opt) {
+        const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
         if (!RED.mavlink.isBlank(v)) return true;
         return 'bind host is required — 0.0.0.0 means all interfaces';
       } },
-      bindPort: { value: 14550, validate: function (v, opt) {
-        var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
+      bindPort: { value: 14550, validate(v, opt) {
+        const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
         if (RED.mavlink.isBlank(v)) return 'bind port is required for UDP/TCP';
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
@@ -103,40 +102,40 @@
       // operator's answer, and a truthiness fallback would resurrect the
       // saved value — clearing both fields to go listen-only would red
       // forever, each blank vouched against by the other's ghost.
-      remoteHost: { value: '', validate: function (v, _opt) {
-        var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
+      remoteHost: { value: '', validate(v, _opt) {
+        const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
-        var $port = RED.mavlink.ownDialogField(this, '#node-config-input-remotePort');
+        const $port = RED.mavlink.ownDialogField(this, '#node-config-input-remotePort');
         return remotePairReason(v, $port ? $port.val() : this.remotePort);
       } },
-      remotePort: { value: '', validate: function (v, opt) {
+      remotePort: { value: '', validate(v, opt) {
         // Mode gate first: serial hides this field, and a stale value must
         // not red a control the operator cannot see (same gate as bindPort).
-        var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
+        const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
-        var range = RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
+        const range = RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
         if (range !== true) return range;
-        var $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
+        const $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
         return remotePairReason(v, $host ? $host.val() : this.remoteHost);
       } },
       broadcastHost: { value: '' },
       // UDP-only, like its row: TCP and serial hide the field, and a stale
       // value must not red a control the operator cannot see.
-      broadcastPort: { value: '', validate: function (v, opt) {
-        var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
+      broadcastPort: { value: '', validate(v, opt) {
+        const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode !== 'udp') return true;
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
       } },
-      serialPath: { value: '', validate: function (v) {
-        var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
+      serialPath: { value: '', validate(v) {
+        const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode !== 'serial') return true;
         return !RED.mavlink.isBlank(v);
       } },
       // The runtime opens the port at this rate as saved (§0) — the editor
       // owns the 57600 default and the membership ring. Gated on serial like
       // the path beside it: a stale value must not red a row the mode hides.
-      baudRate: { value: '57600', validate: function (v, _opt) {
-        var mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
+      baudRate: { value: '57600', validate(v, _opt) {
+        const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode !== 'serial') return true;
         return RED.mavlink.oneOf(SERIAL_BAUDS).call(this, String(v), _opt);
       } },
@@ -151,11 +150,11 @@
       // ruling 6); kept in the list, it stays on screen and the validator
       // reds it with the other Connection's name.
       localIdentity: { value: '', type: 'mavlink-local-identity', required: true,
-        filter: function (identity) {
-          var conn = editingConnection();
+        filter(identity) {
+          const conn = editingConnection();
           return identity.id === conn.localIdentity || identityFree(conn, identity.id);
         },
-        validate: function (v, _opt) { return companionBoundElsewhere(this, [v]); } },
+        validate(v, _opt) { return companionBoundElsewhere(this, [v]); } },
       // Every bound identity must send as its own (sysid, compid). Sharing the
       // pair is a wire collision the driver cannot report: the Connection runs
       // one heartbeat scheduler per identity, and ack attribution matches a
@@ -168,29 +167,27 @@
       // Validating the list covers the whole bound set, primary included: the
       // additionals are the rows an operator can actually change. Siblings are
       // read live through liveOr so the check is scoped to this dialog (#217).
-      additionalIdentities: { value: [], validate: function (v, _opt) {
-        var $live = RED.mavlink.ownDialogField(this, '#node-config-input-additionalIdentities');
+      additionalIdentities: { value: [], validate(v, _opt) {
+        const $live = RED.mavlink.ownDialogField(this, '#node-config-input-additionalIdentities');
         if ($live) v = $live.val();
-        var elsewhere = companionBoundElsewhere(this, v);
+        const elsewhere = companionBoundElsewhere(this, v);
         if (elsewhere !== true) return elsewhere;
-        var vehicleId = RED.mavlink.liveOr(this, '#node-config-input-vehicle', this.vehicle, '');
-        var vehicleNode = vehicleId ? RED.nodes.node(vehicleId) : null;
+        const vehicleId = RED.mavlink.liveOr(this, '#node-config-input-vehicle', this.vehicle, '');
+        const vehicleNode = vehicleId ? RED.nodes.node(vehicleId) : null;
         // No Vehicle resolved yet — its own required ring owns that, and a
         // companion's sysid cannot be derived without it.
         if (!vehicleNode) return true;
-        var primary = RED.mavlink.liveOr(this, '#node-config-input-localIdentity', this.localIdentity, '');
-        var bound = [primary].concat(Array.isArray(v) ? v : []);
-        var clash = RED.mavlink.duplicateBoundIdentity(bound, vehicleNode.defaultTargetSystem);
+        const primary = RED.mavlink.liveOr(this, '#node-config-input-localIdentity', this.localIdentity, '');
+        const bound = [primary].concat(Array.isArray(v) ? v : []);
+        const clash = RED.mavlink.duplicateBoundIdentity(bound, vehicleNode.defaultTargetSystem);
         if (!clash) return true;
-        return '‘' + clash.a + '’ and ‘' + clash.b + '’ both send as '
-          + clash.sysid + '/' + clash.compid
-          + ' — each bound identity needs its own SysID/CompID';
+        return `‘${clash.a}’ and ‘${clash.b}’ both send as ${clash.sysid}/${clash.compid} — each bound identity needs its own SysID/CompID`;
       } },
       // Sign outbound needs a key to sign with (§7): checked with both
       // credential boxes blank is a deploy that cannot start, so it reds here.
       // The sibling reads follow the exclusivity ring's saved/live resolution.
       // Two args so the reason renders (§14).
-      signOutbound: { value: false, validate: function (v, _opt) {
+      signOutbound: { value: false, validate(v, _opt) {
         if (v !== true && v !== 'true') return true;
         if (signingSiblingPresent(this, '#node-config-input-signingPassphrase',
           'signingPassphrase', 'has_signingPassphrase')) return true;
@@ -201,8 +198,8 @@
       requireSigned: { value: false },
       acceptInvalid: { value: false },
       // The signature block carries the link id as one byte on the wire.
-      linkId: { value: 0, validate: function (v, _opt) {
-        var n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      linkId: { value: 0, validate(v, _opt) {
+        const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
         if (Number.isInteger(n) && n >= 0 && n <= 255) return true;
         return 'the signing link id is a byte — 0 to 255';
       } },
@@ -218,7 +215,7 @@
       // signing is optional. Two args so the reason renders (§14).
       signingPassphrase: {
         type: 'password',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
           if (signingSiblingPresent(this, '#node-config-input-signingKeyHex',
             'signingKeyHex', 'has_signingKeyHex')) {
@@ -237,9 +234,9 @@
          *
          * Two args so the reason renders (§14).
          */
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
-          var val = String(v).trim();
+          const val = String(v).trim();
           if (!/^[0-9a-fA-F]{64}$/.test(val)) {
             return 'must be exactly 64 hex characters (a raw 32-byte key)';
           }
@@ -252,18 +249,18 @@
         },
       },
     },
-    label: function () {
-      var mode = (this.mode || 'udp').toUpperCase();
+    label() {
+      const mode = (this.mode || 'udp').toUpperCase();
       if (this.mode === 'serial') {
-        return this.name || ('MAVLink SERIAL ' + (this.serialPath || ''));
+        return this.name || (`MAVLink SERIAL ${this.serialPath || ''}`);
       }
-      var where = this.bindPort ? ':' + this.bindPort : '';
-      return this.name || 'MAVLink ' + mode + where;
+      const where = this.bindPort ? `:${this.bindPort}` : '';
+      return this.name || `MAVLink ${mode}${where}`;
     },
-    oneditprepare: function () {
+    oneditprepare() {
       // Closed vocabulary, so the saved value is always one of the options.
-      var $baud = $('#node-config-input-baudRate');
-      SERIAL_BAUDS.forEach(function (baud) {
+      const $baud = $('#node-config-input-baudRate');
+      SERIAL_BAUDS.forEach((baud) => {
         $('<option></option>').val(baud).text(baud).appendTo($baud);
       });
       $baud.val(String(this.baudRate === undefined ? '57600' : this.baudRate));
@@ -290,40 +287,40 @@
       // for the same reason as the primary's filter: an identity re-roled to
       // companion under two bindings has to stay on screen for the validator
       // to red, not vanish from the menu and from the save.
-      var conn = this;
-      var $idList = $('#mav-conn-additional-identities');
+      const conn = this;
+      const $idList = $('#mav-conn-additional-identities');
       function fillIdentityRow($sel, want) {
-        var taken = [$('#node-config-input-localIdentity').val()];
+        const taken = [$('#node-config-input-localIdentity').val()];
         $idList.editableList('items').each(function () {
-          var $other = $(this).find('select');
+          const $other = $(this).find('select');
           if ($other[0] !== $sel[0]) taken.push($other.val());
         });
         $sel.empty().append($('<option></option>').val('').text('— select identity —'));
-        RED.nodes.eachConfig(function (n) {
+        RED.nodes.eachConfig((n) => {
           if (n.type !== 'mavlink-local-identity') return;
           if (taken.indexOf(n.id) !== -1) return;
           if (n.id !== want && !identityFree(conn, n.id)) return;
           $('<option></option>').val(n.id)
-            .text((n.name || 'Local Identity') + ' (' + (n.role || 'gcs') + ')')
+            .text(`${n.name || 'Local Identity'} (${n.role || 'gcs'})`)
             .appendTo($sel);
         });
         $sel.val(taken.indexOf(want) === -1 ? want : '');
       }
       function currentAdditionalIdentities() {
-        var ids = [];
+        const ids = [];
         $idList.editableList('items').each(function () {
-          var id = $(this).find('select').val();
+          const id = $(this).find('select').val();
           if (id) ids.push(id);
         });
         return ids;
       }
       function syncAdditionalIdentities() {
         $idList.editableList('items').each(function () {
-          var $sel = $(this).find('select');
+          const $sel = $(this).find('select');
           fillIdentityRow($sel, $sel.val());
         });
-        var $input = $('#node-config-input-additionalIdentities').empty();
-        currentAdditionalIdentities().forEach(function (id) {
+        const $input = $('#node-config-input-additionalIdentities').empty();
+        currentAdditionalIdentities().forEach((id) => {
           $('<option></option>').val(id).prop('selected', true).appendTo($input);
         });
         $input.trigger('change');
@@ -333,21 +330,21 @@
         removable: true,
         height: 'auto',
         removeItem: syncAdditionalIdentities,
-        addItem: function (container, _index, data) {
-          var $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
+        addItem(container, _index, data) {
+          const $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
           fillIdentityRow($sel, data && data.id ? data.id : '');
           $sel.on('change', syncAdditionalIdentities);
         },
       });
-      (this.additionalIdentities || []).forEach(function (id) {
-        $idList.editableList('addItem', { id: id });
+      (this.additionalIdentities || []).forEach((id) => {
+        $idList.editableList('addItem', { id });
       });
       $('#node-config-input-localIdentity').on('change', syncAdditionalIdentities);
       syncAdditionalIdentities();
 
       function refreshTransportRows() {
-        var mode = $('#node-config-input-mode').val() || 'udp';
-        var ip = mode === 'udp' || mode === 'tcp';
+        const mode = $('#node-config-input-mode').val() || 'udp';
+        const ip = mode === 'udp' || mode === 'tcp';
         $('#row-conn-bindHost, #row-conn-bindPort, #row-conn-remoteHost, #row-conn-remotePort').toggle(ip);
         // UDP only: TCP is connection-oriented unicast and has no broadcast at
         // all, and a TCP server reaches every client through the peer table.
@@ -366,13 +363,13 @@
       // per dialog and only once serial is chosen, so UDP and TCP dialogs
       // never call the endpoint. A failed fetch leaves the list empty, which
       // reads the same as a host with no ports: the box still accepts a path.
-      var portsRequested = false;
+      let portsRequested = false;
       function fillSerialPorts() {
         if (portsRequested) return;
         portsRequested = true;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/serial-ports'), function (data) {
-          var $list = $('#mav-conn-serial-ports').empty();
-          ((data && data.ports) || []).forEach(function (port) {
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/serial-ports'), (data) => {
+          const $list = $('#mav-conn-serial-ports').empty();
+          ((data && data.ports) || []).forEach((port) => {
             $('<option></option>').val(port.path).text(port.manufacturer || '').appendTo($list);
           });
         });
@@ -381,7 +378,7 @@
       $('#node-config-input-mode').on('change', refreshTransportRows);
       refreshTransportRows();
     },
-    oneditsave: function () {
+    oneditsave() {
       this.additionalIdentities = $('#node-config-input-additionalIdentities').val() || [];
     },
   });

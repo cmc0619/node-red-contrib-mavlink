@@ -2,18 +2,18 @@
   // Fan-out stamps a ground-station source, so only these roles are offered.
   // One spelling: the select fill and the row's visibility test must ask the
   // same question, or a hidden row could still be hiding a real choice.
-  var IDENTITY_ROLES = ['gcs', 'custom'];
+  const IDENTITY_ROLES = ['gcs', 'custom'];
 
   function currentMembers() {
-    var members = [];
+    const members = [];
     $('#mav-fanout-members').editableList('items').each(function () {
-      var row = $(this);
-      var member = { sysid: Number(row.find('.mav-fanout-member-sysid').val()) };
-      ['north', 'east', 'up'].forEach(function (axis) {
-        var raw = row.find('.mav-fanout-member-' + axis).val();
+      const row = $(this);
+      const member = { sysid: Number(row.find('.mav-fanout-member-sysid').val()) };
+      ['north', 'east', 'up'].forEach((axis) => {
+        const raw = row.find(`.mav-fanout-member-${axis}`).val();
         if (!RED.mavlink.isBlank(raw)) member[axis] = Number(raw);
       });
-      var patchText = String(row.find('.mav-fanout-member-patch').val() || '').trim();
+      const patchText = String(row.find('.mav-fanout-member-patch').val() || '').trim();
       if (patchText !== '') {
         try {
           member.patch = JSON.parse(patchText);
@@ -56,13 +56,13 @@
         // metres (blank = none), applied at build time against the message's
         // own position; patch is a raw wire-unit field object (blank = none).
         value: [],
-        validate: function (v, _opt) {
-          var $own = RED.mavlink.ownDialogField(this, '#node-input-members');
+        validate(v, _opt) {
+          const $own = RED.mavlink.ownDialogField(this, '#node-input-members');
           if ($own) {
-            var encoded = $own.val();
+            const encoded = $own.val();
             if (!Array.isArray(encoded)) return 'must be a list of member rows';
             v = [];
-            for (var e = 0; e < encoded.length; e++) {
+            for (let e = 0; e < encoded.length; e++) {
               try {
                 v.push(JSON.parse(encoded[e]));
               } catch (_err) {
@@ -75,46 +75,44 @@
           // The fields a metre offset would write on any supported carrier —
           // a row carrying both an offset and a raw patch of one of these
           // would make the runtime pick a winner, so it reds here instead.
-          var POSITION_FIELDS = ['lat', 'lon', 'alt', 'x', 'y', 'z', 'lat_int', 'lon_int', 'param5', 'param6', 'param7'];
+          const POSITION_FIELDS = ['lat', 'lon', 'alt', 'x', 'y', 'z', 'lat_int', 'lon_int', 'param5', 'param6', 'param7'];
           // Keys the runtime refuses per run (command — the run is classified
           // and safety-gated once) or silently strips (target ids) — red the
           // row at save time instead. Row sysid is the addressing.
-          var RESERVED_KEYS = ['command', 'sysid', 'target_system', 'target_component'];
-          var seen = {};
-          for (var i = 0; i < v.length; i++) {
-            var row = v[i];
-            var where = 'row ' + (i + 1);
-            var sysid = Number(row.sysid);
+          const RESERVED_KEYS = ['command', 'sysid', 'target_system', 'target_component'];
+          const seen = {};
+          for (let i = 0; i < v.length; i++) {
+            const row = v[i];
+            const where = `row ${i + 1}`;
+            const sysid = Number(row.sysid);
             if (!Number.isInteger(sysid) || sysid < 1 || sysid > 255) {
-              return where + ': sysid must be an integer 1-255';
+              return `${where}: sysid must be an integer 1-255`;
             }
             if (seen[sysid]) {
-              return where + ': duplicate sysid ' + sysid + ' — one row per member, or the later row silently wins';
+              return `${where}: duplicate sysid ${sysid} — one row per member, or the later row silently wins`;
             }
             seen[sysid] = true;
-            var hasOffset = false;
-            var axes = ['north', 'east', 'up'];
-            for (var a = 0; a < axes.length; a++) {
+            let hasOffset = false;
+            const axes = ['north', 'east', 'up'];
+            for (let a = 0; a < axes.length; a++) {
               if (row[axes[a]] === undefined) continue;
               hasOffset = true;
               if (typeof row[axes[a]] !== 'number' || !Number.isFinite(row[axes[a]])) {
-                return where + ': ' + axes[a] + ' offset must be a finite number of metres';
+                return `${where}: ${axes[a]} offset must be a finite number of metres`;
               }
             }
             if (row.patch !== undefined) {
               if (typeof row.patch !== 'object' || row.patch === null || Array.isArray(row.patch)) {
-                return where + ': patch must be a JSON object of wire-unit fields';
+                return `${where}: patch must be a JSON object of wire-unit fields`;
               }
-              for (var r = 0; r < RESERVED_KEYS.length; r++) {
+              for (let r = 0; r < RESERVED_KEYS.length; r++) {
                 if (Object.prototype.hasOwnProperty.call(row.patch, RESERVED_KEYS[r])) {
-                  return where + ': patch may not set ' + RESERVED_KEYS[r]
-                    + ' — the row sysid addresses the member, and command is gated once from the base message';
+                  return `${where}: patch may not set ${RESERVED_KEYS[r]} — the row sysid addresses the member, and command is gated once from the base message`;
                 }
               }
-              for (var p = 0; p < POSITION_FIELDS.length; p++) {
+              for (let p = 0; p < POSITION_FIELDS.length; p++) {
                 if (hasOffset && Object.prototype.hasOwnProperty.call(row.patch, POSITION_FIELDS[p])) {
-                  return where + ': metre offsets and a raw patch of position field '
-                    + POSITION_FIELDS[p] + ' conflict — use one or the other';
+                  return `${where}: metre offsets and a raw patch of position field ${POSITION_FIELDS[p]} conflict — use one or the other`;
                 }
               }
             }
@@ -152,8 +150,8 @@
       concurrency: {
         value: 1,
         // Two args so the reason renders (§14).
-        validate: function (v, _opt) {
-          var n = Number(v);
+        validate(v, _opt) {
+          const n = Number(v);
           if (Number.isInteger(n) && n >= 1) return true;
           return 'must be a whole number of in-flight members >= 1';
         },
@@ -166,8 +164,8 @@
         // min="1" is not enforced on save: a saved 0 arms confirmMember and
         // confirmBroadcast at 0 ms, so every member reports unconfirmed before
         // an ack could arrive. Two args so the reason renders (§14).
-        validate: function (v, _opt) {
-          var n = Number(v);
+        validate(v, _opt) {
+          const n = Number(v);
           if (Number.isInteger(n) && n >= 1) return true;
           return 'must be a whole number of milliseconds >= 1';
         },
@@ -184,20 +182,20 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-sitemap',
-    label: function () { return this.name || 'mavlink fanout'; },
-    oneditprepare: function () {
-      var node = this;
-      var enumLoadToken = { cancelled: false };
+    label() { return this.name || 'mavlink fanout'; },
+    oneditprepare() {
+      const node = this;
+      const enumLoadToken = { cancelled: false };
       node._mavEnumLoadToken = enumLoadToken;
       RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       // Members table (#163): one editableList row per member — sysid, N/E/Up
       // offsets in metres, and an optional raw wire-unit patch. Same stock
       // widget the Connection node uses for its extra identities.
-      var $members = $('#mav-fanout-members');
+      const $members = $('#mav-fanout-members');
       function syncMembers() {
-        var $input = $('#node-input-members').empty();
-        currentMembers().forEach(function (member) {
+        const $input = $('#node-input-members').empty();
+        currentMembers().forEach((member) => {
           $('<option></option>').val(JSON.stringify(member)).prop('selected', true).appendTo($input);
         });
         $input.trigger('change');
@@ -208,18 +206,18 @@
         sortable: true,
         height: 'auto',
         removeItem: syncMembers,
-        addItem: function (container, _index, member) {
+        addItem(container, _index, member) {
           container.css({ display: 'flex', 'align-items': 'center', gap: '4px' });
           function cell(cls, placeholder, title, grow) {
-            return $('<input>', { type: 'text', class: cls, placeholder: placeholder, title: title })
+            return $('<input>', { type: 'text', class: cls, placeholder, title })
               .css(grow ? { 'flex-grow': 1, width: '30px' } : { width: '52px', 'flex-shrink': 0 })
               .appendTo(container);
           }
-          var $sysid = cell('mav-fanout-member-sysid', 'sysid', 'System id (1-255)');
-          var $north = cell('mav-fanout-member-north', 'N m', 'North offset in metres, applied to the message’s own position (blank = none)');
-          var $east = cell('mav-fanout-member-east', 'E m', 'East offset in metres (blank = none)');
-          var $up = cell('mav-fanout-member-up', 'Up m', 'Up offset in metres (blank = none)');
-          var $patch = cell('mav-fanout-member-patch', 'patch JSON', 'Optional JSON object of message fields to overwrite for this member, in wire units (blank = none)', true);
+          const $sysid = cell('mav-fanout-member-sysid', 'sysid', 'System id (1-255)');
+          const $north = cell('mav-fanout-member-north', 'N m', 'North offset in metres, applied to the message’s own position (blank = none)');
+          const $east = cell('mav-fanout-member-east', 'E m', 'East offset in metres (blank = none)');
+          const $up = cell('mav-fanout-member-up', 'Up m', 'Up offset in metres (blank = none)');
+          const $patch = cell('mav-fanout-member-patch', 'patch JSON', 'Optional JSON object of message fields to overwrite for this member, in wire units (blank = none)', true);
           if (member) {
             if (member.sysid !== undefined) $sysid.val(member.sysid);
             if (member.north !== undefined) $north.val(member.north);
@@ -229,7 +227,7 @@
               $patch.val(typeof member.patch === 'string' ? member.patch : JSON.stringify(member.patch));
             }
           }
-          [$sysid, $north, $east, $up, $patch].forEach(function ($field) {
+          [$sysid, $north, $east, $up, $patch].forEach(($field) => {
             $field.on('input change', syncMembers);
           });
           // A freshly added row has fired no field handler yet, but it is
@@ -240,7 +238,7 @@
           syncMembers();
         },
       });
-      (node.members || []).forEach(function (member) {
+      (node.members || []).forEach((member) => {
         $members.editableList('addItem', member);
       });
       syncMembers();
@@ -252,8 +250,8 @@
         // the full Build message catalog carried every message and enum table
         // just to read this one. isBuild:false — Fan-out has no dialect row,
         // so even Build delivery resolves through the Connection.
-        RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], function (catalog) {
-          var sel = $('#node-input-vehicleType');
+        RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], (catalog) => {
+          const sel = $('#node-input-vehicleType');
           RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
             saved: node.vehicleType,
             preferLive: true,
@@ -272,9 +270,9 @@
        * timing only for the confirm tier; identity only on wire tiers.
        */
       function refreshVisibility() {
-        var d = $('#node-input-delivery').val() || 'build';
-        var sel = $('#node-input-selectionMode').val() || 'all';
-        var exec = $('#node-input-executionMode').val() || 'sequential';
+        const d = $('#node-input-delivery').val() || 'build';
+        const sel = $('#node-input-selectionMode').val() || 'all';
+        let exec = $('#node-input-executionMode').val() || 'sequential';
         // Build requires the explicit list (see defaults.selectionMode) — grey
         // the selections that need a live peer table rather than red-ringing
         // after the fact. Broadcast goes with them: it only pairs with the
@@ -314,7 +312,7 @@
       $('#node-input-delivery').on('change', refreshVisibility);
       $('#node-input-selectionMode').on('change', refreshVisibility);
       $('#node-input-executionMode').on('change', refreshVisibility);
-      $('#node-input-connection').on('change', function () {
+      $('#node-input-connection').on('change', () => {
         refreshVehicleTypeOptions();
         RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: IDENTITY_ROLES });
         refreshVisibility();
@@ -323,7 +321,7 @@
       RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: IDENTITY_ROLES });
       refreshVisibility();
     },
-    oneditsave: function () {
+    oneditsave() {
       // Collect the member rows. Blank offset cells stay absent (no offset);
       // a patch that parses to a JSON object is stored as the object so the
       // runtime reads it directly; unparseable text is kept verbatim so the
@@ -338,7 +336,7 @@
       $('#node-input-members').remove();
       if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
     },
-    oneditcancel: function () {
+    oneditcancel() {
       if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
     }
   });
