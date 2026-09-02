@@ -172,7 +172,7 @@ test('parsePdefJson ignores entries with no recognisable parameter shape', () =>
   assert.deepEqual([...map.keys()], ['GOOD']);
 });
 
-test('readParamDefs returns an empty map only when the holding file is absent', async (t) => {
+test('readParamDefs returns an empty map for an absent holding file without creating it', async (t) => {
   const userDir = tempUserDir(t);
 
   const map = await readParamDefs(userDir, 'profile-no-seed');
