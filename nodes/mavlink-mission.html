@@ -82,8 +82,8 @@
           return true;
         },
       },
-      timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) },
-      maxRetries: { value: '', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
+      timeout: { value: '1500', validate: RED.mavlink.validateAtLeast(0) },
+      maxRetries: { value: '5', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
     ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   };
 

@@ -79,7 +79,7 @@ function compiledCacheDir(RED) {
 
 module.exports = function registerMavlinkVehicle(RED) {
   if (!vehicleApi) {
-    const msg = vehicleLoadError ? vehicleLoadError.message : 'vehicle library unavailable';
+    const msg = vehicleLoadError.message;
     if (RED.log && typeof RED.log.error === 'function') {
       RED.log.error(`[mavlink-vehicle] ${msg}`);
     }
@@ -87,12 +87,12 @@ module.exports = function registerMavlinkVehicle(RED) {
       RED.nodes.createNode(this, config);
       this.status({ fill: 'red', shape: 'ring', text: 'missing deps' });
       this.getDialect = () => {
-        throw vehicleLoadError || new Error(msg);
+        throw vehicleLoadError;
       };
       // Do not invent profile defaults (especially target 1/1) on a broken
       // load — Connection must fail loud, not bind companions to system 1.
       this.getDefaults = () => {
-        throw vehicleLoadError || new Error(msg);
+        throw vehicleLoadError;
       };
     }
     RED.nodes.registerType('mavlink-vehicle', BrokenVehicleNode);
@@ -130,15 +130,9 @@ module.exports = function registerMavlinkVehicle(RED) {
     registerDialectCatalogRoute(RED, {
       path: ENUMS_ROUTE,
       logLabel: 'mavlink-vehicle',
-      unavailableMessage: 'enum catalog unavailable',
-      fromBundle: (api, bundle, dialect, req) => {
-        const names = typeof req.query.names === 'string' ? req.query.names : '';
-        return api.catalogEnumsFromBundle(bundle, dialect, names);
-      },
-      fromDialect: (api, dialect, req) => {
-        const names = typeof req.query.names === 'string' ? req.query.names : '';
-        return api.listEnumsCatalog(dialect, names);
-      },
+      fromBundle: (api, bundle, dialect, req) =>
+        api.catalogEnumsFromBundle(bundle, dialect, req.query.names),
+      fromDialect: (api, dialect, req) => api.listEnumsCatalog(dialect, req.query.names),
     });
     _enumsRouteRegistered = true;
   }
@@ -193,7 +187,7 @@ module.exports = function registerMavlinkVehicle(RED) {
           catalogUnavailable(res);
           return;
         }
-        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const body = req.body;
         // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
         // so a crafted value cannot inject extra path segments server-side.
         if (body.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(String(body.repo))) {
@@ -208,7 +202,7 @@ module.exports = function registerMavlinkVehicle(RED) {
           .update({
             repo: body.repo,
             ref: body.ref,
-            files: Array.isArray(body.files) ? body.files : undefined,
+            files: body.files,
           })
           .then((manifest) => res.json({ ok: true, manifest }))
           .catch((err) => res.status(500).json({ ok: false, error: err.message, code: err.code }));
@@ -226,8 +220,8 @@ module.exports = function registerMavlinkVehicle(RED) {
         }
         try {
           const result = newCatalog().compare({
-            file: String(req.query.file || ''),
-            snapshot: req.query.snapshot ? String(req.query.snapshot) : undefined,
+            file: req.query.file,
+            snapshot: req.query.snapshot,
           });
           res.json({ ok: true, comparison: result });
         } catch (err) {
@@ -266,7 +260,7 @@ module.exports = function registerMavlinkVehicle(RED) {
     // Both are `required` editor fields (mavlink-vehicle.html), so the saved
     // value is used as-is — no `|| 'ardupilotmega'` / `|| 'seed'` code-literal
     // inherit, and no `|| ''` shim.
-    node.dialect = config.dialect.toLowerCase();
+    node.dialect = config.dialect;
     node.dialectRevision = config.dialectRevision;
     // Component dialects, comma-joined `dialect@revision` from the editor.
     node.additionalDialects = config.additionalDialects;

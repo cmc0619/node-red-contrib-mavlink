@@ -19,7 +19,7 @@ const {
 } = require('../lib/move');
 const { AckWaiter, sendFnFor, cancelSlot } = require('../lib/command');
 const { BAND } = require('../lib/connection/bands');
-const { numberOr, resolveDeliveryContext } = require('../lib/addressing');
+const { resolveDeliveryContext } = require('../lib/addressing');
 const {
   shouldSuppress,
   makeStatusRecord,
@@ -42,7 +42,7 @@ module.exports = function registerMavlinkMove(RED) {
     // Resolve the Vehicle Profile once, like the Connection (guideline:
     // config-node references resolve at deploy, not per input). Build-tier
     // body derivation reads firmware through it.
-    const vehicleAtDeploy = config.vehicle ? RED.nodes.getNode(config.vehicle) : null;
+    const vehicleAtDeploy = RED.nodes.getNode(config.vehicle);
 
     // Stop the active stream and free its single-owner scope (#176). Every
     // stop the node causes — replacement, a non-stream input, an explicit
@@ -87,9 +87,8 @@ module.exports = function registerMavlinkMove(RED) {
         // Ack attribution (§9): ignore an ack explicitly addressed to a
         // different GCS on a shared link.
         sourceIds: connectionNode.resolveSourceIds(identityId),
-        // Blank keeps the library default; the editor's number validator owns
-        // the rest (§14: a finite-number check on operator input is a guardrail).
-        timeoutMs: numberOr(config.ackTimeout, undefined),
+        // The editor owns the default and the number ring.
+        timeoutMs: Number(config.ackTimeout),
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
@@ -180,7 +179,7 @@ module.exports = function registerMavlinkMove(RED) {
           return;
         }
 
-        const payload = msg.payload ?? {};
+        const payload = msg.payload;
         // The one runtime verb, dispatched before target resolution: a stop
         // names no target — it halts whatever this node is streaming — so
         // nothing a resolver could refuse may refuse it. Any other value
@@ -230,10 +229,9 @@ module.exports = function registerMavlinkMove(RED) {
               completeBuild(node, send, message);
               break;
             case 'stream': {
-              // Blank keeps the library default; the editor's number validator owns
-              // the rest (§14: a finite-number check on operator input is a guardrail).
-              const rateHz = numberOr(payload.rateHz, numberOr(config.rateHz));
-              const ttlMs = numberOr(payload.ttlMs, numberOr(config.ttlMs));
+              // msg overrides by presence; the editor owns the defaults and rings.
+              const rateHz = payload.rateHz === undefined ? Number(config.rateHz) : payload.rateHz;
+              const ttlMs = payload.ttlMs === undefined ? Number(config.ttlMs) : payload.ttlMs;
               // One stream per (connection, target) (#176): a second node
               // streaming to the same vehicle would alternate contradictory
               // setpoints — the vehicle oscillates while both nodes report

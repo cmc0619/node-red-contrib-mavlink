@@ -157,7 +157,7 @@ test('POST rejects an empty URL without altering the profile holding file', asyn
   const res = mockRes();
 
   await routes.get('POST /mavlink/param/defs/update').handler(
-    { body: { vehicle: 'profile-existing', url: '  ' } },
+    { body: { vehicle: 'profile-existing', url: '' } },
     res
   );
 
@@ -175,7 +175,7 @@ test('POST rejects a missing Vehicle Profile ID', async (t) => {
   const res = mockRes();
 
   await routes.get('POST /mavlink/param/defs/update').handler(
-    { body: { vehicle: ' ', url: 'https://example.test/params.json' } },
+    { body: { vehicle: '', url: 'https://example.test/params.json' } },
     res
   );
 

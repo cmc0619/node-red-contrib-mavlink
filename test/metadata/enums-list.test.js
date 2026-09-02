@@ -57,7 +57,7 @@ test('DEFAULT_ENUM_NAMES includes the editor pulldown common set', () => {
 });
 
 test('catalogEnumsFromBundle returns default enums with name/value labels', () => {
-  const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture');
+  const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture', '');
 
   assert.equal(catalog.dialect, 'fixture');
   assert.deepEqual(Object.keys(catalog.enums), ['MAV_TYPE', 'MAV_COMPONENT']);
@@ -76,7 +76,7 @@ test('catalogEnumsFromBundle returns default enums with name/value labels', () =
 });
 
 test('catalogEnumsFromBundle adds requested names to the default set', () => {
-  const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture', ['CUSTOM_ENUM']);
+  const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture', 'CUSTOM_ENUM');
 
   assert.ok(catalog.enums.MAV_TYPE, 'default enum remains present');
   assert.deepEqual(catalog.enums.CUSTOM_ENUM[0], {
@@ -88,7 +88,7 @@ test('catalogEnumsFromBundle adds requested names to the default set', () => {
 });
 
 test('listEnumsCatalog loads bundled dialect enum entries', () => {
-  const catalog = listEnumsCatalog('ardupilotmega', ['MAV_TYPE']);
+  const catalog = listEnumsCatalog('ardupilotmega', 'MAV_TYPE');
   const expectedCount = loadBundled('ardupilotmega').enums.MAV_TYPE.entries.length;
 
   assert.equal(catalog.dialect, 'ardupilotmega');
@@ -98,7 +98,7 @@ test('listEnumsCatalog loads bundled dialect enum entries', () => {
 
 test('listEnumsCatalog serves MAV_COMPONENT with XML entry names for every stack', () => {
   for (const dialect of ['common', 'ardupilotmega', 'development']) {
-    const catalog = listEnumsCatalog(dialect, ['MAV_COMPONENT']);
+    const catalog = listEnumsCatalog(dialect, 'MAV_COMPONENT');
     const entries = catalog.enums.MAV_COMPONENT || [];
     assert.ok(entries.length > 0, `${dialect} must expose MAV_COMPONENT`);
     const autopilot = entries.find((entry) => Number(entry.value) === 1);
@@ -128,7 +128,7 @@ test('catalogEnumsFromBundle preserves values outside MAX_SAFE_INTEGER as string
       },
     },
     'fixture',
-    ['HUGE_ENUM']
+    'HUGE_ENUM'
   );
 
   assert.equal(catalog.enums.HUGE_ENUM[0].value, huge);
