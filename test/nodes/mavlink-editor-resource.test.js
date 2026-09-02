@@ -949,6 +949,73 @@ test('applyCompanionTargetVisibility shows targets on Build regardless of identi
   assert.equal(vis.targetComponent, true);
 });
 
+// ── Enum search — rank and resolve behind mountEnumSearch ───────────────────
+//
+// Node-RED's autoComplete owns the menu; what is ours is which rows a typed
+// string offers and which entry it resolves to. Commands carry an optional
+// MAV_CMD_ prefix and their code in `value`; messages carry their code in
+// `id` and no prefix.
+
+const SEARCH_COMMANDS = [
+  { name: 'MAV_CMD_NAV_WAYPOINT', value: 16, description: 'Navigate to waypoint.' },
+  { name: 'MAV_CMD_NAV_LAND', value: 21, description: 'Land at location.' },
+  { name: 'MAV_CMD_NAV_TAKEOFF', value: 22, description: 'Takeoff from ground / hand.' },
+  { name: 'MAV_CMD_DO_SET_MODE', value: 176, description: 'Set system mode.' },
+  { name: 'MAV_CMD_NAV_RALLY_POINT', value: 5100, description: 'Rally point.' },
+  { name: 'MAV_CMD_DO_LAND_START', value: 189, description: 'Mission command to perform a landing.' },
+];
+const SEARCH_MESSAGES = [
+  { name: 'HEARTBEAT', id: 0, description: 'The heartbeat message.' },
+  { name: 'GLOBAL_POSITION_INT', id: 33, description: 'Filtered global position.' },
+  { name: 'COMMAND_LONG', id: 76, description: 'Send a command with up to seven parameters.' },
+  { name: 'COMMAND_INT', id: 75, description: 'Send a command with location.' },
+];
+const CMD = { prefix: 'MAV_CMD_' };
+const MSG = { numberKey: 'id' };
+
+test('rankEnumEntries offers a typed number first and lists partial numbers by prefix', () => {
+  const { RED } = loadResource();
+  const values = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_COMMANDS, q, CMD)).map((e) => e.value);
+  assert.deepEqual(values('5100'), [5100]);
+  assert.deepEqual(values('2'), [21, 22], 'a partial number lists the commands it starts');
+  assert.deepEqual(values(''), [16, 21, 22, 176, 5100, 189], 'an empty box lists the catalog in order');
+});
+
+test('rankEnumEntries takes a name with or without the prefix, descriptions last', () => {
+  const { RED } = loadResource();
+  const values = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_COMMANDS, q, CMD)).map((e) => e.value);
+  assert.deepEqual(values('nav_land'), [21]);
+  assert.deepEqual(values('MAV_CMD_NAV_LAND'), [21]);
+  // NAV_LAND is a bare-name hit ahead of DO_LAND_START, which contains it;
+  // the waypoint entry is out because only its description could match and
+  // it does not — described hits rank after both.
+  assert.deepEqual(values('land'), [21, 189]);
+  assert.deepEqual(values('landing'), [189], 'a description-only match still surfaces');
+});
+
+test('rankEnumEntries reads the code from numberKey for messages', () => {
+  const { RED } = loadResource();
+  const names = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_MESSAGES, q, MSG)).map((e) => e.name);
+  assert.deepEqual(names('33'), ['GLOBAL_POSITION_INT']);
+  assert.deepEqual(names('7'), ['COMMAND_LONG', 'COMMAND_INT'], 'id prefix, catalog order');
+  assert.deepEqual(names('command'), ['COMMAND_LONG', 'COMMAND_INT'], 'name prefix');
+  assert.deepEqual(names('heart'), ['HEARTBEAT']);
+});
+
+test('resolveEnumEntry names an entry only by its exact number or exact name', () => {
+  const { RED } = loadResource();
+  const cmd = (t) => { const e = RED.mavlink.resolveEnumEntry(SEARCH_COMMANDS, t, CMD); return e && e.value; };
+  assert.equal(cmd('5100'), 5100);
+  assert.equal(cmd(' nav_rally_point '), 5100);
+  assert.equal(cmd('MAV_CMD_NAV_RALLY_POINT'), 5100);
+  assert.equal(cmd('51'), undefined, 'a partial number is not a command');
+  assert.equal(cmd('rally'), undefined, 'a partial name is not a command');
+  const msg = (t) => { const e = RED.mavlink.resolveEnumEntry(SEARCH_MESSAGES, t, MSG); return e && e.name; };
+  assert.equal(msg('33'), 'GLOBAL_POSITION_INT');
+  assert.equal(msg('global_position_int'), 'GLOBAL_POSITION_INT');
+  assert.equal(msg('3'), undefined);
+});
+
 // ── payloadVerbIgnoresCarrier — drift pin against lib/payload (§9) ───────────
 
 test('payloadVerbIgnoresCarrier mirrors the lib recipe table exactly', () => {

@@ -73,6 +73,18 @@ test('Build registers the shared connection descriptor, not a local one', () => 
 test('Build messageName defaults to HEARTBEAT and is a <select>', () => {
   assert.match(html, /messageName:\s*\{\s*value:\s*'HEARTBEAT'/);
   assert.match(html, /<select id="node-input-messageName"/);
+  // A search box drives the select by name or id; the select stays the saved
+  // property so nothing outside the dialect can reach messageName.
+  assert.match(html, /<input type="text" id="mav-build-msg-search"/);
+  assert.match(
+    html,
+    /RED\.mavlink\.mountEnumSearch\(\s*\$\('#mav-build-msg-search'\), \$\('#node-input-messageName'\), \{ valueKey: 'name', numberKey: 'id' \}\s*\)/
+  );
+  assert.match(html, /messageSearch\.setEntries\(catalog\.messages \|\| \[\]\)/);
+  // The embedded MAV_CMD select gets the same treatment, and its box carries
+  // no .mav-field-input so the field collector never scrapes it.
+  assert.match(html, /<input type="text" id="mav-build-command-search" placeholder="type a name or number">/);
+  assert.match(html, /RED\.mavlink\.mountEnumSearch\(cmdSearch, cmdSel, \{ prefix: 'MAV_CMD_' \}\)\.setEntries\(commands\)/);
   assert.ok(
     !html.includes('placeholder="e.g. HEARTBEAT"'),
     'free-form message placeholder must be gone'

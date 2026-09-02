@@ -997,6 +997,124 @@
     return sync;
   };
 
+  const ENUM_SEARCH_HITS = 20;
+  function enumBareName(upperName, prefix) {
+    return prefix && upperName.indexOf(prefix) === 0 ? upperName.slice(prefix.length) : upperName;
+  }
+
+  /**
+   * Search over a closed enum vocabulary, ranked the way an operator types:
+   * exact number or name first, then name/number prefix, then name contains,
+   * then description contains. `prefix` is a name prefix the operator may
+   * omit (`MAV_CMD_`); `numberKey` is the entry field carrying the numeric
+   * code (`value` for enums, `id` for messages). At most 20 hits; an empty
+   * query lists the first 20 in catalog order.
+   *
+   * @param {Array<{name:string, description?:string|null}>} entries
+   * @param {string} query
+   * @param {{prefix?: string, numberKey?: string}} [opts]
+   * @returns {Array<object>}
+   */
+  RED.mavlink.rankEnumEntries = function (entries, query, opts) {
+    const prefix = (opts && opts.prefix) || '';
+    const numberKey = (opts && opts.numberKey) || 'value';
+    const q = String(query).trim().toUpperCase();
+    const bare = enumBareName(q, prefix);
+    const exact = [];
+    const starts = [];
+    const contains = [];
+    const described = [];
+    for (const e of entries) {
+      const name = enumBareName(String(e.name).toUpperCase(), prefix);
+      const number = String(e[numberKey]);
+      if (!q) { starts.push(e); if (starts.length >= ENUM_SEARCH_HITS) break; continue; }
+      if (number === q || name === bare) { exact.push(e); continue; }
+      if (name.indexOf(bare) === 0 || number.indexOf(q) === 0) { starts.push(e); continue; }
+      if (name.indexOf(bare) !== -1) { contains.push(e); continue; }
+      if (e.description && e.description.toUpperCase().indexOf(q) !== -1) described.push(e);
+    }
+    return exact.concat(starts, contains, described).slice(0, ENUM_SEARCH_HITS);
+  };
+
+  /**
+   * The entry a typed string names outright — its number, or its name with or
+   * without `prefix` — or undefined. Partial text resolves to nothing.
+   *
+   * @param {Array<object>} entries
+   * @param {string} text
+   * @param {{prefix?: string, numberKey?: string}} [opts]
+   * @returns {object|undefined}
+   */
+  RED.mavlink.resolveEnumEntry = function (entries, text, opts) {
+    const prefix = (opts && opts.prefix) || '';
+    const numberKey = (opts && opts.numberKey) || 'value';
+    const t = String(text).trim().toUpperCase();
+    const bare = enumBareName(t, prefix);
+    return entries.find(function (e) {
+      return String(e[numberKey]) === t || enumBareName(String(e.name).toUpperCase(), prefix) === bare;
+    });
+  };
+
+  /**
+   * A search box that drives a select over a closed vocabulary. A native
+   * select only jumps on the start of the option text, and a dialect's
+   * options all start alike (`MAV_CMD_…`), so a code read off the spec or a
+   * firmware log could not be typed in. The box is NOT the saved property: it
+   * feeds `$select`, which is, so only an entry the dialect lists ever reaches
+   * the node — the vocabulary stays closed and the select keeps its
+   * validator, its hover titles and its browse-by-scrolling. Node-RED's own
+   * autoComplete widget owns the menu, keys and blur; ours is the ranking,
+   * the rows, and the resolve of what was typed.
+   *
+   * The box shows the select's entry after every exchange, so what is on
+   * screen is what will be sent: a typed exact name or number lands in the
+   * select, anything else is replaced by what the select holds. The widget
+   * completes on Enter and Tab by writing the top row into the box without a
+   * change event (red.js autoComplete keydown; a mouse pick does fire one), so
+   * keyup on those keys runs the same resolve path (CodeRabbit, #418).
+   *
+   * Give the box an id outside `node-input-*`: Node-RED's properties pane
+   * copies every `#node-input-<prop>` onto the node at save.
+   *
+   * @param {object} $box     jQuery text input
+   * @param {object} $select  jQuery select — the saved property
+   * @param {{valueKey?: string, numberKey?: string, prefix?: string}} opts
+   *   `valueKey` is the entry field the select's options hold (`value`);
+   *   `numberKey` and `prefix` as for {@link RED.mavlink.rankEnumEntries}.
+   * @returns {{setEntries: function(Array<object>): void}}  call whenever the
+   *   select is refilled from a (new) catalog
+   */
+  RED.mavlink.mountEnumSearch = function ($box, $select, opts) {
+    const valueKey = opts.valueKey || 'value';
+    let entries = [];
+    function sync() {
+      const current = $select.val();
+      const hit = entries.find(function (e) { return String(e[valueKey]) === current; });
+      $box.val(hit ? hit.name : '');
+    }
+    $box.autoComplete({
+      minLength: 0,
+      search: function (query) {
+        return RED.mavlink.rankEnumEntries(entries, query, opts).map(function (e) {
+          const $label = $('<div></div>')
+            .append($('<strong></strong>').text(e.label || RED.mavlink.enumOptionLabel(e)));
+          if (e.description) $label.append($('<span></span>').css('margin-left', '0.5em').text(e.description));
+          return { value: e.name, label: $label };
+        });
+      },
+    });
+    $box.on('change', function () {
+      const hit = RED.mavlink.resolveEnumEntry(entries, $box.val(), opts);
+      if (hit && String(hit[valueKey]) !== $select.val()) $select.val(String(hit[valueKey])).trigger('change');
+      sync();
+    });
+    $box.on('keyup', function (evt) {
+      if (evt.key === 'Enter' || evt.key === 'Tab') $box.trigger('change');
+    });
+    $select.on('change.mavEnumSearch', sync);
+    return { setEntries: function (next) { entries = next; sync(); } };
+  };
+
   /**
    * Fill a select from enum entries. Option values are numeric strings so
    * node configs save MAVLink enum ids, not localized labels.

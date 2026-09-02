@@ -581,89 +581,23 @@
       function buildAdvancedDropdown(catalog) {
         if (!catalog) return;
         const sel = $('#node-input-advancedCommand');
-        _advancedCommands = catalog.commands || [];
         // preferLive: a Connection change mid-dialog must not snap the MAV_CMD
         // back to the pre-edit value.
-        RED.mavlink.fillEnumSelect(sel, _advancedCommands, {
+        RED.mavlink.fillEnumSelect(sel, catalog.commands || [], {
           saved: node.advancedCommand,
           preferLive: true,
           allowEmpty: true,
           emptyLabel: '\u2014 select MAV_CMD \u2014',
           titleNamespace: 'mavCmdTip'
         });
-        syncCommandSearchBox();
+        advancedSearch.setEntries(catalog.commands || []);
       }
 
-      // ── Advanced MAV_CMD search: type a name or a number ───────────────────
-      // A native select only jumps on the start of the option text, and every
-      // option starts with MAV_CMD_, so a code read off the spec or a firmware
-      // log could not be typed in. The box is NOT the saved property: it feeds
-      // the select, which is, so only a command the dialect lists ever reaches
-      // advancedCommand — the vocabulary stays closed and the select keeps its
-      // validator, its hover titles and its browse-by-scrolling. Node-RED's
-      // own autoComplete widget owns the menu, keys and blur; ours is the
-      // ranking, the rows, and the resolve of what was typed.
-      let _advancedCommands = [];
-      const MAX_COMMAND_HITS = 20;
-      function bareName(command) {
-        return String(command.name).toUpperCase().replace(/^MAV_CMD_/, '');
-      }
-      function searchCommands(query) {
-        const q = String(query).trim().toUpperCase();
-        const bare = q.replace(/^MAV_CMD_/, '');
-        const exact = [];
-        const prefix = [];
-        const contains = [];
-        const described = [];
-        for (const c of _advancedCommands) {
-          const name = bareName(c);
-          const value = String(c.value);
-          if (!q) { prefix.push(c); if (prefix.length >= MAX_COMMAND_HITS) break; continue; }
-          if (value === q || name === bare) { exact.push(c); continue; }
-          if (name.indexOf(bare) === 0 || value.indexOf(q) === 0) { prefix.push(c); continue; }
-          if (name.indexOf(bare) !== -1) { contains.push(c); continue; }
-          if (c.description && c.description.toUpperCase().indexOf(q) !== -1) described.push(c);
-        }
-        return exact.concat(prefix, contains, described).slice(0, MAX_COMMAND_HITS);
-      }
-      // The command a typed string names outright — its number, or its name
-      // with or without the MAV_CMD_ prefix — or undefined.
-      function resolveCommand(text) {
-        const t = String(text).trim().toUpperCase();
-        return _advancedCommands.find((c) => String(c.value) === t || bareName(c) === t.replace(/^MAV_CMD_/, ''));
-      }
-      function commandSearchOptions(query) {
-        return searchCommands(query).map((c) => {
-          const $label = $('<div></div>').append($('<strong></strong>').text(RED.mavlink.enumOptionLabel(c)));
-          if (c.description) $label.append($('<span></span>').css('margin-left', '0.5em').text(c.description));
-          return { value: c.name, label: $label };
-        });
-      }
-      // The box shows the select's command after every exchange, so what is
-      // on screen is what will be sent: a typed exact name or number lands in
-      // the select, anything else is replaced by what the select holds.
-      function syncCommandSearchBox() {
-        const current = $('#node-input-advancedCommand').val();
-        const hit = _advancedCommands.find((c) => String(c.value) === current);
-        $('#mav-cmd-search').val(hit ? hit.name : '');
-      }
-      $('#mav-cmd-search').autoComplete({ search: commandSearchOptions, minLength: 0 });
-      $('#mav-cmd-search').on('change', function () {
-        const hit = resolveCommand($(this).val());
-        if (hit && String(hit.value) !== $('#node-input-advancedCommand').val()) {
-          $('#node-input-advancedCommand').val(String(hit.value)).trigger('change');
-        }
-        syncCommandSearchBox();
-      });
-      // The widget completes on Enter and Tab by writing the top row into the
-      // box without a change event (red.js autoComplete keydown; a mouse pick
-      // does fire one), so the box would show the new command while the select
-      // — the saved property — still held the old one, and Done would save the
-      // old one (CodeRabbit, #418). Keyup runs after that write, so the same
-      // resolve path lands the completion in the select.
-      $('#mav-cmd-search').on('keyup', function (evt) {
-        if (evt.key === 'Enter' || evt.key === 'Tab') $(this).trigger('change');
-      });
+      // Type a MAV_CMD by name or number; the select stays the saved property
+      // (RED.mavlink.mountEnumSearch explains the shape).
+      const advancedSearch = RED.mavlink.mountEnumSearch(
+        $('#mav-cmd-search'), $('#node-input-advancedCommand'), { prefix: 'MAV_CMD_' }
+      );
 
       function refreshAdvancedCommands() {
         invalidateRenderedParams();
@@ -675,7 +609,6 @@
       }
 
       $('#node-input-advancedCommand').on('change', function () {
-        syncCommandSearchBox();
         refreshParamFields();
         refreshDelivery();
       });

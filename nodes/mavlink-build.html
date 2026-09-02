@@ -435,7 +435,10 @@
             var cmdSel = $('<select id="mav-build-command-select" class="mav-field-input"></select>')
               .attr('data-field', 'command')
               .attr('data-kind', 'number');
-            container.append(formRow('command (MAV_CMD)', cmdSel));
+            // The search box is not a field: no .mav-field-input, so the
+            // collector never scrapes it; the select stays the saved value.
+            var cmdSearch = $('<input type="text" id="mav-build-command-search" placeholder="type a name or number">');
+            container.append(formRow('command (MAV_CMD)', $('<div></div>').append(cmdSearch, cmdSel)));
             container.append($('<div id="mav-command-params"></div>'));
             loadCommandsCatalog(function (cmdCatalog) {
               var commands = cmdCatalog.commands || [];
@@ -457,6 +460,7 @@
               cmdSel.off('change.mavcmdParams').on('change.mavcmdParams', function () {
                 refreshCommandParams(msg.name, cmdCatalog);
               });
+              RED.mavlink.mountEnumSearch(cmdSearch, cmdSel, { prefix: 'MAV_CMD_' }).setEntries(commands);
               refreshCommandParams(msg.name, cmdCatalog);
             });
             return;
@@ -471,6 +475,12 @@
             container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
           });
         }
+
+        // Type a message by name or id; the select stays the saved property
+        // (RED.mavlink.mountEnumSearch explains the shape).
+        var messageSearch = RED.mavlink.mountEnumSearch(
+          $('#mav-build-msg-search'), $('#node-input-messageName'), { valueKey: 'name', numberKey: 'id' }
+        );
 
         function buildMessageDropdown(catalog) {
           _currentMsgCatalog = catalog;
@@ -487,6 +497,7 @@
             triggerChange: false
           });
           sel.off('change.mavmsgForm').on('change.mavmsgForm', refreshFieldForm);
+          messageSearch.setEntries(catalog.messages || []);
           refreshFieldForm();
         }
 
@@ -555,8 +566,13 @@
   </div>
   <hr/>
   <div class="form-row">
-    <label for="node-input-messageName"><i class="fa fa-envelope"></i> Message</label>
-    <select id="node-input-messageName" style="width:70%"></select>
+    <label for="mav-build-msg-search"><i class="fa fa-envelope"></i> Message</label>
+    <input type="text" id="mav-build-msg-search" placeholder="type a name or number" style="width:70%">
+    <!-- The select is the saved property; the search box above only drives it,
+         so nothing outside the dialect's list can reach messageName. -->
+    <div style="margin-left:104px; margin-top:4px">
+      <select id="node-input-messageName" style="width:70%"></select>
+    </div>
   </div>
   <div class="form-row">
     <label style="width:140px;font-weight:bold">Fields</label>

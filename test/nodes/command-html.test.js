@@ -835,79 +835,20 @@ test('mavlink-command: an unknown preset reds instead of resolving no command', 
   assert.equal(verdict({ mode: 'advanced', preset: 'bogus' }), true);
 });
 
-// ── Advanced MAV_CMD search — ranking and resolve are ours, the menu is Node-RED's ─
+// ── Advanced MAV_CMD search — the shared helper drives the saved select ─────
 //
-// The select stays the saved property; the box only drives it. So the two
-// things worth measuring are what the box offers for a typed string and which
-// command a typed string resolves to — the widget's menu, keys and blur are
-// core's and are not re-tested here.
-
-const SEARCH_COMMANDS = [
-  { name: 'MAV_CMD_NAV_WAYPOINT', value: 16, description: 'Navigate to waypoint.' },
-  { name: 'MAV_CMD_NAV_LAND', value: 21, description: 'Land at location.' },
-  { name: 'MAV_CMD_NAV_TAKEOFF', value: 22, description: 'Takeoff from ground / hand.' },
-  { name: 'MAV_CMD_DO_SET_MODE', value: 176, description: 'Set system mode.' },
-  { name: 'MAV_CMD_NAV_RALLY_POINT', value: 5100, description: 'Rally point.' },
-  { name: 'MAV_CMD_DO_LAND_START', value: 189, description: 'Mission command to perform a landing.' },
-];
-
-function mountCommandSearch(commands) {
-  const block = sliceBetween(
-    'let _advancedCommands = [];',
-    'function commandSearchOptions(query)'
-  );
-  const context = {};
-  vm.runInNewContext(
-    `${block}
-     this.setCommands = (c) => { _advancedCommands = c; };
-     this.search = (q) => searchCommands(q).map((c) => c.value);
-     this.resolve = (t) => { const c = resolveCommand(t); return c && c.value; };`,
-    context
-  );
-  context.setCommands(commands);
-  // Array.from re-homes the result in this realm: the editor script builds its
-  // arrays inside the vm context, and a deep-equal would fail on the foreign
-  // Array prototype rather than on the values.
-  return { search: (q) => Array.from(context.search(q)), resolve: context.resolve };
-}
-
-test('typing a MAV_CMD number offers that command first', () => {
-  const { search } = mountCommandSearch(SEARCH_COMMANDS);
-  assert.deepEqual(search('5100'), [5100]);
-  assert.deepEqual(search('2'), [21, 22], 'a partial number lists the commands it starts');
-});
-
-test('typing a name works with or without the MAV_CMD_ prefix, and matches descriptions last', () => {
-  const { search } = mountCommandSearch(SEARCH_COMMANDS);
-  assert.deepEqual(search('nav_land'), [21]);
-  assert.deepEqual(search('MAV_CMD_NAV_LAND'), [21]);
-  // "land": NAV_LAND is a bare-name hit ahead of DO_LAND_START, which
-  // contains it; the waypoint entry is out because only its description
-  // would match and nothing else does — described hits rank after both.
-  assert.deepEqual(search('land'), [21, 189]);
-  assert.deepEqual(search('landing'), [189], 'a description-only match still surfaces');
-  assert.deepEqual(search(''), [16, 21, 22, 176, 5100, 189], 'an empty box lists the catalog in order');
-});
-
-test('a typed exact number or name resolves to the command the select will hold', () => {
-  const { resolve } = mountCommandSearch(SEARCH_COMMANDS);
-  assert.equal(resolve('5100'), 5100);
-  assert.equal(resolve(' nav_rally_point '), 5100);
-  assert.equal(resolve('MAV_CMD_NAV_RALLY_POINT'), 5100);
-  assert.equal(resolve('51'), undefined, 'a partial number is not a command');
-  assert.equal(resolve('rally'), undefined, 'a partial name is not a command');
-});
+// Ranking and resolve are exercised on RED.mavlink.rankEnumEntries /
+// resolveEnumEntry in mavlink-editor-resource.test.js; what is Command's is
+// the wiring: the box is not a node property, the select still is, and the
+// MAV_CMD_ prefix is optional when typing.
 
 test('the MAV_CMD search box is not a node property and the select still is', () => {
   assert.match(html, /<input type="text" id="mav-cmd-search"/, 'the box exists');
   assert.ok(!html.includes('node-input-mav-cmd-search'), 'the box must not be copied into the node by the properties pane');
-  assert.match(html, /\$\('#mav-cmd-search'\)\.autoComplete\(\{ search: commandSearchOptions, minLength: 0 \}\)/,
-    'Node-RED\'s autoComplete owns the menu');
-  assert.match(html, /const hit = resolveCommand\(\$\(this\)\.val\(\)\);\s*if \(hit && String\(hit\.value\) !== \$\('#node-input-advancedCommand'\)\.val\(\)\) \{\s*\$\('#node-input-advancedCommand'\)\.val\(String\(hit\.value\)\)\.trigger\('change'\)/,
-    'a resolved entry lands in the select, which stays the saved property');
-  // Node-RED's autoComplete completes on Enter/Tab by writing the top row into
-  // the box with no change event (only a mouse pick fires one), so without this
-  // the select — the saved property — would keep the previous command.
-  assert.match(html, /\$\('#mav-cmd-search'\)\.on\('keyup', function \(evt\) \{\s*if \(evt\.key === 'Enter' \|\| evt\.key === 'Tab'\) \$\(this\)\.trigger\('change'\);/,
-    'a keyboard completion runs the same resolve path as a mouse pick');
+  assert.match(
+    html,
+    /RED\.mavlink\.mountEnumSearch\(\s*\$\('#mav-cmd-search'\), \$\('#node-input-advancedCommand'\), \{ prefix: 'MAV_CMD_' \}\s*\)/,
+    'the shared search drives the saved select, MAV_CMD_ optional'
+  );
+  assert.match(html, /advancedSearch\.setEntries\(catalog\.commands \|\| \[\]\)/, 'every catalog refill feeds the search');
 });
