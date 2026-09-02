@@ -14,12 +14,14 @@ const vm = require('node:vm');
  * inside that callback only (brace-balanced), not a later sibling handler.
  *
  * @param {string} html
- * @param {string} binder  e.g. "$('#node-input-delivery')" or "$dialect"
+ * @param {string|RegExp} binder  e.g. "$('#node-input-delivery')" or "$dialect";
+ *   a RegExp when the source spelling is a template literal, whose `${` a
+ *   plain string cannot carry without reading as a forgotten backtick
  * @param {string} needle
  * @param {string} [msg]
  */
 function assertChangeHandlerContains(html, binder, needle, msg) {
-  const escaped = binder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = binder instanceof RegExp ? binder.source : binder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const startRe = new RegExp(
     `${escaped}\\.on\\('change(?:\\.[^']*)?',\\s*(?:function\\s*\\(\\)|\\(\\)\\s*=>)\\s*\\{`
   );

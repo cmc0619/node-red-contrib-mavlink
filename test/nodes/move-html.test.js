@@ -1493,13 +1493,13 @@ test('mavlink-move: clearing a group clears its fields, so the form and the mask
   // screen to explain it.
   assertChangeHandlerContains(
     html,
-    `$(\`#move-group-\${entry[0]}\`)`,
+    /\$\(`#move-group-\$\{entry\[0\]\}`\)/,
     `$(\`#node-input-\${name}\`).val('')`,
     'clearing a box clears the group it discloses'
   );
   assertChangeHandlerContains(
     html,
-    `$(\`#move-group-\${entry[0]}\`)`,
+    /\$\(`#move-group-\$\{entry\[0\]\}`\)/,
     'refreshVisibility()',
     'and repaints, so the rows follow'
   );
