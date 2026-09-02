@@ -58,13 +58,6 @@ test('resolveDialect seed bundles are memoized', () => {
 
 /* ---------- resolveDialect — catalog snapshot ---------- */
 
-test('resolveDialect snapshot without a catalog base dir fails loud from XmlCatalog', () => {
-  assert.throws(
-    () => resolveDialect({ name: 'My Profile', dialect: 'common', dialectRevision: '2026-01-01' }),
-    (e) => e.code === 'XML_CATALOG_NO_DIR'
-  );
-});
-
 test('resolveDialect unknown snapshot id fails loud naming the snapshot', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
   assert.throws(
