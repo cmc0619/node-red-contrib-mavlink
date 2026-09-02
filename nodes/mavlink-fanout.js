@@ -69,7 +69,7 @@ module.exports = function registerMavlinkFanout(RED) {
           timeoutMs: numberOption(opts, config, 'timeoutMs'),
           maxRetries: numberOption(opts, config, 'maxRetries'),
           concurrency: numberOption(opts, config, 'concurrency'),
-          stopOnError: opts.stopOnError !== undefined ? !!opts.stopOnError : !!config.stopOnError,
+          stopOnError: opts.stopOnError !== undefined ? Boolean(opts.stopOnError) : Boolean(config.stopOnError),
           identityId: opts.identityId === undefined ? config.identity : opts.identityId,
         }));
 

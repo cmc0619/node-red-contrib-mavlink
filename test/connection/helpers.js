@@ -83,7 +83,7 @@ function fakeWire() {
           sysid: ctx.sysid,
           compid: ctx.compid,
           seq: ctx.seq,
-          sign: !!ctx.sign,
+          sign: Boolean(ctx.sign),
           timestamp: ctx.timestamp,
           fields: message.fields,
         })

@@ -498,7 +498,7 @@
           className: opts.className,
         }).attr(opts.attrName, opts.attrValue);
       }
-      const isBitmask = !!spec.bitmask;
+      const isBitmask = Boolean(spec.bitmask);
       const sel = $('<select></select>')
         .addClass(opts.className)
         .attr(opts.attrName, opts.attrValue)
@@ -600,7 +600,7 @@
     if (!values.length) return null;
     let mask = 0n;
     for (let i = 0; i < values.length; i++) {
-      mask = mask | BigInt(String(values[i]));
+      mask |= BigInt(String(values[i]));
     }
     return Number(mask);
   };
@@ -694,7 +694,7 @@
     }
     if (!query) {
       if (!target.query) return {};
-      query = Object.assign({}, target.query);
+      query = { ...target.query };
     }
     addEnumNames(query, names);
     return query;
@@ -764,7 +764,7 @@
       const tierSelector = '#node-input-tier';
       const hasDelivery = source
         ? source.delivery !== undefined
-        : !!$(deliverySelector).length;
+        : Boolean($(deliverySelector).length);
       const mode = hasDelivery
         ? read('delivery', deliverySelector)
         : read('tier', tierSelector);
@@ -1246,11 +1246,9 @@
       return;
     }
     const suggested = split.suggested;
-    RED.mavlink.fillEnumSelect($select, suggested.concat(split.others), Object.assign({}, opts, {
-      groupOf(entry) {
+    RED.mavlink.fillEnumSelect($select, suggested.concat(split.others), { ...opts, groupOf(entry) {
         return suggested.indexOf(entry) !== -1 ? 'Suggested' : 'Other components';
-      },
-    }));
+      },});
   };
 
   /**
@@ -1897,7 +1895,7 @@
       dialect: {
         value: '',
         validate(v) {
-          if (currentMode(this) === 'build') return !!v;
+          if (currentMode(this) === 'build') return Boolean(v);
           return true;
         },
       },
@@ -1910,7 +1908,7 @@
         value: '',
         type: 'mavlink-vehicle',
         validate(v) {
-          if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') return !!v;
+          if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') return Boolean(v);
           return true;
         },
       },
@@ -1921,7 +1919,7 @@
         value: '',
         validate(v) {
           const dialect = currentDialect(this);
-          if (currentMode(this) === 'build' && dialect && dialect !== '__vehicle') return !!v;
+          if (currentMode(this) === 'build' && dialect && dialect !== '__vehicle') return Boolean(v);
           return true;
         },
       };
@@ -1940,7 +1938,7 @@
   RED.mavlink.toggleRow = function (selector, shown) {
     if (!selector) return;
     const $el = $(selector);
-    if ($el && $el.length) $el.toggle(!!shown);
+    if ($el && $el.length) $el.toggle(Boolean(shown));
   };
 
   /**
@@ -1958,12 +1956,12 @@
    */
   RED.mavlink.applyBuildTierRowVisibility = function (opts) {
     opts = opts || {};
-    const isBuild = !!opts.isBuild;
+    const isBuild = Boolean(opts.isBuild);
     const dialect = opts.dialect || '';
     const toggle = RED.mavlink.toggleRow;
     toggle(opts.dialectRow, isBuild);
     toggle(opts.vehicleRow, isBuild && dialect === '__vehicle');
-    toggle(opts.firmwareRow, isBuild && !!dialect && dialect !== '__vehicle');
+    toggle(opts.firmwareRow, isBuild && Boolean(dialect) && dialect !== '__vehicle');
     toggle(opts.connectionRow, !isBuild);
   };
 
@@ -1983,7 +1981,7 @@
    */
   RED.mavlink.applyCompanionTargetVisibility = function (opts) {
     opts = opts || {};
-    const isBuild = !!opts.isBuild;
+    const isBuild = Boolean(opts.isBuild);
     const identityId = opts.identityId != null ? opts.identityId : '';
     const hideCompid = opts.hideCompidWhenCompanion !== false;
     const isCompanion = !isBuild && RED.mavlink.identityRole(identityId) === 'companion';

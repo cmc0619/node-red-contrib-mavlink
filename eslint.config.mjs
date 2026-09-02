@@ -10,8 +10,8 @@ const nodeFiles = [
   'scripts/**/*.js',
   'test/**/*.js',
   'integration/**/*.js',
-  // The SITL measurement scripts and the repo hooks are Node programs too;
-  // unlisted, they were linted with no rules at all (found 2026-09-02).
+  // The SITL measurement scripts and the repo hooks are Node programs and
+  // lint under the same rules as the driver.
   'sitl/**/*.js',
   '.cursor/**/*.js',
 ];
@@ -52,6 +52,16 @@ const styleRules = {
   'no-else-return': 'error',
   'dot-notation': 'error',
   eqeqeq: ['error', 'always', { null: 'ignore' }],
+  // `Boolean(x)` over `!!x`, spread over Object.assign, `+=` over `x = x +`,
+  // a regex that starts with `=` spelled so it cannot read as `/=`, and no
+  // `${…}` inside a plain string — that one is the forgotten-backtick bug.
+  'no-implicit-coercion': 'error',
+  'prefer-object-spread': 'error',
+  'operator-assignment': 'error',
+  'no-div-regex': 'error',
+  'no-template-curly-in-string': 'error',
+  'no-lonely-if': 'error',
+  'prefer-exponentiation-operator': 'error',
 };
 
 const correctnessRules = {

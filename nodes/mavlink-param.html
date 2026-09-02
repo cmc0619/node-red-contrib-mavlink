@@ -2,9 +2,8 @@
   (function () {
   // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
   // (§6 Firmware XOR); Param's mode field is `delivery`.
-  const paramDefaults = Object.assign(
-    {
-      name: { value: '' },
+  const paramDefaults = {
+    name: { value: '' },
       identity: { value: '' },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
       // Without this, a drifted action falls through buildParamMessage's
@@ -130,10 +129,9 @@
       // Blank inherits the runtime's documented default; a present value is a
       // wait window, and a negative one expires before the vehicle can answer
       // and reads as vehicle silence.
-      timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) }
-    },
-    RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
-  );
+      timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) },
+    ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
+  };
 
   /**
    * Loaded definitions, keyed by *which* definitions they are, because Node-RED
@@ -444,7 +442,7 @@
             ? entry.description.toUpperCase() : '';
         }
         const hasDefs = _paramIds.length > 0;
-        $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && !!_defsNotice);
+        $('#row-param-defs-tip').toggle(!hasDefs && _defsLoaded && Boolean(_defsNotice));
         if (!hasDefs && _defsLoaded && _defsNotice) {
           $('#mav-param-defs-tip-text').text(_defsNotice);
         }
@@ -616,8 +614,8 @@
         const action = $('#node-input-action').val() || 'read';
         const $value = $('#node-input-value');
         const $select = $('#mav-param-value-select');
-        const hasBits = !!(action === 'set' && def && def.bits && def.bits.length);
-        const hasValues = !hasBits && !!(action === 'set' && def && def.values && def.values.length);
+        const hasBits = Boolean(action === 'set' && def && def.bits && def.bits.length);
+        const hasValues = !hasBits && Boolean(action === 'set' && def && def.values && def.values.length);
 
         // Shared helper (§6): sets the hover text on the input *and* its label,
         // and maintains the units hint. A private span here would be a second
@@ -650,12 +648,12 @@
           $select.attr('multiple', 'multiple').attr('size', Math.min(8, def.bits.length));
           for (let b = 0; b < def.bits.length; b++) {
             const bit = def.bits[b];
-            const flag = String(Math.pow(2, bit.bit));
+            const flag = String(2**bit.bit);
             $select.append(
               $('<option></option>').val(flag).text(`${bit.label} (bit ${bit.bit})`)
             );
             _valueBitEntries.push({ value: flag });
-            _valueDocMask = _valueDocMask | BigInt(flag);
+            _valueDocMask |= BigInt(flag);
           }
           const saved = bitmaskBoxValue($value.val());
           $select.val(saved === null

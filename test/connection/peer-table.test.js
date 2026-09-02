@@ -109,7 +109,7 @@ test('stale then expired transitions emit events', () => {
 
 test('an explicit heartbeatStaleMs/ExpireMs of undefined still gets the built-in default (owner ruling, 2026-08-14)', () => {
   // The Connection's blank-config path passes `heartbeatStaleMs: undefined`
-  // as an OWN property, not an omitted key — `{...DEFAULT_OPTIONS, ...options}`
+  // as an OWN property, not an omitted key — `{...DEFAULT_OPTIONS, ...options }`
   // would copy that `undefined` straight over the 5000/15000 default,
   // silently disabling staleness for every blank Stale/Expire field (the
   // most common deploy). This pins the `??` fix, not the truthy-key path

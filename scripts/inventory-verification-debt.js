@@ -11,7 +11,7 @@ const path = require('node:path');
 const designPath = path.join(__dirname, '..', 'DESIGN.md');
 const text = fs.readFileSync(designPath, 'utf8');
 const entries = [...text.matchAll(/^\*\*14\.(\d+)\s+(.+?)\*\*\s*(.*)$/gm)].map((m) => ({
-  num: +m[1],
+  num: Number(m[1]),
   title: m[2].trim(),
   tags: m[3].trim(),
   hasCheck: /✔/.test(m[3]),

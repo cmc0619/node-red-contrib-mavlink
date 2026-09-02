@@ -60,7 +60,7 @@ module.exports = function registerMavlinkConnection(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    node.disabled = !!config.disabled;
+    node.disabled = Boolean(config.disabled);
 
     const vehicleNode = RED.nodes.getNode(config.vehicle);
     const defaults = vehicleNode.getDefaults();
@@ -287,10 +287,10 @@ function buildSigning(config, credentials) {
 
   const signing = {
     linkId: Number(config.linkId),
-    signOutbound: !!config.signOutbound,
-    requireSigned: !!config.requireSigned,
-    acceptInvalid: !!config.acceptInvalid,
-    hasKey: !!(passphrase || keyHex),
+    signOutbound: Boolean(config.signOutbound),
+    requireSigned: Boolean(config.requireSigned),
+    acceptInvalid: Boolean(config.acceptInvalid),
+    hasKey: Boolean(passphrase || keyHex),
     key: null,
   };
   if (keyHex) {

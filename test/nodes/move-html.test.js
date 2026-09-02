@@ -581,7 +581,7 @@ test('mavlink-move dialect + vehicle defaults come from the shared Build-tier he
   // is proven in mavlink-editor-resource.test.js.
   assert.match(
     html,
-    /Object\.assign\([\s\S]*RED\.mavlink\.buildTierDialectDefaults\(\)\s*\)/,
+    /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\)/,
     'Move defaults must merge buildTierDialectDefaults()'
   );
 });
@@ -661,7 +661,7 @@ test('mavlink-move: Steer must command something — any combination of groups c
   // fields meaning.
   const defaults = loadNodeDefaults('mavlink-move');
   const verdict = (over) =>
-    defaults.action.validate.call(Object.assign({ id: 'm1', action: 'steer' }, over), 'steer', {});
+    defaults.action.validate.call({id: 'm1', action: 'steer', ...over }, 'steer', {});
 
   assert.equal(defaults.action.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
   assert.equal(defaults.action.validate.call({ id: 'm1', action: 'goto' }, 'goto', {}), true,
@@ -739,7 +739,7 @@ test('mavlink-move: position + acceleration without velocity reds', () => {
   // would see "sent" while the vehicle held position.
   const { action } = loadNodeDefaults('mavlink-move');
   const verdict = (over) =>
-    action.validate.call(Object.assign({ id: 'm1', action: 'steer' }, over), 'steer', {});
+    action.validate.call({id: 'm1', action: 'steer', ...over }, 'steer', {});
 
   assert.match(String(verdict({ north: '5', aUp: '0.5' })), /has no guided submode/);
   assert.match(String(verdict({ up: '5', aNorth: '0.5' })), /has no guided submode/,
@@ -759,7 +759,7 @@ test('mavlink-move: Steer cannot be set to the confirm tier', () => {
   // tier. Both fields are known at deploy, so the editor says so.
   const { delivery } = loadNodeDefaults('mavlink-move');
   const verdict = (over) => delivery.validate.call(
-    Object.assign({ id: 'm1' }, over), over.delivery, {}
+    {id: 'm1', ...over }, over.delivery, {}
   );
 
   assert.equal(delivery.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
@@ -854,7 +854,7 @@ test('mavlink-move: Offset reds on a PX4 profile rather than being silently rewr
   };
   const { reference } = loadNodeDefaults('mavlink-move', lookup);
   const verdict = (over) => reference.validate.call(
-    Object.assign({ id: 'm1', action: 'steer' }, over), over.reference, {}
+    {id: 'm1', action: 'steer', ...over }, over.reference, {}
   );
 
   assert.equal(reference.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
@@ -902,7 +902,7 @@ test('mavlink-move: terrain altRef reds on a PX4 profile rather than being silen
   };
   const { altRef } = loadNodeDefaults('mavlink-move', lookup);
   const verdict = (over) => altRef.validate.call(
-    Object.assign({ id: 'm1', action: 'goto' }, over), over.altRef, {}
+    {id: 'm1', action: 'goto', ...over }, over.altRef, {}
   );
 
   assert.match(
@@ -945,7 +945,7 @@ test('mavlink-move: Offset cannot be set to the stream tier', () => {
   // TTL. Same shape as the steer × confirm verdict, and known at deploy.
   const { delivery } = loadNodeDefaults('mavlink-move');
   const verdict = (over) => delivery.validate.call(
-    Object.assign({ id: 'm1' }, over), over.delivery, {}
+    {id: 'm1', ...over }, over.delivery, {}
   );
 
   assert.match(
@@ -996,7 +996,7 @@ test('mavlink-move: Turn heading is required and bounded 0-360, because the vehi
   // operator learns before flying.
   const defaults = loadNodeDefaults('mavlink-move');
   const verdict = (over) => defaults.heading.validate.call(
-    Object.assign({ id: 'm1', action: 'turn' }, over), over.heading, {}
+    {id: 'm1', action: 'turn', ...over }, over.heading, {}
   );
 
   assert.equal(defaults.heading.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
@@ -1029,7 +1029,7 @@ test('mavlink-move: Turn reds on a non-ArduPilot profile and names the escape', 
   };
   const { action } = loadNodeDefaults('mavlink-move', lookup);
   const verdict = (over) => action.validate.call(
-    Object.assign({ id: 'm1' }, over), over.action, {}
+    {id: 'm1', ...over }, over.action, {}
   );
 
   const denied = String(verdict({ action: 'turn', delivery: 'send', connection: 'connPx4' }));
@@ -1054,7 +1054,7 @@ test('mavlink-move: a command action cannot be set to the stream tier', () => {
   // the runtime would report `sent` — true of the wire, a lie about the tier.
   const { delivery } = loadNodeDefaults('mavlink-move');
   const verdict = (over) => delivery.validate.call(
-    Object.assign({ id: 'm1' }, over), over.delivery, {}
+    {id: 'm1', ...over }, over.delivery, {}
   );
 
   for (const action of ['turn', 'speed']) {
@@ -1090,7 +1090,7 @@ test('mavlink-move: only the acked actions can confirm — stated once, not per 
   // stream, command × stream). Generalised rather than special-cased again.
   const { delivery } = loadNodeDefaults('mavlink-move');
   const verdict = (over) => delivery.validate.call(
-    Object.assign({ id: 'm1' }, over), over.delivery, {}
+    {id: 'm1', ...over }, over.delivery, {}
   );
 
   for (const action of ['steer', 'attitude', 'manual']) {
@@ -1166,7 +1166,7 @@ test('mavlink-move: every `show` key actually reaches a toggle', () => {
   // markup toggles nothing at all, silently — so that is what is asserted.
   assert.match(
     html,
-    /Object\.keys\(show\)\.forEach\(\(key\) => \{[\s\S]{0,220}?\$\(`#row-move-\$\{key\}`\)\.toggle\(!!show\[key\]\);/,
+    /Object\.keys\(show\)\.forEach\(\(key\) => \{[\s\S]{0,220}?\$\(`#row-move-\$\{key\}`\)\.toggle\(Boolean\(show\[key\]\)\);/,
     'every key of the map is toggled by construction'
   );
   assert.match(
@@ -1542,7 +1542,7 @@ test('mavlink-move: an all-blank Attitude reds — every ignore bit set commands
   // that is the failure mode with no symptom (Codex, #303).
   const { action } = loadNodeDefaults('mavlink-move');
   const verdict = (over) => action.validate.call(
-    Object.assign({ id: 'm1', action: 'attitude' }, over), 'attitude', {}
+    {id: 'm1', action: 'attitude', ...over }, 'attitude', {}
   );
 
   assert.match(String(verdict({})), /Attitude needs at least one field filled/);

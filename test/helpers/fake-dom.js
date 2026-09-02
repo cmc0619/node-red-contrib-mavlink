@@ -206,7 +206,7 @@ class FakeElement {
   }
 
   toggle(visible) {
-    this.visible = !!visible;
+    this.visible = Boolean(visible);
     return this;
   }
 

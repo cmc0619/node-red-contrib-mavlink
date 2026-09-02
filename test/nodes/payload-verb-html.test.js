@@ -230,7 +230,7 @@ test('mavlink-payload Build dialect picker keeps empty invalid and offers Vehicl
   // is proven in mavlink-editor-resource.test.js.
   assert.match(
     payloadHtml,
-    /Object\.assign\([\s\S]*RED\.mavlink\.buildTierDialectDefaults\(\)\s*\)/,
+    /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\)/,
     'Payload defaults must merge buildTierDialectDefaults()'
   );
   assert.match(payloadHtml, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');

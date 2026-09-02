@@ -9,9 +9,8 @@
 
   // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
   // (§6 Firmware XOR); Mission's mode field is `delivery` (default confirm).
-  const missionDefaults = Object.assign(
-    {
-      name: { value: '' },
+  const missionDefaults = {
+    name: { value: '' },
       identity: { value: '' },
       delivery: { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'confirm']) },
       operation: { value: 'download', validate: RED.mavlink.oneOf(['download', 'upload', 'clear']) },
@@ -84,10 +83,9 @@
         },
       },
       timeout: { value: '', validate: RED.mavlink.validateAtLeast(0) },
-      maxRetries: { value: '', validate: RED.mavlink.validateAtLeast(0, { integer: true }) }
-    },
-    RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
-  );
+      maxRetries: { value: '', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
+    ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
+  };
 
   RED.nodes.registerType('mavlink-mission', {
     category: 'mavlink',

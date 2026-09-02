@@ -47,7 +47,7 @@ test('Command Advanced MAV_CMD select and enum options use catalog descriptions'
   // Preset rows merge the whole catalog param spec (description included) and
   // render through advancedParamInput → the shared paramControl, which titles
   // controls and their enum options from it.
-  assert.match(html, /Object\.assign\(\{\}, catalogParamByIndex/);
+  assert.match(html, /\{ \.\.\.catalogParamByIndex/);
   assert.match(html, /RED\.mavlink\.paramControl\(spec, enums, \{/);
   assert.match(resourceScript, /if \(entry\.description\) \$opt\.attr\('title', entry\.description\)/);
   assert.match(resourceScript, /RED\.mavlink\.paramControl\s*=\s*function[\s\S]*?spec\.description \|\| ''/);
