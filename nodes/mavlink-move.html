@@ -108,7 +108,7 @@
     }
     return {
       family,
-      gated: !!allowed,
+      gated: Boolean(allowed),
       allows,
       reason(action) {
         if (allows(action)) return null;
@@ -317,9 +317,8 @@
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Move's mode field is `delivery` and it has no firmware selector.
-  const moveDefaults = Object.assign(
-    {
-      name: { value: '' },
+  const moveDefaults = {
+    name: { value: '' },
       identity: { value: '' },
       // The dialog only ever offers the tiers DELIVERY_OPTIONS lists for the
       // chosen action, so a Steer node cannot be *set* to confirm through the
@@ -725,10 +724,9 @@
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
           return (Number.isFinite(Number(v)) && Number(v) >= 0) || 'must be a number of milliseconds (0 = no TTL)';
         },
-      }
-    },
-    RED.mavlink.buildTierDialectDefaults()
-  );
+      },
+    ...RED.mavlink.buildTierDialectDefaults()
+  };
 
   RED.nodes.registerType('mavlink-move', {
     category: 'mavlink',
@@ -1029,9 +1027,9 @@
         const shown = {};
         STEER_GROUPS.forEach((entry) => {
           const name = entry[0];
-          shown[name] = isSteer && (planeSteer ? name === 'position' : !!disclosed[name]);
+          shown[name] = isSteer && (planeSteer ? name === 'position' : Boolean(disclosed[name]));
           const $box = $(`#move-group-${name}`);
-          if ($box.length) $box.prop('checked', !!disclosed[name]);
+          if ($box.length) $box.prop('checked', Boolean(disclosed[name]));
         });
         return shown;
       }
@@ -1215,7 +1213,7 @@
         // already toggled them above — listing them here would fight it.
         Object.keys(show).forEach((key) => {
           if (HELPER_ROWS.indexOf(key) !== -1) return;
-          $(`#row-move-${key}`).toggle(!!show[key]);
+          $(`#row-move-${key}`).toggle(Boolean(show[key]));
         });
 
         // Labels follow the reference so the operator never translates

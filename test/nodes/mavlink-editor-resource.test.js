@@ -48,7 +48,7 @@ function loadResource(values = {}, nodeLookup = {}, opts = {}) {
         return has ? values[selector] : undefined;
       },
       toggle(shown) {
-        toggled[selector] = !!shown;
+        toggled[selector] = Boolean(shown);
         return this;
       },
     };
@@ -905,7 +905,7 @@ test('applyCompanionTargetVisibility hides both rows for wire companion', () => 
     $(selector) {
       return {
         length: 1,
-        toggle(shown) { toggles[selector] = !!shown; },
+        toggle(shown) { toggles[selector] = Boolean(shown); },
       };
     },
   };
@@ -1056,7 +1056,7 @@ function loadResourceWithElements() {
         props[k] = v;
         return api;
       },
-      is(sel) { return sel === ':checked' ? !!props.checked : false; },
+      is(sel) { return sel === ':checked' ? Boolean(props.checked) : false; },
     };
     return api;
   }
@@ -1166,7 +1166,7 @@ function paramHarness() {
         props[k] = v;
         return api;
       },
-      is(sel) { return sel === ':checked' ? !!props.checked : false; },
+      is(sel) { return sel === ':checked' ? Boolean(props.checked) : false; },
       append(child) { options.push(child); return api; },
       val(v) {
         if (v === undefined) return api.value;

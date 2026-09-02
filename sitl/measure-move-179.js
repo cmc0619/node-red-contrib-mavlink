@@ -149,7 +149,7 @@ function attachSampler(conn, sysid) {
         kind: 'hb',
         baseMode: Number(f.base_mode),
         customMode: Number(f.custom_mode),
-        armed: !!(Number(f.base_mode) & 128),
+        armed: Boolean(Number(f.base_mode) & 128),
       });
     } else if (decoded.name === 'STATUSTEXT') {
       samples.push({
@@ -539,7 +539,7 @@ async function probePx4OffboardRate(conn, sysid, results) {
     sendCmd(conn, sysid, 400, [1, 0, 0, 0, 0, 0, 0]);
     await sleep(1500);
   }
-  const armed = !!conn.peerTable.getComponent(sysid, 1)?.armed;
+  const armed = Boolean(conn.peerTable.getComponent(sysid, 1)?.armed);
   note(results, 'px4-armed', armed, armed ? 'armed' : 'could not arm — rate probe degraded');
   if (!armed) {
     note(results, 'px4-offboard-rate', true, 'skipped — not armed', {});
@@ -570,7 +570,7 @@ async function probePx4OffboardRate(conn, sysid, results) {
     const t0 = Date.now();
     await sleep(8000);
     const peerEnd = conn.peerTable.getComponent(sysid, 1)?.flightMode;
-    const armedEnd = !!conn.peerTable.getComponent(sysid, 1)?.armed;
+    const armedEnd = Boolean(conn.peerTable.getComponent(sysid, 1)?.armed);
     stream.stop();
     unsub();
     const hbs = samples.filter((s) => s.kind === 'hb' && s.t >= t0 + 1000);

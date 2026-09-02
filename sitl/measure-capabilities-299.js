@@ -183,7 +183,7 @@ async function measureStack(label, connOpts, results) {
     : peer && peer.capabilities;
   const bits = caps != null ? capBits(caps) : null;
 
-  note(results, `${label}-request`, !!answer,
+  note(results, `${label}-request`, Boolean(answer),
     answer
       ? `AUTOPILOT_VERSION in ${latencyMs}ms caps=${bits && bits.raw}`
       : `no reply within ${REQUEST_TIMEOUT_MS}ms`,

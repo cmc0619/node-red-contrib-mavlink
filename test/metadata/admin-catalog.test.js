@@ -58,7 +58,7 @@ test('registerDialectCatalogRoute wires fromBundle / fromDialect', () => {
   registerDialectCatalogRoute(RED, {
     path: '/mavlink/test/catalog',
     logLabel: 'test',
-    fromBundle: (_api, bundle, dialect) => ({ via: 'bundle', dialect, ok: !!bundle }),
+    fromBundle: (_api, bundle, dialect) => ({ via: 'bundle', dialect, ok: Boolean(bundle) }),
     fromDialect: (_api, dialect) => ({ via: 'dialect', dialect }),
   });
   const handler = handlers.get('/mavlink/test/catalog');

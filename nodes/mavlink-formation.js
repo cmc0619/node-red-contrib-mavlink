@@ -247,7 +247,7 @@ function candidate(peer) {
  * @returns {boolean}
  */
 function canAnchor(entry) {
-  return !!entry.component && isActive(entry.component) && !!entry.component.position;
+  return Boolean(entry.component) && isActive(entry.component) && Boolean(entry.component.position);
 }
 
 /**

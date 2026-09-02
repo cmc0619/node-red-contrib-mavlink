@@ -300,9 +300,8 @@
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Command's mode field is `delivery` and it has no Firmware field.
-  const commandDefaults = Object.assign(
-    {
-      name:              { value: '' },
+  const commandDefaults = {
+    name:              { value: '' },
       mode:              { value: 'preset', validate: RED.mavlink.oneOf(['preset', 'advanced']) },
       // The dropdown cannot produce an unknown preset; a hand-edited flow can.
       // The runtime does not repair it (AGENTS.md, input trust) — `getPreset`
@@ -407,9 +406,8 @@
           return true;
         },
       },
-    },
-    RED.mavlink.buildTierDialectDefaults()
-  );
+    ...RED.mavlink.buildTierDialectDefaults()
+  };
 
   RED.nodes.registerType('mavlink-command', {
     category: 'mavlink',
@@ -615,7 +613,7 @@
 
       // ── Delivery dropdown ──────────────────────────────────────────────────
       function refreshDelivery() {
-        const hasConn = !!$('#node-input-connection').val();
+        const hasConn = Boolean($('#node-input-connection').val());
         const mode = $('#node-input-mode').val();
         let hasCompletion = false;
         if (mode === 'preset') {
@@ -727,11 +725,11 @@
       }
 
       function needsPresetMessages(specs) {
-        return specs.some((spec) => !!spec.messages);
+        return specs.some((spec) => Boolean(spec.messages));
       }
 
       function presetMessagesReady() {
-        return !!presetMessagesCatalog;
+        return Boolean(presetMessagesCatalog);
       }
 
       function messageEntries(catalog) {
@@ -976,7 +974,7 @@
             // numeric inputs) rather than an empty form.
             for (const spec of paramSpec) {
               // Curation keys override the catalog spec; omitted keys inherit.
-              const merged = Object.assign({}, catalogParamByIndex(catalog, commandId, spec.index) || {}, spec);
+              const merged = { ...catalogParamByIndex(catalog, commandId, spec.index) || {}, ...spec };
               container.append(RED.mavlink.formRow(advancedParamLabel(merged), presetParamInput(merged, catalog.enums || {}, commandId)));
             }
             node._mavParamsRendered = true;

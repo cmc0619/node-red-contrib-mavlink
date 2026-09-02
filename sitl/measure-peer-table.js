@@ -297,24 +297,24 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
   note(results, `${tag}-armed-active`, c.armed === true && c.state === 'active',
     `armed=${c.armed} state=${c.state}`);
 
-  const epOk = !!c.primaryEndpoint && c.endpoints && c.endpoints.size > 0;
+  const epOk = Boolean(c.primaryEndpoint) && c.endpoints && c.endpoints.size > 0;
   note(results, `${tag}-endpoints`, epOk,
     epOk ? `primary=${c.primaryEndpoint} n=${c.endpoints.size}` : 'no primary endpoint');
 
   const pos = c.position;
-  const posOk = !!(pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lon)
+  const posOk = Boolean(pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lon)
     && Number(pos.relativeAlt) > (opts.minRelMm || 5000));
   note(results, `${tag}-position`, posOk,
     pos ? `lat=${pos.lat} lon=${pos.lon} relMm=${pos.relativeAlt} hdg=${pos.heading}` : 'null',
     { position: pos });
 
   const gps = c.gps;
-  const gpsOk = !!(gps && Number(gps.fixType) >= 3 && Number(gps.satellites) > 0);
+  const gpsOk = Boolean(gps && Number(gps.fixType) >= 3 && Number(gps.satellites) > 0);
   note(results, `${tag}-gps`, gpsOk,
     gps ? `fixType=${gps.fixType} sats=${gps.satellites}` : 'null', { gps });
 
   const bat = c.battery;
-  const batOk = !!(bat && (
+  const batOk = Boolean(bat && (
     (bat.batteryVoltage != null && bat.batteryVoltage !== 65535)
     || bat.remaining != null
     || bat.batteryRemaining != null
@@ -322,7 +322,7 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
   note(results, `${tag}-battery`, batOk, bat ? JSON.stringify(bat) : 'null', { battery: bat });
 
   const home = c.home;
-  const homeOk = !!(home && Number.isFinite(home.lat) && Number.isFinite(home.lon));
+  const homeOk = Boolean(home && Number.isFinite(home.lat) && Number.isFinite(home.lon));
   note(results, `${tag}-home`, homeOk, home ? JSON.stringify(home) : 'null', { home });
 
   for (const [sec, maxAge] of [
@@ -342,7 +342,7 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
   }
 
   const ver = c.autopilotVersion;
-  const verOk = !!(ver && ver.flightSwVersion != null);
+  const verOk = Boolean(ver && ver.flightSwVersion != null);
   note(results, `${tag}-autopilot-version`, verOk,
     verOk ? JSON.stringify(ver) : 'no AUTOPILOT_VERSION (PARTIAL-ok if SIH mute)',
     { autopilotVersion: ver, capabilities: c.capabilities });
@@ -353,7 +353,7 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
     { count: texts.length, sample: texts.slice(-3) });
 
   // Snapshot projection: units converted, same presence.
-  const snapOk = !!(snap && snap.armed === true && snap.position
+  const snapOk = Boolean(snap && snap.armed === true && snap.position
     && Number(snap.position.relativeAlt) > (opts.minRelM || 5)
     && snap.gps && Number(snap.gps.fixType) >= 3
     && snap.battery
@@ -384,7 +384,7 @@ async function runStack(label, connOpts, flyPrep, results) {
     const moved = before && after
       && (Math.abs(Number(after.lat) - Number(before.lat)) > 50
         || Math.abs(Number(after.lon) - Number(before.lon)) > 50);
-    note(results, `${label}-moved`, !!moved,
+    note(results, `${label}-moved`, Boolean(moved),
       moved ? 'lat/lon changed during velocity legs' : 'lat/lon unchanged (still assert enrichment)',
       { before, after });
     assertPeerFields(conn, connOpts.sysid, results, label, {

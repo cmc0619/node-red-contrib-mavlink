@@ -15,7 +15,7 @@ const { StubConnection } = require('./stubs/connection');
 
 /** Load the node type against a fresh RED stub with the given connection node. */
 function loadNode(connNode, extraNodes) {
-  const nodes = Object.assign({ conn: connNode }, extraNodes || {});
+  const nodes = {conn: connNode, ...extraNodes || {}};
   const RED = {
     nodes: {
       types: {},

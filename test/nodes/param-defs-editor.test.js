@@ -345,12 +345,10 @@ function mountValueField(defs, values) {
   const start = paramHtml.indexOf('let _paramDefs = {};');
   const end = paramHtml.indexOf('/* Reload defs when tier-influencing fields change. */', start);
   assert.ok(start >= 0 && end > start, 'Param definition loader is present');
-  const seed = Object.assign({
-    '#node-input-delivery': 'build',
+  const seed = {'#node-input-delivery': 'build',
     '#node-input-dialect': '__vehicle',
     '#node-input-vehicle': 'profile-1',
-    '#node-input-action': 'set',
-  }, values || {});
+    '#node-input-action': 'set', ...values || {}};
 
   const { element, $, requests } = makeDom(seed);
 
@@ -740,7 +738,7 @@ function mountActionRows(action, lookup) {
     applyTypeRowVisibility: () => element('#row-paramType').toggle(action === 'set'),
   };
   context.RED.mavlink.toggleRow = (selector, shown) => {
-    if (selector) element(selector).toggle(!!shown);
+    if (selector) element(selector).toggle(Boolean(shown));
   };
   vm.runInNewContext(
     `${paramHtml.slice(start, end + '\n      }'.length)}\nthis.run = applyActionRows;`,

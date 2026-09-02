@@ -125,7 +125,7 @@ const BOUND = {
 function boundValidate(conn, value) {
   const defaults = loadNodeDefaults('mavlink-connection', BOUND);
   return defaults.additionalIdentities.validate.call(
-    Object.assign({ id: 'c1', vehicle: 'veh' }, conn),
+    {id: 'c1', vehicle: 'veh', ...conn },
     value,
     {}
   );

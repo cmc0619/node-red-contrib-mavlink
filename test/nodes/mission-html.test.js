@@ -36,7 +36,7 @@ test('mavlink-mission dialect + vehicle + firmware defaults come from the shared
   // mavlink-editor-resource.test.js.
   assert.match(
     html,
-    /Object\.assign\([\s\S]*RED\.mavlink\.buildTierDialectDefaults\(\{\s*withFirmware:\s*true\s*\}\)\s*\)/,
+    /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\{\s*withFirmware:\s*true\s*\}\)/,
     'Mission defaults must merge buildTierDialectDefaults({ withFirmware: true })'
   );
 });
@@ -145,7 +145,7 @@ test('mavlink-mission items validator reds per-item: uint16 command and family r
   // Payload-supplied items ride.
   const { items } = loadNodeDefaults('mavlink-mission');
   const verdict = (over, arr) => items.validate.call(
-    Object.assign({ id: 'm1', operation: 'upload', missionType: 'mission' }, over),
+    {id: 'm1', operation: 'upload', missionType: 'mission', ...over },
     JSON.stringify(arr), {}
   );
 

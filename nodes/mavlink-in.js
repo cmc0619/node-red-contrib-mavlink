@@ -106,9 +106,9 @@ module.exports = function registerMavlinkIn(RED) {
     // Unknown frames are opt-in. A msgid the dialect does not carry arrives as
     // UNKNOWN_<id> (#344); that is a diagnostic, not traffic a working flow
     // asked for, so an In node stays quiet about it until the box is ticked.
-    const showUnknown = !!config.showUnknown;
+    const showUnknown = Boolean(config.showUnknown);
 
-    const changedOnly = !!config.changedOnly;
+    const changedOnly = Boolean(config.changedOnly);
     // Changed-only field subset: compare only these fields when set, so a
     // hot timestamp does not make every frame look "changed".
     const changedFields = parseNameList(config.changedFields);

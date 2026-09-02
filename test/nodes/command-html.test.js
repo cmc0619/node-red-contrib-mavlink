@@ -209,7 +209,7 @@ test('preset rows render through the Advanced catalog path', () => {
   assert.ok(!/loadEnumsCatalog/.test(html), 'no separate preset enum fetch — enums ride the commands catalog');
   assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/, 'message ids load via shared loadCatalog');
   assert.match(presetBlock, /catalogParamByIndex\(catalog, commandId, spec\.index\)/, 'each row merges the catalog param spec');
-  assert.match(presetBlock, /Object\.assign\(\{\}, catalogParamByIndex/, 'curation keys override, omitted keys inherit');
+  assert.match(presetBlock, /\{ \.\.\.catalogParamByIndex/, 'curation keys override, omitted keys inherit');
   assert.match(presetBlock, /presetParamInput\(merged, catalog\.enums \|\| \{\}, commandId\)/, 'rows render with catalog enums');
   // The command id is threaded in, not re-read from the DOM: Preset resolves
   // it from the preset, Advanced from #node-input-advancedCommand, and the
@@ -294,7 +294,7 @@ test('command Build dialect + vehicle defaults come from the shared Build-tier h
   // behaviour is proven in mavlink-editor-resource.test.js.
   assert.match(
     html,
-    /Object\.assign\([\s\S]*RED\.mavlink\.buildTierDialectDefaults\(\)\s*\)/,
+    /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\)/,
     'Command defaults must merge buildTierDialectDefaults()'
   );
   assert.doesNotMatch(html, /if \(tier === ['"]build['"]\) return !!v/, 'no pasted dialect validator');
@@ -530,7 +530,7 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   // whole of what stops a Set Home telling the vehicle its home is 0,0, or an
   // Orbit centred on null island.
   const { params } = loadNodeDefaults('mavlink-command');
-  const cfg = (over) => Object.assign({ id: 'c1', mode: 'preset' }, over);
+  const cfg = (over) => ({id: 'c1', mode: 'preset', ...over });
   const verdict = (over, blob) => params.validate.call(cfg(over), JSON.stringify(blob), {});
 
   assert.equal(params.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
@@ -753,7 +753,7 @@ test('mavlink-command: a form that rendered nothing falls back to the saved para
     dom: { '#node-input-params': { val: saved }, '.param-input': { items } },
     editStack: [{ id: 'c1' }],
   }).params.validate.call(
-    Object.assign({ id: 'c1', mode: 'preset', preset: 'set_home' }, over), saved, {}
+    {id: 'c1', mode: 'preset', preset: 'set_home', ...over }, saved, {}
   );
 
   // Set Home does declare param rows, so "no controls, flag off" is not a
@@ -782,7 +782,7 @@ test('mavlink-command: a NaN centre cannot ride COMMAND_INT', () => {
   // message (Codex, #286).
   const { params } = loadNodeDefaults('mavlink-command');
   const verdict = (over, blob) => params.validate.call(
-    Object.assign({ id: 'c1', mode: 'preset', preset: 'orbit' }, over), JSON.stringify(blob), {}
+    {id: 'c1', mode: 'preset', preset: 'orbit', ...over }, JSON.stringify(blob), {}
   );
 
   assert.match(String(verdict({}, {})), /COMMAND_INT cannot carry/,
@@ -818,7 +818,7 @@ test('mavlink-command: an unknown preset reds instead of resolving no command', 
   // only layer that can red a typo before it runs.
   const { preset } = loadNodeDefaults('mavlink-command');
   const verdict = (over) => preset.validate.call(
-    Object.assign({ id: 'c1', mode: 'preset' }, over), over.preset, {}
+    {id: 'c1', mode: 'preset', ...over }, over.preset, {}
   );
 
   assert.equal(preset.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');

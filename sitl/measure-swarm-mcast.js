@@ -216,7 +216,7 @@ async function measureLoopback(results) {
   await listener.start();
   await talker.start();
   await sleep(3000);
-  const heard = !!listener.peerTable.getComponent(253, 192);
+  const heard = Boolean(listener.peerTable.getComponent(253, 192));
   note(results, 'mcast-loopback-two-members', heard,
     heard ? 'listener saw talker heartbeat on shared multicast group' : 'no cross-member visibility');
   await new Promise((resolve) => talker.close(() => resolve()));

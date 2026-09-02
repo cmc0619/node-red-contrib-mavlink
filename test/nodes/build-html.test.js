@@ -51,7 +51,7 @@ test('Build dialect + vehicle defaults come from the shared Build-tier helper', 
   // mavlink-editor-resource.test.js — here we only assert the delegation.
   assert.match(
     html,
-    /Object\.assign\([\s\S]*RED\.mavlink\.buildTierDialectDefaults\(\{\s*modeField:\s*'tier'\s*\}\)\s*\)/,
+    /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\{\s*modeField:\s*'tier'\s*\}\)/,
     'Build defaults must merge buildTierDialectDefaults({ modeField: tier })'
   );
 });

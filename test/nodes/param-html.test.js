@@ -71,7 +71,7 @@ test('mavlink-param dialect + vehicle + firmware defaults come from the shared h
   // mavlink-editor-resource.test.js.
   assert.match(
     html,
-    /Object\.assign\([\s\S]*RED\.mavlink\.buildTierDialectDefaults\(\{\s*withFirmware:\s*true\s*\}\)\s*\)/,
+    /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\{\s*withFirmware:\s*true\s*\}\)/,
     'Param defaults must merge buildTierDialectDefaults({ withFirmware: true })'
   );
 });

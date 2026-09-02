@@ -81,9 +81,8 @@
     // Dialect + Vehicle validators are the shared Build-tier rule (§6); the
     // Build node's mode field is `tier`. Connection stays local because it is
     // required on wire tiers only — the inverse of the dialect rule.
-    const buildDefaults = Object.assign(
-      {
-        name:        { value: '' },
+    const buildDefaults = {
+      name:        { value: '' },
         // A name this dialect cannot resolve — blank, or a name the catalog
         // does not carry — resolves no message metadata, so every input fails
         // with "dialect or message unresolved". Config validity is the
@@ -138,9 +137,8 @@
         // looks configured and does nothing. Blank is 0, which is the real
         // "off" value, so blank stays legal.
         repeatMs:    { value: 0, validate: RED.mavlink.validateAtLeast(0) },
-      },
-      RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' })
-    );
+      ...RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' })
+    };
 
     RED.nodes.registerType('mavlink-build', {
       category: 'mavlink',

@@ -235,10 +235,8 @@ function makeHarness() {
 }
 
 function commandNode(over) {
-  return Object.assign({
-    id: 'cmd-1', mode: 'preset', preset: '', advancedCommand: '',
-    params: '{}', dialect: '', connection: 'conn-1', vehicle: '', identity: '',
-  }, over);
+  return {id: 'cmd-1', mode: 'preset', preset: '', advancedCommand: '',
+    params: '{}', dialect: '', connection: 'conn-1', vehicle: '', identity: '', ...over };
 }
 
 test('a closed dialog\'s late preset response cannot reprogram the dialog now open', () => {

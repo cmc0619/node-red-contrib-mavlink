@@ -19,9 +19,8 @@
      */
     const REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
 
-    const payloadDefaults = Object.assign(
-      {
-        name: { value: '' },
+    const payloadDefaults = {
+      name: { value: '' },
         identity: { value: '' },
         // The tiers the runtime dispatches (§5): a drifted tier matches no
         // case there and completes as a no-op, so the red ring is the only
@@ -73,10 +72,9 @@
             }
             return true;
           },
-        }
-      },
-      RED.mavlink.buildTierDialectDefaults()
-    );
+        },
+      ...RED.mavlink.buildTierDialectDefaults()
+    };
 
     /**
      * Label for a field the dialect does not name. Command params carry a
@@ -124,7 +122,7 @@
       // verb's field has no meaning in the next verb's, and `mode` / `action`
       // are shared keys whose enums differ per device. Pick a new verb and you
       // get that verb's defaults.
-      const stash = Object.assign({}, node.values);
+      const stash = { ...node.values };
 
       function selection() {
         return {
@@ -236,7 +234,7 @@
       function applyCarrier(data) {
         const sel = selection();
         const matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
-          && !!(data && data.carrierMatters);
+          && Boolean(data && data.carrierMatters);
         if (!matters) $('#node-input-sendAs').val('int');
         $('#row-payload-sendAs').toggle(matters);
         applyFrameRow(matters);
@@ -367,7 +365,7 @@
       RED.mavlink.populateDialectSelect($dialect, { saved: node.dialect || '' });
 
       node._payloadSave = function () {
-        return Object.assign({}, stash, collectValues());
+        return { ...stash, ...collectValues() };
       };
 
       RED.mavlink.refreshVerbOptions({ saved: node.verb });
