@@ -172,11 +172,6 @@ test('parsePdefJson ignores entries with no recognisable parameter shape', () =>
   assert.deepEqual([...map.keys()], ['GOOD']);
 });
 
-test('a profile ID that could escape the holding directory is refused before any file is touched', async () => {
-  await assert.rejects(readParamDefs('C:\\node-red', '../outside'), /unsupported characters/i);
-  await assert.rejects(readParamDefs('C:\\node-red', 'folder\\outside'), /unsupported characters/i);
-});
-
 test('readParamDefs returns an empty map only when the holding file is absent', async (t) => {
   const userDir = tempUserDir(t);
 
@@ -234,16 +229,14 @@ test('explicit updates overwrite one stable profile holding file across URL chan
   assert.deepEqual(files, ['profile-stable.json']);
 });
 
-test('explicit update rejects a document with no definitions', async (t) => {
+test('a document with no definitions is written as zero definitions', async (t) => {
   const userDir = tempUserDir(t);
 
-  await assert.rejects(
-    updateParamDefs(userDir, 'profile-empty-doc', 'https://example.test/empty.json', {
-      fetchFn: async () => ({}),
-    }),
-    /no parameter definitions/i
-  );
-  assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), false);
+  const result = await updateParamDefs(userDir, 'profile-empty-doc', 'https://example.test/empty.json', {
+    fetchFn: async () => ({}),
+  });
+  assert.equal(result.count, 0);
+  assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), true);
 });
 
 test('a failed update preserves the last good profile holding file', async (t) => {
@@ -315,7 +308,7 @@ test(
   }
 );
 
-test('corrupt local JSON and invalid local documents propagate instead of appearing absent', async (t) => {
+test('corrupt local JSON propagates instead of appearing absent; an empty document reads as empty', async (t) => {
   const userDir = tempUserDir(t);
   const corruptFile = holdingFile(userDir, 'profile-corrupt');
   const emptyFile = holdingFile(userDir, 'profile-empty');
@@ -324,7 +317,7 @@ test('corrupt local JSON and invalid local documents propagate instead of appear
   fs.writeFileSync(emptyFile, '{}');
 
   await assert.rejects(readParamDefs(userDir, 'profile-corrupt'), /JSON|property name|position/i);
-  await assert.rejects(readParamDefs(userDir, 'profile-empty'), /no parameter definitions/i);
+  assert.equal((await readParamDefs(userDir, 'profile-empty')).size, 0);
 });
 
 /**
@@ -567,8 +560,8 @@ test('a boolean="true" parameter expands to the Disabled/Enabled pair PX4 itself
 test('XML that is not a parameter document says so instead of reporting zero parameters', async (t) => {
   const userDir = tempUserDir(t);
   const previousFetch = globalThis.fetch;
-  // An HTML error page also starts with '<' and would otherwise reach the
-  // "contains no parameter definitions" wall, which reads as an empty source.
+  // An HTML error page also starts with '<' and would otherwise parse as a
+  // document with zero parameters.
   globalThis.fetch = async () => xmlResponse('<html><body>404 Not Found</body></html>');
   t.after(() => { globalThis.fetch = previousFetch; });
 

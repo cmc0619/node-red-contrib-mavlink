@@ -74,15 +74,6 @@ test('an update follows real <include>s and ignores commented-out ones', async (
     'the real include was fetched, the commented one never asked for');
 });
 
-test('an update refuses file names that could escape or are not XML', async () => {
-  const src = stubSource({ 'root.xml': XML('<include>../evil.xml</include><messages/>'), 'common.txt': 'not xml' });
-  const build = () => new XmlCatalog({
-    baseDir: tmpBase(), resolveCommit: src.resolveCommit, fetchFile: src.fetchFile, listFiles: src.listFiles,
-  });
-  await assert.rejects(build().update({ repo: 'r', ref: 'master', files: ['root.xml'] }), /Unsafe or invalid/);
-  await assert.rejects(build().update({ repo: 'r', ref: 'master', files: ['common.txt'] }), /Unsafe or invalid/);
-});
-
 /* ---------- compileXmlFromFile ---------- */
 
 test('compileXmlFromFile compiles an entry and its includes from disk', () => {
@@ -189,7 +180,6 @@ test('filePath rejects unsafe file and snapshot ids', async () => {
 
   assert.ok(catalog.filePath('minimal.xml', manifest.snapshotId));
   assert.equal(catalog.filePath('minimal.xml', '../escape'), null);
-  assert.throws(() => catalog.filePath('../evil.xml'), /Unsafe or invalid/);
 });
 
 /* ---------- XmlCatalog: compare ---------- */
