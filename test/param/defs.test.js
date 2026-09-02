@@ -233,7 +233,7 @@ test('a document with no definitions is written as zero definitions', async (t) 
   const userDir = tempUserDir(t);
 
   const result = await updateParamDefs(userDir, 'profile-empty-doc', 'https://example.test/empty.json', {
-    fetchFn: async () => ({}),
+    fetchFn: () => Promise.resolve({}),
   });
   assert.equal(result.count, 0);
   assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), true);
