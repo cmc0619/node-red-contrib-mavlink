@@ -1123,6 +1123,21 @@ runtime doorguard" sentence stands for every other discard; this is the one wire
 that lives in the Connection, because the peer table it protects lives there.
 *Check:* `rg -n 'frame.sysid === 0' lib/connection/runtime.js` — one match, in `_onFrame`.
 
+**14.139 The PX4 bytewise param union rides a JavaScript number; the two signaling-NaN bands are accepted, not guarded.** ✔ (owner ruling, 2026-09-02)
+An INT32 whose bit pattern is a *signaling* NaN does not survive `readFloatLE` → `writeFloatLE`:
+the float32→double conversion sets the quiet bit, so a PARAM_SET writes a different integer.
+The bands are 0x7F800001–0x7FBFFFFF (2 139 095 041 to 2 143 289 343) and 0xFF800001–0xFFBFFFFF
+(−8 388 607 to −4 194 305); quiet NaNs, which is every small negative down to −4 194 304, survive.
+Measured 2026-09-02 (node 22, x86-64): 86 482 of 172 962 values sampled across both bands
+corrupt, none outside them. Against the shipped PX4 definitions: 0 of 541 INT32 parameters
+declare a range reaching either band; the one that can pass through is `LND_FLIGHT_T_LO`, a
+vehicle-written microsecond counter. pymavlink's `struct.pack('>i')` → `unpack('>f')` path
+corrupts the same values identically and has shipped that way for years; QGC and MAVSDK carry
+the bits in a C++ `float` and do not; PX4 itself `memcpy`s with no NaN handling and no caveat.
+The codec's `assertFloatBitsSurvive` refusal was deleted in #428 and stays deleted: a guard
+for values no shipped parameter produces is §0 noise. Codex raised it on #428; this is the answer.
+*Check:* `node -e "const b=Buffer.alloc(4);b.writeInt32LE(2139095041);const c=Buffer.alloc(4);c.writeFloatLE(b.readFloatLE(0));console.log(c.readInt32LE(0))"` prints `2143289345`; after #428, `rg -n assertFloatBitsSurvive lib` — no matches.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
