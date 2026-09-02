@@ -32,8 +32,8 @@ test('a missing include fails loud, naming the include and the referrer', () => 
   assert.throws(() => compileXml({ 'entry.xml': entry }, 'entry.xml'), /common\.xml.*included by 'entry\.xml'/);
 });
 
-test('the entry file must be present', () => {
-  assert.throws(() => compileXml({ 'other.xml': XML('') }, 'entry.xml'), /Entry dialect file 'entry\.xml'/);
+test('a missing entry file fails loud, naming it', () => {
+  assert.throws(() => compileXml({ 'other.xml': XML('') }, 'entry.xml'), /Dialect include 'entry\.xml'/);
 });
 
 test('a cyclic include fails loud, naming the cycle', () => {

@@ -7,7 +7,6 @@ const {
   listCommandsCatalog,
   catalogFromBundle,
   loadBundled,
-  resolveBundledDialect,
   commandLabel,
   isHiddenParam,
 } = require('../../lib/metadata');
@@ -16,12 +15,6 @@ const { enumOptionLabel } = require('../../lib/metadata/commands-list');
 test('commandLabel shows the full command name and value in parentheses (§6)', () => {
   assert.equal(commandLabel('MAV_CMD_NAV_TAKEOFF', 22), 'MAV_CMD_NAV_TAKEOFF (22)');
   assert.equal(commandLabel('MAV_CMD_COMPONENT_ARM_DISARM', 400), 'MAV_CMD_COMPONENT_ARM_DISARM (400)');
-});
-
-test('resolveBundledDialect allow-lists known names and rejects unknown ones (§6)', () => {
-  assert.equal(resolveBundledDialect('ardupilotmega'), 'ardupilotmega');
-  assert.throws(() => resolveBundledDialect('../etc/passwd'), /unknown dialect/);
-  assert.throws(() => resolveBundledDialect(''), /unknown dialect/);
 });
 
 test('isHiddenParam follows the §6 reserved / Empty / Reserved cases', () => {

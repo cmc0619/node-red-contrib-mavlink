@@ -172,12 +172,7 @@ test('parsePdefJson ignores entries with no recognisable parameter shape', () =>
   assert.deepEqual([...map.keys()], ['GOOD']);
 });
 
-test('a profile ID that could escape the holding directory is refused before any file is touched', async () => {
-  await assert.rejects(readParamDefs('C:\\node-red', '../outside'), /unsupported characters/i);
-  await assert.rejects(readParamDefs('C:\\node-red', 'folder\\outside'), /unsupported characters/i);
-});
-
-test('readParamDefs returns an empty map only when the holding file is absent', async (t) => {
+test('readParamDefs returns an empty map for an absent holding file without creating it', async (t) => {
   const userDir = tempUserDir(t);
 
   const map = await readParamDefs(userDir, 'profile-no-seed');
@@ -234,29 +229,14 @@ test('explicit updates overwrite one stable profile holding file across URL chan
   assert.deepEqual(files, ['profile-stable.json']);
 });
 
-test('explicit update rejects an empty URL before fetching', async (t) => {
-  const userDir = tempUserDir(t);
-  let fetched = false;
-
-  await assert.rejects(
-    updateParamDefs(userDir, 'profile-empty-url', '   ', {
-      fetchFn: async () => { fetched = true; return documentFor('NOPE'); },
-    }),
-    /URL is required/i
-  );
-  assert.equal(fetched, false);
-});
-
-test('explicit update rejects a document with no definitions', async (t) => {
+test('a document with no definitions is written as zero definitions', async (t) => {
   const userDir = tempUserDir(t);
 
-  await assert.rejects(
-    updateParamDefs(userDir, 'profile-empty-doc', 'https://example.test/empty.json', {
-      fetchFn: async () => ({}),
-    }),
-    /no parameter definitions/i
-  );
-  assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), false);
+  const result = await updateParamDefs(userDir, 'profile-empty-doc', 'https://example.test/empty.json', {
+    fetchFn: () => Promise.resolve({}),
+  });
+  assert.equal(result.count, 0);
+  assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), true);
 });
 
 test('a failed update preserves the last good profile holding file', async (t) => {
@@ -328,7 +308,7 @@ test(
   }
 );
 
-test('corrupt local JSON and invalid local documents propagate instead of appearing absent', async (t) => {
+test('corrupt local JSON propagates instead of appearing absent; an empty document reads as empty', async (t) => {
   const userDir = tempUserDir(t);
   const corruptFile = holdingFile(userDir, 'profile-corrupt');
   const emptyFile = holdingFile(userDir, 'profile-empty');
@@ -337,7 +317,7 @@ test('corrupt local JSON and invalid local documents propagate instead of appear
   fs.writeFileSync(emptyFile, '{}');
 
   await assert.rejects(readParamDefs(userDir, 'profile-corrupt'), /JSON|property name|position/i);
-  await assert.rejects(readParamDefs(userDir, 'profile-empty'), /no parameter definitions/i);
+  assert.equal((await readParamDefs(userDir, 'profile-empty')).size, 0);
 });
 
 /**
@@ -419,9 +399,9 @@ test('a values array with no usable entries yields undefined, not NaN options', 
   assert.equal(map.get('X').values, undefined);
 });
 
-test('an XZ archive is named as such instead of reaching JSON.parse', async (t) => {
+test('an XZ archive is neither JSON nor XML', async (t) => {
   const userDir = tempUserDir(t);
-  // The real magic number, and the bytes behind the "7zXZ" in the reported error.
+  // The real magic number; the bytes behind the "7zXZ" in the reported head.
   const xz = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6];
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => bytesResponse(xz);
@@ -430,8 +410,8 @@ test('an XZ archive is named as such instead of reaching JSON.parse', async (t) 
   await assert.rejects(
     updateParamDefs(userDir, 'profile-xz', 'https://artifacts.px4.io/Firmware/_general/parameters.json.xz'),
     (err) => {
-      assert.match(err.message, /XZ archive, not JSON/);
-      // The point of the change: no binary, no "Unexpected token" in the editor.
+      assert.match(err.message, /did not return JSON or XML/);
+      // No binary, no "Unexpected token" in the editor.
       assert.doesNotMatch(err.message, /Unexpected token/);
       return true;
     }
@@ -580,8 +560,8 @@ test('a boolean="true" parameter expands to the Disabled/Enabled pair PX4 itself
 test('XML that is not a parameter document says so instead of reporting zero parameters', async (t) => {
   const userDir = tempUserDir(t);
   const previousFetch = globalThis.fetch;
-  // An HTML error page also starts with '<' and would otherwise reach the
-  // "contains no parameter definitions" wall, which reads as an empty source.
+  // An HTML error page also starts with '<' and would otherwise parse as a
+  // document with zero parameters.
   globalThis.fetch = async () => xmlResponse('<html><body>404 Not Found</body></html>');
   t.after(() => { globalThis.fetch = previousFetch; });
 

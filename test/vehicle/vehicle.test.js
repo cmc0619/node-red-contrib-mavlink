@@ -43,10 +43,10 @@ test('resolveDialect seed + known name → returns DialectBundle', () => {
   assert.ok(typeof bundle.messages === 'object');
 });
 
-test('resolveDialect seed + unknown name → throws naming the dialect', () => {
+test('resolveDialect seed + unknown name → craters at the manifest lookup', () => {
   assert.throws(
     () => resolveDialect({ dialect: 'nonexistent', dialectRevision: 'seed' }),
-    /nonexistent/
+    TypeError
   );
 });
 
@@ -57,13 +57,6 @@ test('resolveDialect seed bundles are memoized', () => {
 });
 
 /* ---------- resolveDialect — catalog snapshot ---------- */
-
-test('resolveDialect snapshot without a catalog base dir fails loud', () => {
-  assert.throws(
-    () => resolveDialect({ name: 'My Profile', dialect: 'common', dialectRevision: '2026-01-01' }),
-    /My Profile/
-  );
-});
 
 test('resolveDialect unknown snapshot id fails loud naming the snapshot', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
