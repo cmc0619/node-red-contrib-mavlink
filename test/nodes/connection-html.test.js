@@ -97,8 +97,8 @@ test('additionalIdentities has an editor row (issue #94 — feature must be reac
   );
   assert.match(
     html,
-    /function fillIdentityRow\(\$sel, want\)[\s\S]*taken\.indexOf\(n\.id\) !== -1 \|\| !identityFree\(conn, n\.id\)/,
-    'every row menu leaves out what the primary, the other rows, and other Connections hold'
+    /function fillIdentityRow\(\$sel, want\)[\s\S]*if \(taken\.indexOf\(n\.id\) !== -1\) return;\s*if \(n\.id !== want && !identityFree\(conn, n\.id\)\) return;/,
+    'every row menu leaves out what the primary, the other rows, and other Connections hold — except its own saved value, kept for the validator'
   );
   assert.match(
     html,
@@ -178,6 +178,27 @@ test('the Identity picker never offers a companion another Connection holds', ()
   });
   const offered = Object.keys(BOUND).filter((id) => id !== 'veh' && defaults.localIdentity.filter({ id }));
   assert.deepEqual(offered, ['id-gcs', 'id-second', 'id-own', 'id-comp2', 'id-comp-dup']);
+});
+
+test('the Identity picker keeps a saved identity that another Connection also holds, so the validator can red it', () => {
+  // The route no menu sees: id-comp was a GCS bound to both Connections, then
+  // re-roled to companion. Filtering it out of c1's own list would move the
+  // select onto another entry and the save would rewrite the binding silently;
+  // kept in the list, it stays selected and the validator names Backup radio.
+  const nodes = {
+    ...BOUND,
+    c1: { type: 'mavlink-connection', name: 'Main radio', localIdentity: 'id-comp', additionalIdentities: [] },
+    c2: { type: 'mavlink-connection', name: 'Backup radio', localIdentity: 'id-comp', additionalIdentities: [] },
+  };
+  const defaults = loadNodeDefaults('mavlink-connection', nodes, {
+    editStack: [{ id: 'c1', type: 'mavlink-connection', localIdentity: 'id-comp' }],
+  });
+  assert.equal(defaults.localIdentity.filter({ id: 'id-comp' }), true, 'still offered');
+  assert.match(
+    String(defaults.localIdentity.validate.call({ id: 'c1' }, 'id-comp', {})),
+    /Backup radio[\s\S]*one Connection/,
+    'and still red'
+  );
 });
 
 test('the Identity picker keeps offering the companion this Connection already holds', () => {

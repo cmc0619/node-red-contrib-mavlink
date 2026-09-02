@@ -142,13 +142,19 @@
       } },
       // Config-node references (§6 — everything enumerable is a dropdown).
       vehicle: { value: '', type: 'mavlink-vehicle', required: true },
-      // A companion another Connection holds is not offered at all: the stock
-      // picker hands every Local Identity through `filter` and lists the ones
-      // it returns true for. The validator keeps the ring for the route the
-      // menus cannot see — an identity re-roled to companion after two
-      // Connections bound it as a GCS.
+      // A companion another Connection holds is not offered: the stock picker
+      // hands every Local Identity through `filter` and lists the ones it
+      // returns true for. The one exception is this Connection's own saved
+      // value — an identity re-roled to companion after two Connections bound
+      // it as a GCS. Dropping it from the list would leave the select on some
+      // other entry and the save would rewrite the binding silently (§9
+      // ruling 6); kept in the list, it stays on screen and the validator
+      // reds it with the other Connection's name.
       localIdentity: { value: '', type: 'mavlink-local-identity', required: true,
-        filter: function (identity) { return identityFree(editingConnection(), identity.id); },
+        filter: function (identity) {
+          var conn = editingConnection();
+          return identity.id === conn.localIdentity || identityFree(conn, identity.id);
+        },
         validate: function (v, _opt) { return companionBoundElsewhere(this, [v]); } },
       // Every bound identity must send as its own (sysid, compid). Sharing the
       // pair is a wire collision the driver cannot report: the Connection runs
@@ -280,6 +286,10 @@
       // is refilled on every change, so a pick made in one control leaves the
       // others' menus at once, and a row whose pick the primary just took
       // shows the placeholder again rather than a value the save would omit.
+      // A row's own saved value is the exception to the bound-elsewhere rule,
+      // for the same reason as the primary's filter: an identity re-roled to
+      // companion under two bindings has to stay on screen for the validator
+      // to red, not vanish from the menu and from the save.
       var conn = this;
       var $idList = $('#mav-conn-additional-identities');
       function fillIdentityRow($sel, want) {
@@ -291,7 +301,8 @@
         $sel.empty().append($('<option></option>').val('').text('— select identity —'));
         RED.nodes.eachConfig(function (n) {
           if (n.type !== 'mavlink-local-identity') return;
-          if (taken.indexOf(n.id) !== -1 || !identityFree(conn, n.id)) return;
+          if (taken.indexOf(n.id) !== -1) return;
+          if (n.id !== want && !identityFree(conn, n.id)) return;
           $('<option></option>').val(n.id)
             .text((n.name || 'Local Identity') + ' (' + (n.role || 'gcs') + ')')
             .appendTo($sel);

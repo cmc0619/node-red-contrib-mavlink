@@ -27,7 +27,9 @@ config-node shapes and message contracts may still change without a major bump.
   refilled on every change. The save used to drop a repeated or primary
   reference silently while the row kept showing it; the row now resets to
   the placeholder instead. The red ring stays for the one route the menus
-  cannot see: an identity re-roled to companion after two Connections bound it.
+  cannot see, an identity re-roled to companion after two Connections bound
+  it: that saved binding stays in its own menu, so it stays on screen for the
+  validator to red rather than vanishing from the save.
 
 - **Param id search uses Node-RED's own autocomplete widget.** The hand-rolled
   results panel — its keyboard navigation, blur handling and CSS — is gone;
