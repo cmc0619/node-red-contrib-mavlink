@@ -4,7 +4,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
-## [Unreleased]
+## [0.6.0] "Pure" - 2026-09-02
 
 ### Removed
 
@@ -17,6 +17,27 @@ config-node shapes and message contracts may still change without a major bump.
   itself and PX4 accepts both, so neither ever sends these codes; the resend
   only ever fired against a custom-built stack. The warn-and-badge that
   announced a resend goes with it.
+
+- **The ack-timeout re-send.** A command whose ack window closed silently used to
+  be re-sent up to three times before settling `timeout`. One window now, then
+  `timeout`, and the peer-table completion check runs as before. The retry on
+  `TEMPORARILY_REJECTED` stays: there the vehicle asked for it.
+
+- **Param resends and list refills.** A `PARAM_SET` whose echo did not arrive was
+  re-sent up to three attempts; a `PARAM_REQUEST_LIST` collect re-requested missing
+  indexes for up to three rounds. Both are gone: one set, one list request, and the
+  outcome reports what arrived.
+
+- **The deploy-time Connection badge.** Every wire node and `mavlink-in` used to paint
+  a status badge at deploy for a Connection reference that did not resolve. A
+  reference the editor cannot save (a hand-edited flow, an Admin-API deploy) now fails
+  loud instead: senders on their first input, `mavlink-in` and State at construction
+  in the deploy log. The Connection's own Disable checkbox is unchanged.
+
+- **Fan-out's message refusals.** A message without a `target_system` field, a
+  broadcast `PARAM_SET`, and a targets list the old validator disliked were refused
+  before anything reached the wire. Fan-out now stamps `target_system` per member on a
+  message that did not carry one and sends what it is handed; the flow decides.
 
 ### Changed
 
@@ -110,6 +131,14 @@ config-node shapes and message contracts may still change without a major bump.
   sent. Health has worked this way since it grew the field; the rule is now one
   shared predicate rather than seven dialogs' worth of local opinion. No saved
   flow changes behaviour.
+
+- **Frames from source system 0 are dropped at the Connection.** System 0 is the
+  broadcast destination, never a source, so such frames no longer reach `mavlink-in`,
+  State or the peer table.
+
+- **A TCP client retries its first connection three times** before the Connection
+  reports the failure. A link that once worked still redials on the jittered backoff
+  as before; UDP, serial and TCP-listener start-up failures stay terminal.
 
 ## [0.5.1] "Nap of the earth" - 2026-08-25
 
