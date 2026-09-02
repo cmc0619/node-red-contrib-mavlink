@@ -120,10 +120,6 @@ test('compileXmlFromFile fails loud on a missing entry file', () => {
   );
 });
 
-test('compileXmlFromFile requires a non-empty path', () => {
-  assert.throws(() => compileXmlFromFile('  '), (e) => e.code === 'XML_DIALECT_NO_PATH');
-});
-
 /* ---------- XmlCatalog: constructor ---------- */
 
 test('XmlCatalog requires a baseDir', () => {

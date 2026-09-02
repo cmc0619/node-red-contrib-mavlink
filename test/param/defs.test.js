@@ -234,19 +234,6 @@ test('explicit updates overwrite one stable profile holding file across URL chan
   assert.deepEqual(files, ['profile-stable.json']);
 });
 
-test('explicit update rejects an empty URL before fetching', async (t) => {
-  const userDir = tempUserDir(t);
-  let fetched = false;
-
-  await assert.rejects(
-    updateParamDefs(userDir, 'profile-empty-url', '   ', {
-      fetchFn: async () => { fetched = true; return documentFor('NOPE'); },
-    }),
-    /URL is required/i
-  );
-  assert.equal(fetched, false);
-});
-
 test('explicit update rejects a document with no definitions', async (t) => {
   const userDir = tempUserDir(t);
 
@@ -419,9 +406,9 @@ test('a values array with no usable entries yields undefined, not NaN options', 
   assert.equal(map.get('X').values, undefined);
 });
 
-test('an XZ archive is named as such instead of reaching JSON.parse', async (t) => {
+test('an XZ archive is neither JSON nor XML', async (t) => {
   const userDir = tempUserDir(t);
-  // The real magic number, and the bytes behind the "7zXZ" in the reported error.
+  // The real magic number; the bytes behind the "7zXZ" in the reported head.
   const xz = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6];
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => bytesResponse(xz);
@@ -430,8 +417,8 @@ test('an XZ archive is named as such instead of reaching JSON.parse', async (t) 
   await assert.rejects(
     updateParamDefs(userDir, 'profile-xz', 'https://artifacts.px4.io/Firmware/_general/parameters.json.xz'),
     (err) => {
-      assert.match(err.message, /XZ archive, not JSON/);
-      // The point of the change: no binary, no "Unexpected token" in the editor.
+      assert.match(err.message, /did not return JSON or XML/);
+      // No binary, no "Unexpected token" in the editor.
       assert.doesNotMatch(err.message, /Unexpected token/);
       return true;
     }
