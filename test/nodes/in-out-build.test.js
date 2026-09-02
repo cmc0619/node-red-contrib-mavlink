@@ -1232,6 +1232,28 @@ test('mavlink-build: a string on a 64-bit field rides as the BigInt the writer t
   assert.equal(out0.payload.message.fields.time_boot_ms, '5', 'only 64-bit fields are read as BigInt');
 });
 
+test('mavlink-build: a 64-bit string BigInt cannot read fails the run, not the process', () => {
+  // The conversion runs for repeat-timer runs too, where no input handler sits
+  // above it to catch a throw; BigInt's own SyntaxError rides failRun instead.
+  const RED = makeRED();
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance();
+  Constructor.call(node, {
+    dialect: 'common',
+    messageName: 'SYSTEM_TIME',
+    tier: 'build',
+    fields: JSON.stringify({ time_unix_usec: 'not a number' }),
+  });
+
+  assert.doesNotThrow(() => node._input({ payload: {} }));
+  const [out0, out1] = node._sends[0];
+  assert.equal(out0, null, 'output 0 must not fire');
+  assert.equal(out1.result, 'failed');
+  assert.match(out1.detail, /BigInt/);
+  assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
+});
+
 test('mavlink-build: a typo\'d tier matches no arm — nothing built, nothing sent', () => {
   // Build and Send are the only tiers, and the editor's `tier` select is the
   // vocabulary (RED.mavlink.oneOf, mavlink-build.html). A token past it

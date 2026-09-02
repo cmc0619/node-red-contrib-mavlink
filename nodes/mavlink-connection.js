@@ -98,6 +98,10 @@ module.exports = function registerMavlinkConnection(RED) {
     // loads and fails at send time. `send` refuses instead — swallowing a
     // frame would let the sender report "sent" over a link that moved
     // nothing (§2).
+    // The Local Identity id, read live by a node whose editor hides the
+    // Identity field on a single-identity Connection (mavlink-health).
+    node.localIdentity = config.localIdentity;
+
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};

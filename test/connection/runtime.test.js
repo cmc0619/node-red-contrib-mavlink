@@ -137,6 +137,31 @@ test('source sysid 0 is rejected at connection ingress', async () => {
   connection.close();
 });
 
+test('the send() dry run signs when the link signs, consuming no counter', async () => {
+  // A sign-outbound link with no key must refuse inside send(), the signer's
+  // own error into the calling node's path — not pass an unsigned dry run and
+  // drop the envelope in _pump after the node reported `sent`.
+  const contexts = [];
+  const wire = fakeWire();
+  const serialize = wire.serialize;
+  wire.serialize = (message, ctx) => { contexts.push(ctx); return serialize(message, ctx); };
+  const key = Buffer.alloc(32, 7);
+  const { connection } = build(
+    { signing: { linkId: 3, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: true, key } },
+    { wire }
+  );
+  await connection.start();
+
+  connection.send({ name: 'HEARTBEAT', fields: {} }, { band: BAND.LIVENESS });
+
+  const dryRun = contexts.find((ctx) => ctx.seq === 0 && ctx.timestamp === 0);
+  assert.ok(dryRun, 'the dry run serializes with seq 0 and timestamp 0');
+  assert.equal(dryRun.sign, true);
+  assert.equal(dryRun.linkId, 3);
+  assert.equal(dryRun.key, key);
+  connection.close();
+});
+
 test('outbound sends drain one at a time in band order, using the socket callback as the release', async () => {
   const { connection, dg } = build();
   await connection.start();

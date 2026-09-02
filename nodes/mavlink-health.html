@@ -77,7 +77,7 @@
         RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
         // The Identity is a choice only when the Connection carries more than
         // one identity. A single-identity Connection has exactly one — its
-        // Local Identity — so the field is hidden and oneditsave stores that id.
+        // Local Identity — so the field is hidden and oneditsave stores blank.
         // Showing a field with a single answer, then red-ringing a stale pick,
         // is the anti-pattern §0 forbids. When there is a choice,
         // the field is a connection-scoped select — the same one command and
@@ -87,11 +87,6 @@
         function refreshIdentityRow() {
           const connId = $('#node-input-connection').val() || '';
           if (isSingleIdentity(connId)) {
-            // Populated even while hidden, so oneditsave can select the sole
-            // identity and Node-RED harvests that id from the element.
-            RED.mavlink.fillIdentitySelect($('#node-input-identity'), connId, {
-              saved: RED.nodes.node(connId).localIdentity,
-            });
             $('#row-health-identity').hide();
           } else {
             $('#row-health-identity').show();
@@ -102,16 +97,15 @@
         $('#node-input-connection').on('change', refreshIdentityRow);
       },
       oneditsave() {
-        // A single-identity Connection hides the field; store its sole Local
-        // Identity so the runtime reads the id the editor chose. Set the DOM
-        // element, not just the property: Node-RED harvests #node-input-*
-        // values into the node after oneditsave, so setting only this.identity
-        // would be overwritten by the select's value.
+        // A single-identity Connection hides the field; store blank so nothing
+        // stale is kept and the runtime reads the Connection's Local Identity
+        // live. Clear the DOM element, not just the property: Node-RED harvests
+        // #node-input-* values into the node after oneditsave, so setting only
+        // this.identity would be overwritten by the select's value.
         const connId = $('#node-input-connection').val() || '';
         if (isSingleIdentity(connId)) {
-          const local = RED.nodes.node(connId).localIdentity;
-          $('#node-input-identity').val(local);
-          this.identity = local;
+          $('#node-input-identity').val('');
+          this.identity = '';
         }
       },
     });

@@ -524,12 +524,19 @@ test('link id is a wire byte; peer-freshness thresholds are required positive in
       /required/,
       `${field} blank reds — the editor owns the default the runtime sweeps on`
     );
-    assert.equal(defaults[field].validate.call({ id: 'c1' }, '5000', {}), true);
+    assert.equal(defaults[field].validate.call({ id: 'c1', staleMs: 1000 }, '5000', {}), true);
     assert.match(
-      String(defaults[field].validate.call({ id: 'c1' }, '0', {})),
+      String(defaults[field].validate.call({ id: 'c1', staleMs: 1000 }, '0', {})),
       />= 1/
     );
   }
+  // A peer must go stale before it expires: expire at or below stale drops the
+  // peer with the stale event never fired (CodeRabbit).
+  assert.match(
+    String(defaults.expireMs.validate.call({ id: 'c1', staleMs: 5000 }, '5000', {})),
+    /greater than the stale/
+  );
+  assert.equal(defaults.expireMs.validate.call({ id: 'c1', staleMs: 5000 }, '5001', {}), true);
 });
 
 test('mode gates read through liveOr — a foreign dialog cannot poison them (#217)', () => {
@@ -604,6 +611,12 @@ test('signing credentials are mutually exclusive in both directions, live-aware'
     true
   );
   assert.equal(creds.signingKeyHex.validate.call({ id: 'c1', credentials: {} }, key, {}), true);
+  // The runtime reads the value as saved: a padded key would reach
+  // Buffer.from(…, 'hex') with its whitespace, so the ring sees it too.
+  assert.match(
+    String(creds.signingKeyHex.validate.call({ id: 'c1', credentials: {} }, ` ${key} `, {})),
+    /64 hex/
+  );
   // Wire format still guards the key before exclusivity is even asked.
   assert.match(
     String(creds.signingKeyHex.validate.call({ id: 'c1', credentials: {} }, 'abc', {})),

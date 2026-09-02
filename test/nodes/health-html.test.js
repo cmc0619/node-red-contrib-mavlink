@@ -64,7 +64,7 @@ test('one helper decides single-vs-multi, so the three sites cannot drift', () =
 test('the Identity row is hidden for a single-identity Connection, shown for many', () => {
   assert.match(
     html,
-    /if \(isSingleIdentity\(connId\)\)\s*\{[\s\S]*?\$\('#row-health-identity'\)\.hide\(\)/,
+    /if \(isSingleIdentity\(connId\)\)\s*\{\s*\$\('#row-health-identity'\)\.hide\(\)/,
     'a single-identity Connection hides the row'
   );
   assert.match(
@@ -79,20 +79,21 @@ test('the Identity row is hidden for a single-identity Connection, shown for man
   );
 });
 
-test('oneditsave stores the Local Identity (DOM and property) for a single-identity Connection', () => {
+test('oneditsave clears the Identity (DOM and property) for a single-identity Connection', () => {
   // Both, on purpose: Node-RED harvests #node-input-* into the node after
-  // oneditsave, so the property alone would be overwritten by the select.
+  // oneditsave, so the property alone would be overwritten by the select
+  // (Codacy). Clearing the DOM element makes the harvested value blank too.
   assert.match(
     html,
-    /oneditsave\(\) \{[\s\S]*?if \(isSingleIdentity\(connId\)\)\s*\{[\s\S]*?\$\('#node-input-identity'\)\.val\(local\);\s*this\.identity = local/,
-    'a hidden field stores the Local Identity in both the select and the property'
+    /oneditsave\(\) \{[\s\S]*?if \(isSingleIdentity\(connId\)\)\s*\{\s*\$\('#node-input-identity'\)\.val\(''\);\s*this\.identity = ''/,
+    'a hidden field clears both the select and the property'
   );
 });
 
 test('oneditsave executes: clears a hidden field for a single-identity Connection', () => {
   // Run the hook for real, not just grep the source — the persistence behaviour
-  // is what matters (CodeRabbit). A single-identity Connection stores its sole
-  // Local Identity; a real multi-identity pick is kept.
+  // is what matters (CodeRabbit). A single-identity Connection clears the
+  // stored id so nothing stale survives; a real multi-identity pick is kept.
   const single = loadNodeType(
     'mavlink-health',
     { c1: { localIdentity: 'comp', additionalIdentities: [] }, comp: { role: 'companion' } },
@@ -100,7 +101,7 @@ test('oneditsave executes: clears a hidden field for a single-identity Connectio
   );
   const singleNode = { connection: 'c1', identity: 'loose' };
   single.oneditsave.call(singleNode);
-  assert.equal(singleNode.identity, 'comp', 'hidden single-identity field stores the Local Identity');
+  assert.equal(singleNode.identity, '', 'hidden single-identity field is cleared');
 
   const multi = loadNodeType(
     'mavlink-health',

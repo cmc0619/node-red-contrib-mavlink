@@ -137,8 +137,14 @@ module.exports = function registerMavlinkBuild(RED) {
       // Merge config defaults with any per-message overrides from the trigger.
       const overrides = triggerMsg ? triggerMsg.payload : {};
       const fields = { ...configFields, ...overrides };
-      for (const name of bigIntFields) {
-        if (typeof fields[name] === 'string') fields[name] = BigInt(fields[name]);
+      try {
+        for (const name of bigIntFields) {
+          if (typeof fields[name] === 'string') fields[name] = BigInt(fields[name]);
+        }
+      } catch (err) {
+        // BigInt's own refusal of a string it cannot read, on the run's error
+        // path: a repeat-timer run has no input handler above it to catch it.
+        return failRun(err);
       }
 
       const builtMessage = { name: messageName, fields };

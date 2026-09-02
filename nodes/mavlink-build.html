@@ -255,8 +255,7 @@
               }).attr('data-field', spec.name);
             }
             // Options carry the wire value, so Done saves the number
-            // mavlink-in emits and pymavlink accepts. A flow saved with entry
-            // names still selects its options here; one Done re-saves numbers.
+            // mavlink-in emits and pymavlink accepts.
             const multi = spec.display === 'bitmask';
             const sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
@@ -270,11 +269,9 @@
               sel.append($opt);
             });
             if (multi) {
-              sel.val(Array.isArray(saved)
-                ? entries.filter((e) => saved.includes(e.name)).map((e) => String(e.value))
-                : RED.mavlink.selectedBitmaskValues(saved, entries));
+              sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
             } else if (saved !== undefined && saved !== null && saved !== '') {
-              const match = entries.find((e) => String(e.value) === String(saved) || e.name === saved);
+              const match = entries.find((e) => String(e.value) === String(saved));
               if (match) {
                 sel.val(String(match.value));
               } else {
