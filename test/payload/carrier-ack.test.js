@@ -34,12 +34,13 @@ function scriptedConn(results) {
           name: 'COMMAND_ACK',
           sysid: opts.target.sysid,
           compid: opts.target.compid,
-          fields: { command: message.fields.command, result },
+          // Omitted target extensions decode as 0 (§14).
+          fields: { command: message.fields.command, result, target_system: 0, target_component: 0 },
         };
         for (const { handler } of subs.slice()) handler(decoded);
       }, 0);
     },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);
@@ -100,7 +101,7 @@ test('a wrong-carrier ack is the result: one send, reported on output 1 as-is', 
   // servo set is pinned to COMMAND_INT by the editor; a LONG-only vehicle's
   // answer rides out as the rejection it is, and the flow decides.
   const { node, conn, warnings } = deploy([MAV_RESULT.COMMAND_LONG_ONLY]);
-  const sent = await runInput(node, {}, () => {});
+  const sent = await runInput(node, { payload: {} }, () => {});
 
   assert.equal(conn.sent.length, 1, 'the pinned carrier is sent once; nothing follows it');
   assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
@@ -113,7 +114,7 @@ test('a wrong-carrier ack is the result: one send, reported on output 1 as-is', 
 
 test('ACCEPTED: one send, no warn', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED]);
-  await runInput(node, {}, () => {});
+  await runInput(node, { payload: {} }, () => {});
   await tick();
 
   assert.equal(conn.sent.length, 1);
@@ -123,7 +124,7 @@ test('ACCEPTED: one send, no warn', async () => {
 
 test('DENIED: one send, no warn', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.DENIED]);
-  await runInput(node, {}, () => {});
+  await runInput(node, { payload: {} }, () => {});
   await tick();
 
   assert.equal(conn.sent.length, 1);

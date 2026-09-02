@@ -39,7 +39,7 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon in d
   assert.equal(connection.sends.length, 3);
 
   const expected = new Map(
-    formationTargets({ shape: 'line', spacing: 10, anchor: ANCHOR, headingDeg: 0, sysids: [1, 2, 3] })
+    formationTargets({ shape: 'line', spacing: 10, anchor: ANCHOR, headingDeg: 0, pitchDeg: 0, sysids: [1, 2, 3] })
       .map((t) => [t.sysid, t])
   );
   for (const { message } of connection.sends) {
@@ -451,7 +451,7 @@ test('formation builds COMMAND_INT with per-member degE7 coords (§9)', async ()
 
   assert.equal(sent[1].result, 'succeeded');
   const expected = new Map(
-    formationTargets({ shape: 'line', spacing: 10, anchor: ANCHOR, headingDeg: 0, sysids: [1, 2] })
+    formationTargets({ shape: 'line', spacing: 10, anchor: ANCHOR, headingDeg: 0, pitchDeg: 0, sysids: [1, 2] })
       .map((t) => [t.sysid, t])
   );
   for (const { message } of connection.sends) {

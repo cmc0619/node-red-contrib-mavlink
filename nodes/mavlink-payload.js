@@ -11,12 +11,9 @@ const {
   sendFnFor,
   cancelSlot,
   resolveFrame,
-  DEFAULT_TIMEOUT_MS,
-  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 const {
   resolveDeliveryContext,
-  numberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -42,8 +39,7 @@ function enumsForFields(bundle, fields) {
   for (const meta of Object.values(fields)) {
     const name = meta.enum;
     if (!name || out[name]) continue;
-    const found = bundle.enums && bundle.enums[name];
-    if (found) out[name] = found.entries || [];
+    out[name] = bundle.enums[name].entries;
   }
   return out;
 }
@@ -65,12 +61,11 @@ module.exports = function registerMavlinkPayload(RED) {
           return;
         }
 
-        // Blank keeps the library default; the editor's number validator owns
-        // the rest (§14: a finite-number check on operator input is a guardrail).
-        const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
-        const maxRetries = numberOr(config.maxRetries, DEFAULT_MAX_RETRIES);
+        // The editor owns the defaults and the number rings.
+        const timeoutMs = Number(config.timeout);
+        const maxRetries = Number(config.maxRetries);
 
-        const payload = msg.payload ?? {};
+        const payload = msg.payload;
         // Payload: compidFromConfig keeps the compid field authoritative even
         // under a companion identity — compid addresses a payload device, not
         // the autopilot (DESIGN.md §6 spec'd exception).
@@ -185,22 +180,14 @@ module.exports = function registerMavlinkPayload(RED) {
       FIELD_TIPS_ROUTE,
       RED.auth.needsPermission('mavlink.read'),
       (req, res) => {
-        const topic = typeof req.query.topic === 'string' ? req.query.topic.trim() : '';
-        const verb = typeof req.query.verb === 'string' ? req.query.verb.trim() : '';
-        let path = typeof req.query.path === 'string' ? req.query.path.trim() : '';
-        // Editor preview only: a gimbal-aim tips request before a path member is
-        // picked still shows the legacy fields. The `|| 'legacy'` default moved
-        // out of recipeFor (so the runtime craters on a blank path) to here,
-        // where a preview default belongs — the editor is the validator layer.
-        if (topic === 'gimbal' && verb === 'aim' && !path) path = 'legacy';
-        if (!topic || !verb) {
-          return res.json({ fields: {}, dialect: '' });
-        }
+        // The dialog sends every field of its selection, path included — it
+        // supplies `legacy` itself while the gimbal path is still unpicked.
+        const { topic, verb, path } = req.query;
         if (!metadataApi) {
           return res.status(503).json({ fields: {}, error: 'metadata unavailable' });
         }
         try {
-          const source = resolveCatalogSource(RED, metadataApi, req.query || {}, { soft: true });
+          const source = resolveCatalogSource(RED, metadataApi, req.query, { soft: true });
           let bundle;
           let dialect;
           switch (source.kind) {
@@ -226,19 +213,10 @@ module.exports = function registerMavlinkPayload(RED) {
               bundle = source.bundle;
               dialect = source.dialect;
               break;
-            case 'dialect': {
-              const known = metadataApi.knownDialects();
-              if (!known.includes(source.dialect)) {
-                return res.json({
-                  dialect: source.dialect,
-                  fields: {},
-                  notice: `unknown dialect ${JSON.stringify(source.dialect)}`,
-                });
-              }
+            case 'dialect':
               bundle = metadataApi.loadBundled(source.dialect);
               dialect = source.dialect;
               break;
-            }
             default: break; // This space intentionally left blank (§5)
           }
           // The field set IS the form: keys are the rows the dialog renders,

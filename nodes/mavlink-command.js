@@ -47,8 +47,6 @@ const {
   CARRIER,
   intCoordKinds,
   resolveFrame,
-  DEFAULT_TIMEOUT_MS,
-  DEFAULT_MAX_RETRIES,
 } = require('../lib/command');
 
 const {
@@ -62,7 +60,6 @@ const {
   dialectFromVehicleId,
   dialectFromConnection,
   isBlank,
-  numberOr,
 } = require('../lib/addressing');
 const {
   shouldSuppress,
@@ -83,16 +80,14 @@ function metadataApi(RED) {
  * Return the command ID for the current node config (preset or advanced).
  *
  * @param {object} config  node config from editor
- * @returns {number|null}
+ * @returns {number}
  */
 function resolveCommandId(config) {
   switch (config.mode) {
     case 'advanced':
       return Number(config.advancedCommand);
-    case 'preset': {
-      const preset = getPreset(config.preset);
-      return preset ? preset.commandId : null;
-    }
+    case 'preset':
+      return getPreset(config.preset).commandId;
     default: break; // This space intentionally left blank (§5)
   }
   return NaN; // nothing matched: no behavior selected (§5)
@@ -134,32 +129,30 @@ module.exports = function registerMavlinkCommand(RED) {
      * How this command's param5/6 ride the INT carrier, per the dialect XML
      * (§9 "ask the XML"): scaled lat/lon, natively degE7, or raw non-location
      * values. Resolved lazily — the wire tier's vehicle bundle attaches at
-     * connection start — and null (historical scaling) when no bundle exists.
+     * connection start. A dialect that cannot be loaded throws here, and that
+     * throw is the input's failure (§0).
      * @returns {{5: string, 6: string}|null}
      */
     let _coordKinds;
     let _coordKindsResolved = false;
     function coordKinds() {
       if (_coordKindsResolved) return _coordKinds;
-      let bundle = null;
+      let bundle;
       switch (delivery) {
         case 'build':
-          if (config.dialect === '__vehicle') {
-            bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
-          } else if (config.dialect) {
-            const api = metadataApi(RED);
-            if (api) bundle = api.loadBundled(config.dialect);
-          }
+          bundle = config.dialect === '__vehicle'
+            ? dialectFromVehicleId(RED, config.vehicle)
+            : metadataApi(RED).loadBundled(config.dialect);
           break;
         case 'send':
         case 'confirm':
         case 'complete':
           // Connection snapshot has no bundle — resolve the profile node (§7).
-          bundle = dialectFromConnection(RED, connNode, { rethrow: true });
+          bundle = dialectFromConnection(RED, connNode);
           break;
         default: break; // This space intentionally left blank (§5)
       }
-      _coordKinds = bundle ? intCoordKinds(bundle, commandId) : null;
+      _coordKinds = intCoordKinds(bundle, commandId);
       _coordKindsResolved = true;
       return _coordKinds;
     }
@@ -240,9 +233,7 @@ module.exports = function registerMavlinkCommand(RED) {
       for (const [idx, value] of Object.entries(modeParams)) {
         userParams[idx] = value;
       }
-      userParams[1] = userParams[1] === undefined
-        ? MODE_FLAG_CUSTOM_MODE_ENABLED
-        : (Number(userParams[1]) | MODE_FLAG_CUSTOM_MODE_ENABLED);
+      userParams[1] |= MODE_FLAG_CUSTOM_MODE_ENABLED;
     }
 
     /**
@@ -299,10 +290,9 @@ module.exports = function registerMavlinkCommand(RED) {
       // buildCarrierMessage dispatches it affirmatively.
       const configuredCarrier = config.sendAs;
 
-      // Blank keeps the library default; the editor's number validator owns
-      // the rest (§14: a finite-number check on operator input is a guardrail).
-      const timeoutMs = numberOr(config.timeout, DEFAULT_TIMEOUT_MS);
-      const maxRetries = numberOr(config.maxRetries, DEFAULT_MAX_RETRIES);
+      // The editor owns the defaults and the number rings.
+      const timeoutMs = Number(config.timeout);
+      const maxRetries = Number(config.maxRetries);
       // Complete's poll timeout resolves here too — before the send, not in
       // the post-ack continuation where it used to sit: by then the vehicle
       // has already accepted and begun executing the command, so a garbage
@@ -310,10 +300,10 @@ module.exports = function registerMavlinkCommand(RED) {
       // so a cleared value cannot red a Build/Send/Confirm node that never
       // reads it (the same liveOr rule the editors follow).
       const completionTimeoutMs = delivery === 'complete'
-        ? numberOr(config.completionTimeout, 60000)
+        ? Number(config.completionTimeout)
         : null;
 
-      const payload = msg.payload ?? {};
+      const payload = msg.payload;
       const { target, identityId, profile } = resolveDeliveryContext(RED, {
         delivery,
         config,
@@ -339,7 +329,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // it is the frame the COMMAND_INT builder scales param5/6 by, nothing
       // more.
       const frame = resolveFrame(msg.mavFrame, config.frame);
-      const { wire: paramArray, requested: requestedParams } = getParams(msg.payload, { target, profile });
+      const { wire: paramArray, requested: requestedParams } = getParams(payload, { target, profile });
 
       /**
        * Build the wire message for a carrier at a given confirmation counter.
@@ -484,7 +474,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
         // Timeout: check peer table for completion condition.
         if (ackOutcome.result === 'timeout') {
-          if (completionKey && connNode.peerTable) {
+          if (completionKey) {
             const stateCheck = checkCompletion(
               completionKey,
               requestedParams,
@@ -529,7 +519,7 @@ module.exports = function registerMavlinkCommand(RED) {
         // Terminal ack result.
         if (ackOutcome.result === 'accepted') {
           // ── Complete tier: poll peer table for actual completion. ────────
-          if (delivery === 'complete' && completionKey && connNode.peerTable) {
+          if (delivery === 'complete' && completionKey) {
             applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
             const completionWait = waitForCompletion({
               completionKey,
@@ -677,7 +667,6 @@ module.exports = function registerMavlinkCommand(RED) {
     registerDialectCatalogRoute(RED, {
       path: '/mavlink/command/commands',
       logLabel: 'mavlink-command',
-      unavailableMessage: 'command catalog unavailable',
       fromBundle: (api, bundle, dialect) => api.catalogFromBundle(bundle, dialect),
       fromDialect: (api, dialect) => api.listCommandsCatalog(dialect),
     });

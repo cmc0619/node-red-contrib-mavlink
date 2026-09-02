@@ -36,10 +36,10 @@ test('camera photo does not invent recipe defaults for blank slots', () => {
     target: { sysid: 1, compid: 1 },
     values: { interval: 2 },
   });
-  assert.ok(Number.isNaN(built.message.fields.param1), 'blank cameraId → Number(undefined) on LONG');
+  assert.equal(built.message.fields.param1, undefined, 'blank cameraId rides unset — the wire writes NaN for an unset float');
   assert.equal(built.message.fields.param2, 2);
-  assert.ok(Number.isNaN(built.message.fields.param3), 'blank count');
-  assert.ok(Number.isNaN(built.message.fields.param4), 'blank sequence');
+  assert.equal(built.message.fields.param3, undefined, 'blank count');
+  assert.equal(built.message.fields.param4, undefined, 'blank sequence');
 });
 
 test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation (#259)', () => {
@@ -70,7 +70,7 @@ test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation 
     target: { sysid: 1, compid: 1 },
     values: {},
   });
-  assert.ok(Number.isNaN(blank.message.fields.param1), 'blank cameraId');
+  assert.equal(blank.message.fields.param1, undefined, 'blank cameraId');
 });
 
 test('gimbal manager aim uses the message path and declares no confirmation', () => {
@@ -293,8 +293,8 @@ test('relay set does not invent 0 for blank instance/setting', () => {
     target: { sysid: 1, compid: 1 },
     values: {},
   });
-  assert.ok(Number.isNaN(built.message.fields.param1), 'blank instance');
-  assert.ok(Number.isNaN(built.message.fields.param2), 'blank setting');
+  assert.equal(built.message.fields.param1, undefined, 'blank instance');
+  assert.equal(built.message.fields.param2, undefined, 'blank setting');
 });
 
 test('camera zoom and focus map to SET_CAMERA_ZOOM / SET_CAMERA_FOCUS with the RANGE default', () => {

@@ -14,7 +14,7 @@ const { buildParamArray, getPreset } = require('../../lib/command/presets');
 test('orbit params with JSON "NaN" center coerce to numeric NaN in the param array', () => {
   const user = mergeParams(
     { params: '{"1":100,"2":5,"3":0,"5":"NaN","6":"NaN","7":"NaN"}' },
-    null
+    {}
   );
   const arr = buildParamArray(getPreset('orbit'), user);
   assert.equal(arr[0], 100);
@@ -31,7 +31,7 @@ test('absent orbit centre, velocity and altitude encode the spec NaN sentinels; 
   // param5/6 NaN = "use current vehicle position, or current center if already
   // orbiting". A zero-fill commanded zero tangential velocity and an orbit
   // centred on null island at ground level — GCS parity sends the sentinels.
-  const user = mergeParams({ params: '{"1":100,"2":5,"3":0}' }, null);
+  const user = mergeParams({ params: '{"1":100,"2":5,"3":0}' }, {});
   const arr = buildParamArray(getPreset('orbit'), user);
   assert.deepEqual(arr.slice(0, 4), [100, 5, 0, 0]);
   assert.ok(Number.isNaN(arr[4]) && Number.isNaN(arr[5]),
@@ -39,13 +39,13 @@ test('absent orbit centre, velocity and altitude encode the spec NaN sentinels; 
   assert.ok(Number.isNaN(arr[6]), 'absent altitude encodes NaN (current altitude)');
 
   // A typed centre still wins, and rides as given.
-  const placed = buildParamArray(getPreset('orbit'), mergeParams({ params: '{"5":47.4,"6":8.5}' }, null));
+  const placed = buildParamArray(getPreset('orbit'), mergeParams({ params: '{"5":47.4,"6":8.5}' }, {}));
   assert.equal(placed[4], 47.4);
   assert.equal(placed[5], 8.5);
 
-  const blankVelocity = buildParamArray(getPreset('orbit'), mergeParams({ params: '{"1":100}' }, null));
+  const blankVelocity = buildParamArray(getPreset('orbit'), mergeParams({ params: '{"1":100}' }, {}));
   assert.ok(Number.isNaN(blankVelocity[1]), 'absent velocity encodes NaN (vehicle default)');
-  assert.equal(buildParamArray(getPreset('orbit'), mergeParams({ params: '{"2":0}' }, null))[1], 0,
+  assert.equal(buildParamArray(getPreset('orbit'), mergeParams({ params: '{"2":0}' }, {}))[1], 0,
     'an explicit 0 velocity is a typed value and wins');
 });
 
@@ -73,7 +73,7 @@ test('blank is absent, and everything else still merges as before (#141)', () =>
 
   // The NaN sentinel is the whole reason this function exists — JSON cannot
   // carry a bare NaN, so the string form must survive.
-  assert.ok(Number.isNaN(mergeParams({ params: '{"5":"NaN"}' }, null)[5]));
+  assert.ok(Number.isNaN(mergeParams({ params: '{"5":"NaN"}' }, {})[5]));
   assert.ok(Number.isNaN(mergeParams({ params: '{}' }, { 5: NaN })[5]));
 
   // Ordinary values, including the ones a blank check could plausibly eat.

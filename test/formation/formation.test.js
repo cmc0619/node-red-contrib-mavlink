@@ -107,7 +107,7 @@ test('formationTargets places a line east-west of the anchor by the flat-earth d
     spacing: 10,
     anchor: { lat: 47.397742, lon: 8.545594, alt: 30 },
     headingDeg: 0,
-    sysids: [1, 2, 3],
+    sysids: [1, 2, 3], pitchDeg: 0,
   });
   const dLon = 1.32709215145987e-4;
   assert.deepEqual(targets[0], { sysid: 1, lat: 47.397742, lon: 8.545594, alt: 30 });
@@ -125,7 +125,7 @@ test('formationTargets trails a column south of a north-facing anchor', () => {
     spacing: 10,
     anchor: { lat: 47.397742, lon: 8.545594, alt: 30 },
     headingDeg: 0,
-    sysids: [1, 2],
+    sysids: [1, 2], pitchDeg: 0,
   });
   approx(targets[1].lat, 47.397742 - 8.98315284119521e-5, 1e-12, 'slot 1 lat');
   approx(targets[1].lon, 8.545594, 1e-12, 'slot 1 lon');
@@ -138,7 +138,7 @@ test('planar shapes give every vehicle the anchor altitude', () => {
       spacing: 15,
       anchor: { lat: -35.363262, lon: 149.165237, alt: 587.5 },
       headingDeg: 45,
-      sysids: [1, 2, 3, 4],
+      sysids: [1, 2, 3, 4], pitchDeg: 0,
     });
     for (const t of targets) assert.equal(t.alt, 587.5, shape);
   }
@@ -163,7 +163,7 @@ test('sphere formationTargets vary altitude from the anchor', () => {
     spacing: 12,
     anchor: { lat: -35.363262, lon: 149.165237, alt: 40 },
     headingDeg: 0,
-    sysids: [1, 2, 3, 4, 5],
+    sysids: [1, 2, 3, 4, 5], pitchDeg: 0,
   });
   assert.equal(targets[0].alt, 40, 'slot 0 stays on the anchor');
   const alts = targets.slice(1).map((t) => t.alt);
@@ -200,7 +200,7 @@ test('formationTargets rotates the pattern by the heading', () => {
     spacing: 10,
     anchor: { lat: 47.397742, lon: 8.545594, alt: 30 },
     headingDeg: 90,
-    sysids: [1, 2],
+    sysids: [1, 2], pitchDeg: 0,
   });
   approx(targets[1].lon, 8.545594 - 1.32709215145987e-4, 1e-12, 'slot 1 lon');
   approx(targets[1].lat, 47.397742, 1e-12, 'slot 1 lat');
@@ -212,7 +212,7 @@ test('formationTargets dedupes and sorts sysids, coercing numeric strings', () =
     spacing: 10,
     anchor: { lat: 47.397742, lon: 8.545594, alt: 30 },
     headingDeg: 0,
-    sysids: ['5', 3, 5],
+    sysids: ['5', 3, 5], pitchDeg: 0,
   });
   assert.deepEqual(targets.map((t) => t.sysid), [3, 5]);
 });
@@ -222,11 +222,11 @@ test('anchor coordinates are coerced, not refused — the editor owns the boxes'
   // (mavlink-formation.html lat/lon/alt), and are the leader's own reported
   // position otherwise. Here they coerce: a blank is Number('') and rides.
   const at0 = formationTargets({
-    shape: 'line', spacing: 10, anchor: { lat: '', lon: 8, alt: 30 }, headingDeg: 0, sysids: [1],
+    shape: 'line', spacing: 10, anchor: { lat: '', lon: 8, alt: 30 }, headingDeg: 0, sysids: [1], pitchDeg: 0,
   });
   assert.equal(at0[0].lat, 0, 'a blank latitude is the coercion, not a substituted place');
   const noAlt = formationTargets({
-    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: undefined }, headingDeg: 0, sysids: [1],
+    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: undefined }, headingDeg: 0, sysids: [1], pitchDeg: 0,
   });
   assert.ok(Number.isNaN(noAlt[0].alt), 'an absent altitude stays absent, never sea level');
 });
@@ -238,14 +238,14 @@ test('sysid entries are trusted input: Number() coercion, never a refusal', () =
     shape: 'line',
     spacing: 10,
     anchor: { lat: 47, lon: 8, alt: 30 },
-    sysids: [1, 'abc'],
+    sysids: [1, 'abc'], pitchDeg: 0,
   });
   assert.equal(targets.length, 2, 'both entries keep their slots');
   assert.equal(targets[0].sysid, 1);
   assert.ok(Number.isNaN(targets[1].sysid), 'the malformed entry coerces to NaN');
   // null takes the defined coercion too: Number(null) is 0.
   const coerced = formationTargets({
-    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [1, null],
+    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [1, null], pitchDeg: 0,
   });
   assert.deepEqual(coerced.map((target) => target.sysid), [0, 1]);
 });
@@ -263,7 +263,7 @@ test('spacing is trusted config: Number() coercion only — the editor validator
 
 test('an empty sysid list positions nobody', () => {
   const targets = formationTargets({
-    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [],
+    shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [], pitchDeg: 0,
   });
   assert.deepEqual(targets, [], 'no vehicles, no slots — nothing to refuse');
 });
@@ -273,7 +273,7 @@ test('an anchor at the pole computes what the maths gives — no refusal of its 
   // typed anchor; a leader's own reported position is measured data (§4). The
   // driver computes and hands the number on.
   const targets = formationTargets({
-    shape: 'line', spacing: 10, anchor: { lat: 89.999999, lon: 8, alt: 30 }, sysids: [1, 2],
+    shape: 'line', spacing: 10, anchor: { lat: 89.999999, lon: 8, alt: 30 }, sysids: [1, 2], pitchDeg: 0,
   });
   assert.equal(targets.length, 2);
   assert.ok(targets.every((t) => typeof t.lon === 'number'));

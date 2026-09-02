@@ -85,7 +85,7 @@
             const changedOnly = $own ? $own.is(':checked') : this.changedOnly === true;
             if (changedOnly !== true) return true;
             if (RED.mavlink.isBlank(v)) return true;
-            return String(v).split(',').every((token) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(token.trim())) || 'must be comma-separated field names';
+            return String(v).split(',').every((token) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) || 'must be comma-separated field names';
           },
         },
         fieldName:   {
@@ -98,7 +98,7 @@
         },
         fieldValue:  { value: '' },
         rateLimit:   {
-          value: 0,
+          value: '0',
           validate(v) {
             // Blank/number = global Hz; otherwise comma NAME=Hz pairs, with an
             // optional bare Hz default among them. Every token must be

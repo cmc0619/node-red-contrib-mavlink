@@ -26,8 +26,14 @@ function stubConn() {
         if (i >= 0) handlers.splice(i, 1);
       };
     },
+    // Omitted target extensions decode as 0 (§14).
     injectAck(fields, sysid, compid) {
-      const decoded = { name: 'COMMAND_ACK', sysid, compid, fields };
+      const decoded = {
+        name: 'COMMAND_ACK',
+        sysid,
+        compid,
+        fields: { target_system: 0, target_component: 0, ...fields },
+      };
       for (const { handler } of handlers.slice()) handler(decoded);
     },
   };
@@ -40,6 +46,7 @@ function makeWaiter(conn, opts) {
     commandId: 400,
     targetSystem: 1,
     targetComponent: 1,
+    sourceIds: { sysid: 255, compid: 190 },
     ...opts,
   });
 }

@@ -48,12 +48,13 @@ function scriptedConn(results) {
           name: 'COMMAND_ACK',
           sysid: opts.target.sysid,
           compid: opts.target.compid,
-          fields: { command: message.fields.command, result },
+          // Omitted target extensions decode as 0 (§14).
+          fields: { command: message.fields.command, result, target_system: 0, target_component: 0 },
         };
         for (const { handler } of subs.slice()) handler(decoded);
       }, 0);
     },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);

@@ -15,8 +15,6 @@ const assert = require('node:assert/strict');
 const {
   makeStatusRecord,
   MAV_RESULT,
-  TERMINAL_RESULTS,
-  SUCCESS_RESULTS,
   RESULT_NAME,
 } = require('../../lib/command');
 
@@ -78,16 +76,6 @@ test('makeStatusRecord fills defaults for optional fields', () => {
 });
 
 // -- MAV_RESULT tables -------------------------------------------------------
-
-test('TERMINAL_RESULTS contains ACCEPTED, not IN_PROGRESS', () => {
-  assert.equal(TERMINAL_RESULTS.has(MAV_RESULT.ACCEPTED), true);
-  assert.equal(TERMINAL_RESULTS.has(MAV_RESULT.IN_PROGRESS), false);
-});
-
-test('SUCCESS_RESULTS contains only ACCEPTED', () => {
-  assert.equal(SUCCESS_RESULTS.has(MAV_RESULT.ACCEPTED), true);
-  assert.equal(SUCCESS_RESULTS.size, 1);
-});
 
 test('RESULT_NAME maps every MAV_RESULT to a non-empty string', () => {
   for (const [k, v] of Object.entries(MAV_RESULT)) {

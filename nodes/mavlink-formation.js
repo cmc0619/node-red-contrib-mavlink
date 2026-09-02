@@ -79,7 +79,7 @@ module.exports = function registerMavlinkFormation(RED) {
         // Guided reposition is relative-alt; pass the frame explicitly —
         // the driver no longer invents it when omitted (§0).
         frame: DEFAULT_FRAME,
-        coordKinds: (bundle && intCoordKinds(bundle, commandId)) || undefined,
+        coordKinds: intCoordKinds(bundle, commandId),
       });
       return _message;
     }
@@ -90,7 +90,7 @@ module.exports = function registerMavlinkFormation(RED) {
           done();
           return;
         }
-        const payload = msg.payload ?? {};
+        const payload = msg.payload;
         const sysids = parseSysidList(
           payload.sysids !== undefined ? payload.sysids : config.sysids
         );
@@ -125,13 +125,10 @@ module.exports = function registerMavlinkFormation(RED) {
           targets: memberTargets,
           mode: 'sequential',
           delivery: config.delivery,
-          // The editor validators reject blank at deploy, so a present value
-          // is guaranteed numeric — trust it (Number only, no second default).
-          // Absence stays absence: a config with no key passes undefined so
-          // lib/fanout's own absence default fires, rather than NaN silencing
-          // every pacing comparison (Gitar, #287).
-          intervalMs: config.intervalMs === undefined ? undefined : Number(config.intervalMs),
-          timeoutMs: config.timeoutMs === undefined ? undefined : Number(config.timeoutMs),
+          // The editor owns both defaults and rejects blank at deploy, so the
+          // saved value is numeric — trust it (Number only, no second default).
+          intervalMs: Number(config.intervalMs),
+          timeoutMs: Number(config.timeoutMs),
         }));
 
         // A redeploy cancelled us: finish quietly rather than emitting or
@@ -193,8 +190,10 @@ module.exports = function registerMavlinkFormation(RED) {
  *   `leaderSysid` only on a leader anchor — the vehicle the pattern hung off.
  */
 function resolveAnchor(config, payload, peerTable) {
-  // Payload heading wins over config; blank means "not set" (null). The peer
-  // table projects a leader's telemetry heading to a finite number or null.
+  // Payload heading wins over config; both blank means "not set" (NaN), and a
+  // present value rides as Number() whatever it holds. The peer table
+  // projects a leader's telemetry heading to a finite number or null.
+  const headingGiven = !isBlank(payload.headingDeg) || !isBlank(config.headingDeg);
   let heading = !isBlank(payload.headingDeg)
     ? Number(payload.headingDeg)
     : isBlank(config.headingDeg) ? NaN : Number(config.headingDeg);
@@ -215,7 +214,7 @@ function resolveAnchor(config, payload, peerTable) {
         peerTable.snapshot(), Number(config.leader), config.promoteLeader
       );
       const position = leader.component.position;
-      if (!Number.isFinite(heading) && position.heading != null) heading = position.heading;
+      if (!headingGiven && position.heading != null) heading = position.heading;
       return {
         anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
         headingDeg: heading,

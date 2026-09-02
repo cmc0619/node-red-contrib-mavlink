@@ -7,7 +7,6 @@ const {
   resolveActionTarget,
   profileFromVehicleNode,
   firstDefined,
-  numberOr,
 } = require('../../lib/addressing');
 
 const PROFILE = { targetSystem: 42, targetComponent: 191, firmware: 'px4' };
@@ -132,23 +131,3 @@ test('profileFromVehicleNode maps defaults, firmware and family', () => {
   );
 });
 
-// ── numberOr ─────────
-
-test('numberOr: blank/absent resolves to the fallback verbatim', () => {
-  assert.equal(numberOr(undefined, 1000), 1000);
-  assert.equal(numberOr(null, 1000), 1000);
-  assert.equal(numberOr('', 1000), 1000);
-  assert.equal(numberOr('   ', 1000), 1000);
-  // The fallback itself is not finiteness-checked — undefined rides through,
-  // matching PeerTable's own "let the built-in default apply" contract.
-  assert.equal(numberOr(undefined, undefined), undefined);
-});
-
-test('numberOr: a present finite value coerces, including an explicit 0', () => {
-  assert.equal(numberOr('5000', 1000), 5000);
-  assert.equal(numberOr(5000, 1000), 5000);
-  // 0 is a real value, not blank — the truthiness bug this replaces
-  // (`config.staleMs ? Number(config.staleMs) : undefined`) lost it.
-  assert.equal(numberOr(0, 1000), 0);
-  assert.equal(numberOr('0', 1000), 0);
-});

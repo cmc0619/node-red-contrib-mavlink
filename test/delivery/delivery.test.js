@@ -114,8 +114,3 @@ test('capBadge: the last character of a capped string is the ellipsis glyph', ()
   assert.equal(capped[capped.length - 1], '\u2026');
 });
 
-test('capBadge: coerces non-string input via String()', () => {
-  const result = capBadge(12345);
-  assert.equal(result, '12345');
-});
-

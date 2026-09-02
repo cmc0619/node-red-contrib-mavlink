@@ -116,7 +116,7 @@ test('changedFields red-rings tokens that can never name a decoded field — onl
   assert.equal(changedFields.validate.length, 2);
   const on = { changedOnly: true };
   assert.equal(changedFields.validate.call(on, '', {}), true, 'blank = all fields except timestamps');
-  assert.equal(changedFields.validate.call(on, 'custom_mode, base_mode', {}), true);
+  assert.equal(changedFields.validate.call(on, 'custom_mode,base_mode', {}), true);
   assert.match(String(changedFields.validate.call(on, 'custom_mode,', {})), /field names/, 'a stray comma reds');
   assert.match(String(changedFields.validate.call(on, 'custom mode', {})), /field names/, 'a space mid-name reds');
   assert.equal(

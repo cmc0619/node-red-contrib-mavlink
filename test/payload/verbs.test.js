@@ -79,8 +79,8 @@ test('shared field keys map to colliding enum families, so a stashed id must not
 });
 
 test('gimbal roi-set does not invent 0 for a blank coordinate (#88)', () => {
-  // Incomplete msg values stay unset through the recipe; LONG Number() yields
-  // NaN (float). Invented 0 would be silent equator (§0).
+  // Incomplete msg values stay unset through the recipe and ride unset on the
+  // built message; the wire writes NaN for an unset float, never a silent equator (§0).
   const base = {
     topic: 'gimbal',
     verb: 'roi-set',
@@ -88,7 +88,7 @@ test('gimbal roi-set does not invent 0 for a blank coordinate (#88)', () => {
     carrier: 'long',
   };
   const blank = buildPayloadMessage({ ...base, values: { lon: 8.5, alt: 30 } });
-  assert.ok(Number.isNaN(blank.message.fields.param5), 'blank lat is NaN, not 0');
+  assert.equal(blank.message.fields.param5, undefined, 'blank lat rides unset — NaN on the wire, never 0');
   assert.equal(blank.message.fields.param6, 8.5);
 
   // The slot still carries `required` — as metadata for the dialog.
@@ -155,6 +155,6 @@ test('whitespace is blank for an ROI coordinate — NaN, not Number(\' \') → 0
       carrier: 'long',
       values: { lat: ws, lon: 8.5, alt: 30 },
     });
-    assert.ok(Number.isNaN(built.message.fields.param5), `${JSON.stringify(ws)} is blank`);
+    assert.equal(built.message.fields.param5, undefined, `${JSON.stringify(ws)} is blank`);
   }
 });
