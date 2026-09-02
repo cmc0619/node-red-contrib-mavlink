@@ -73,9 +73,9 @@ const { BAND } = require('../lib/connection/bands');
 
 /** Lazy metadata for coordKinds — palette still registers when deps are missing. */
 let _metadataApi;
-function metadataApi() {
+function metadataApi(RED) {
   if (_metadataApi !== undefined) return _metadataApi;
-  _metadataApi = loadMetadata('mavlink-command').api;
+  _metadataApi = loadMetadata('mavlink-command', RED).api;
   return _metadataApi;
 }
 
@@ -147,7 +147,7 @@ module.exports = function registerMavlinkCommand(RED) {
           if (config.dialect === '__vehicle') {
             bundle = dialectFromVehicleId(RED, config.vehicle, { rethrow: true });
           } else if (config.dialect) {
-            const api = metadataApi();
+            const api = metadataApi(RED);
             if (api) bundle = api.loadBundled(config.dialect);
           }
           break;
@@ -194,7 +194,7 @@ module.exports = function registerMavlinkCommand(RED) {
         case 'build':
           context.bundle = config.dialect === '__vehicle'
             ? dialectFromVehicleId(RED, config.vehicle)
-            : null;
+            : metadataApi(RED).loadBundled(config.dialect);
           break;
         case 'send':
         case 'confirm':

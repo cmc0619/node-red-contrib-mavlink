@@ -242,20 +242,16 @@ module.exports = function registerMavlinkParam(RED) {
           buildFirmwareProfile: true,
         });
 
-        const request = requestFrom(config, payload, {
-          target,
-          profile,
-          connectionNode: connNode,
-        });
-
-        const message = buildParamMessage(request);
-
         // Affirmative dispatch on the tier (§5): a token the editor's delivery
         // ring cannot save (mavlink-param.html) matches no case, so nothing
-        // reaches the wire and the input completes as a no-op.
+        // reaches the wire and the input completes as a no-op. Each arm builds
+        // its own request: Build has no peer table to ask, so the firmware
+        // rung decides its encoding; the wire tiers read AUTOPILOT_VERSION.
         switch (delivery) {
           case 'build':
-            completeBuild(node, send, message);
+            completeBuild(node, send, buildParamMessage(
+              requestFrom(config, payload, { target, profile, capabilities: null })
+            ));
             break;
           case 'send':
           case 'confirm':
@@ -273,6 +269,12 @@ module.exports = function registerMavlinkParam(RED) {
 
         /** Send the message and, on a waiting tier, arm its transaction. */
         function wireTier() {
+          const request = requestFrom(config, payload, {
+            target,
+            profile,
+            capabilities: capabilitiesFromPeer(connNode, target),
+          });
+          const message = buildParamMessage(request);
           // Queue band per action (§5, §7): the full-table stream rides Bulk,
           // the single-param conversations ride Control. A stray action
           // selects no band here — and built no message either
@@ -459,10 +461,10 @@ module.exports = function registerMavlinkParam(RED) {
  *
  * @param {object} config
  * @param {object} payload
- * @param {{target: object, profile: object|null, connectionNode?: object|null}} ctx
+ * @param {{target: object, profile: object|null, capabilities: number|null}} ctx
  * @returns {object} normalized param request
  */
-function requestFrom(config, payload, { target, profile, connectionNode }) {
+function requestFrom(config, payload, { target, profile, capabilities }) {
   const firmware = payload.firmware === undefined
     ? profile && profile.firmware
     : payload.firmware;
@@ -470,7 +472,6 @@ function requestFrom(config, payload, { target, profile, connectionNode }) {
   // unexampled and untested — nothing in the repo ever wrote it (1a79c88 removed
   // the matching config-side alias).
   const encoding = payload.paramEncoding;
-  const capabilities = capabilitiesFromPeer(connectionNode, target);
   return {
     action: payload.action === undefined ? config.action : payload.action,
     target,
@@ -496,9 +497,9 @@ function requestFrom(config, payload, { target, profile, connectionNode }) {
  * @returns {number|null}
  */
 function capabilitiesFromPeer(connectionNode, target) {
-  // Supported absence: connection not ready / peer table not attached yet.
-  // Missing component or capabilities → fall through to firmware (null).
-  const table = connectionNode && connectionNode.peerTable;
+  // Supported absence: peer table not attached yet. Missing component or
+  // capabilities → fall through to firmware (null).
+  const table = connectionNode.peerTable;
   if (!table) return null;
   const component = table.getComponent(Number(target.sysid), Number(target.compid));
   if (!component || component.capabilities == null || component.capabilities === '') {
