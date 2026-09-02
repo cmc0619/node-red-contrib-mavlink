@@ -8,6 +8,12 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **Build's Message picker and its COMMAND_LONG/INT MAV_CMD picker can be
+  typed.** The same search box the Command node's Advanced MAV_CMD got: a
+  name or the number, matches with descriptions as you type, the select stays
+  the saved property. The search is now one shared editor helper behind all
+  three pickers.
+
 - **Move's Buttons row is one multi-select.** The sixteen generated checkboxes
   are replaced by Node-RED's typedInput multi-select over the same sixteen
   bits; the saved value is still the uint16 mask, composed on every change,

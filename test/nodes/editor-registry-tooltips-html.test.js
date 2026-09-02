@@ -40,7 +40,7 @@ test('Build message and MAV_CMD selects title via shared fillEnumSelect', () => 
 
 test('Command Advanced MAV_CMD select and enum options use catalog descriptions', () => {
   const html = readHtml('mavlink-command');
-  assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,\s*_advancedCommands/);
+  assert.match(html, /RED\.mavlink\.fillEnumSelect\(sel,\s*catalog\.commands/);
   assert.match(html, /titleNamespace:\s*'mavCmdTip'/);
   assert.match(html, /RED\.mavlink\.bindSelectTitleSync\(sel,\s*\{\s*namespace:\s*'mavPresetTip'/);
   assert.match(html, /catalogParamByIndex/);
