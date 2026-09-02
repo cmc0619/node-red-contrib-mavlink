@@ -8,6 +8,14 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **Advanced MAV_CMD can be typed.** A search box above the command select
+  takes a name, with or without the `MAV_CMD_` prefix, or the number, and
+  offers matches with their descriptions as you type; a typed exact name or
+  number lands in the select directly. The select stays the saved property
+  and keeps its browse list, validator and hover titles, so only a command
+  the dialect lists can be saved. The menu is Node-RED's own autocomplete
+  widget.
+
 - **The Connection dialog no longer offers an identity it cannot bind.** The
   Identity picker leaves out a companion another Connection holds, and each
   Extra identities row leaves out the primary and what the other rows hold,
