@@ -162,6 +162,31 @@ test('the send() dry run signs when the link signs, consuming no counter', async
   connection.close();
 });
 
+test('a sign-outbound link with no key refuses inside send(), through the real signer', async () => {
+  // The credentials file is gone but the flow still says sign-outbound: the
+  // real wire's signer refuses a null key, and the signed dry run puts that
+  // refusal in send() synchronously — nothing is enqueued, nothing reported
+  // sent, no frame reaches the socket.
+  const { createWire } = require('../../lib/connection/wire');
+  const { loadBundled } = require('../../lib/metadata');
+  const { connection, dg } = build(
+    { signing: { linkId: 0, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: false, key: null } },
+    { wire: createWire({ bundle: loadBundled('minimal') }) }
+  );
+  await connection.start();
+
+  assert.throws(
+    () => connection.send(
+      { name: 'HEARTBEAT', fields: { type: 6, autopilot: 8, base_mode: 0, custom_mode: 0, system_status: 0, mavlink_version: 3 } },
+      { band: BAND.LIVENESS }
+    ),
+    TypeError
+  );
+  await delay(10);
+  assert.equal(dg.sockets[0].sent.length, 0, 'nothing left the socket');
+  connection.close();
+});
+
 test('outbound sends drain one at a time in band order, using the socket callback as the release', async () => {
   const { connection, dg } = build();
   await connection.start();
