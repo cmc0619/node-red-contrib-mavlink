@@ -70,8 +70,7 @@ module.exports = function registerMavlinkMove(RED) {
     // TEMPORARILY_REJECTED, and re-arms on IN_PROGRESS. A goto re-sent is the
     // same goto, so auto-retry is safe. Every non-accepted terminal —
     // COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included — is a
-    // failure with its MAV_RESULT name, never silence; Move does no carrier
-    // swap, because DO_REPOSITION is COMMAND_INT-only by spec and ArduPilot.
+    // failure with its MAV_RESULT name, never silence.
     async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
       waiterSlot.cancel();
       applyActionStatus(node, 'sending', `${label}…`);

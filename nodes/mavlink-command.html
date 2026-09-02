@@ -1183,10 +1183,10 @@
         float32.</li>
   </ul>
   <p>
-    A vehicle that rejects the chosen carrier with
-    <code>COMMAND_INT_ONLY</code> / <code>COMMAND_LONG_ONLY</code> triggers one
-    automatic resend in the other form; the resend is rebuilt from the same
-    degree-valued parameters.
+    A vehicle that wants the other message acks
+    <code>COMMAND_INT_ONLY</code> / <code>COMMAND_LONG_ONLY</code>; that ack is
+    reported on output 1 (status) like any other rejection, and the flow decides
+    what to send next.
   </p>
 
   <h3>Outputs</h3>

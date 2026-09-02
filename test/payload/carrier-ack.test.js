@@ -1,15 +1,9 @@
 'use strict';
 
 /**
- * mavlink-payload carrier auto-resend (DESIGN.md §9 "resend in the other
- * form") — the same rule mavlink-command follows, through the same
- * `carrierWantedBy`.
- *
- * This matters more on Payload than on Command. The editor shows the Carrier
- * control only for a verb whose command carries a location (gimbal ROI-set)
- * and pins the other 13 command verbs to COMMAND_INT, so an operator cannot
- * choose LONG for them. On a LONG-only vehicle the swap is the only thing
- * between those verbs and a flat refusal.
+ * mavlink-payload on the confirm tier: the pinned or chosen carrier is sent
+ * once, and the COMMAND_ACK it earns — a wrong-carrier code included — is the
+ * result (DESIGN.md §9). A redeploy-cancelled wait finishes quietly.
  */
 
 const { EventEmitter } = require('node:events');
@@ -102,68 +96,22 @@ function runInput(node, msg = {}, done = () => {}) {
   return new Promise((resolve) => node.emit('input', msg, resolve, done));
 }
 
-test('LONG_ONLY on a pinned-INT verb resends as COMMAND_LONG and continues', async () => {
-  const { node, conn, warnings } = deploy([
-    MAV_RESULT.COMMAND_LONG_ONLY,
-    MAV_RESULT.ACCEPTED,
-  ]);
-  await runInput(node, {}, () => {});
-  await tick();
-  await tick();
+test('a wrong-carrier ack is the result: one send, reported on output 1 as-is', async () => {
+  // servo set is pinned to COMMAND_INT by the editor; a LONG-only vehicle's
+  // answer rides out as the rejection it is, and the flow decides.
+  const { node, conn, warnings } = deploy([MAV_RESULT.COMMAND_LONG_ONLY]);
+  const sent = await runInput(node, {}, () => {});
 
-  assert.equal(conn.sent.length, 2, 'exactly two sends: one INT then one LONG');
-  assert.equal(conn.sent[0].message.name, 'COMMAND_INT', 'first attempt is the pinned carrier');
-  assert.equal(conn.sent[1].message.name, 'COMMAND_LONG', 'resent in the form the vehicle asked for');
-  assert.equal(conn.sent[1].message.fields.command, 183, 'same command, rebuilt not mutated');
-  assert.equal(conn.sent[1].message.fields.param1, 8, 'params survive the rebuild');
-  assert.equal(conn.sent[1].message.fields.param2, 1600);
-  assert.equal(warnings.length, 1, 'the swap is announced, never silent');
-  assert.match(warnings[0], /carrier swap/);
+  assert.equal(conn.sent.length, 1, 'the pinned carrier is sent once; nothing follows it');
+  assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
+  assert.deepEqual(warnings, []);
+  assert.equal(sent[0], null, 'output 0 stays silent on a rejection');
+  assert.equal(sent[1].result, 'command_long_only');
+  assert.equal(sent[1].resultCode, MAV_RESULT.COMMAND_LONG_ONLY);
+  assert.equal(sent[1].detail, null, 'the ack rides out unchanged');
 });
 
-test('INT_ONLY on a LONG-carrier verb resends as COMMAND_INT', async () => {
-  // The other direction. gimbal roi-set is the one verb whose Send-as control
-  // the editor still shows, so `long` here is an operator choice rather than
-  // the pin — and it is the verb where the carrier is observable at all.
-  const { node, conn, warnings } = deploy(
-    [MAV_RESULT.COMMAND_INT_ONLY, MAV_RESULT.ACCEPTED],
-    {
-      topic: 'gimbal',
-      verb: 'roi-set',
-      sendAs: 'long',
-      frame: '3',
-      values: { lat: 47.397742, lon: 8.545594, alt: 30 },
-    }
-  );
-  await runInput(node, {}, () => {});
-  await tick();
-  await tick();
-
-  assert.equal(conn.sent.length, 2);
-  assert.equal(conn.sent[0].message.name, 'COMMAND_LONG', 'first attempt is the configured carrier');
-  assert.equal(conn.sent[1].message.name, 'COMMAND_INT', 'resent in the form the vehicle asked for');
-  // The rebuild re-runs the recipe, so INT scaling is applied to the resend
-  // rather than the LONG floats being copied across.
-  assert.equal(conn.sent[1].message.fields.x, Math.round(47.397742 * 1e7), 'lat rebuilt as degE7');
-  assert.equal(conn.sent[1].message.fields.y, Math.round(8.545594 * 1e7), 'lon rebuilt as degE7');
-  assert.equal(conn.sent[0].message.fields.param5, 47.397742, 'the LONG attempt carried raw degrees');
-  assert.equal(warnings.length, 1);
-});
-
-test('a second wrong-carrier ack fails loud rather than ping-ponging', async () => {
-  const { node, conn } = deploy([
-    MAV_RESULT.COMMAND_LONG_ONLY,
-    MAV_RESULT.COMMAND_INT_ONLY,
-  ]);
-  await runInput(node, {}, () => {});
-  await tick();
-  await tick();
-  await tick();
-
-  assert.equal(conn.sent.length, 2, 'no third send — one swap per message');
-});
-
-test('ACCEPTED first time does not swap and does not warn', async () => {
+test('ACCEPTED: one send, no warn', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED]);
   await runInput(node, {}, () => {});
   await tick();
@@ -173,12 +121,12 @@ test('ACCEPTED first time does not swap and does not warn', async () => {
   assert.deepEqual(warnings, []);
 });
 
-test('an ordinary DENIED is not a carrier problem and is not resent', async () => {
+test('DENIED: one send, no warn', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.DENIED]);
   await runInput(node, {}, () => {});
   await tick();
 
-  assert.equal(conn.sent.length, 1, 'DENIED means no, not wrong envelope');
+  assert.equal(conn.sent.length, 1);
   assert.deepEqual(warnings, []);
 });
 

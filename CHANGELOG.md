@@ -6,6 +6,18 @@ config-node shapes and message contracts may still change without a major bump.
 
 ## [Unreleased]
 
+### Removed
+
+- **The wrong-carrier auto-resend.** Command and Payload no longer answer a
+  `COMMAND_INT_ONLY` / `COMMAND_LONG_ONLY` ack by rebuilding the command as
+  the other message and sending it again. That ack is now the reported result,
+  on the failure output like any other rejection, and the flow decides what to
+  send next — which is what pymavlink, MAVSDK and QGroundControl do, none of
+  them resends. Stock ArduPilot converts every `COMMAND_LONG` to `COMMAND_INT`
+  itself and PX4 accepts both, so neither ever sends these codes; the resend
+  only ever fired against a custom-built stack. The warn-and-badge that
+  announced a resend goes with it.
+
 ### Changed
 
 - **Build's Message picker and its COMMAND_LONG/INT MAV_CMD picker can be

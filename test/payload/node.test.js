@@ -175,8 +175,7 @@ test('mavlink-payload confirm tier with carrier int sends COMMAND_INT without a 
 });
 
 test('a broadcast target on the confirm tier still sends — the editor is what reds it (#260)', async () => {
-  // One ack cannot answer for a fleet, and the carrier swap could re-broadcast
-  // off a stray wrong-carrier ack. A *configured* sysid 0 on the confirm tier
+  // One ack cannot answer for a fleet. A *configured* sysid 0 on the confirm tier
   // reds at deploy (mavlink-payload.html targetSystem); a payload override is
   // trusted input and rides (§0).
   const conn = connStub();
