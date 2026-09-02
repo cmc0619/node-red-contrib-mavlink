@@ -1493,13 +1493,13 @@ test('mavlink-move: clearing a group clears its fields, so the form and the mask
   // screen to explain it.
   assertChangeHandlerContains(
     html,
-    "$(`#move-group-${entry[0]}`)",
-    "$(`#node-input-${name}`).val('')",
+    `$(\`#move-group-\${entry[0]}\`)`,
+    `$(\`#node-input-\${name}\`).val('')`,
     'clearing a box clears the group it discloses'
   );
   assertChangeHandlerContains(
     html,
-    "$(`#move-group-${entry[0]}`)",
+    `$(\`#move-group-\${entry[0]}\`)`,
     'refreshVisibility()',
     'and repaints, so the rows follow'
   );
@@ -1511,7 +1511,7 @@ test('mavlink-move: the disclosure is seeded from the fields, not from a saved f
   assert.match(html, /function seedDisclosure/, 'the seed exists');
   assert.match(
     html,
-    /=> !RED\.mavlink\.isBlank\(node\[name\]\)/,
+    /[=]> !RED\.mavlink\.isBlank\(node\[name\]\)/,
     'a group is open iff one of its fields carries a value'
   );
   assert.match(html, /if \(!any\) seeded\.position = true;/, 'an empty Steer node opens on Position');

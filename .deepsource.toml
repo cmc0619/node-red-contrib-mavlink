@@ -3,7 +3,9 @@ version = 1
 # Generated artifacts and fixtures, not authored source. `seed/` is written by
 # scripts/generate-seed.js and generate-param-seed.js; `examples/` is Node-RED
 # flow JSON that the editor round-trips.
-exclude_patterns = ["seed/**", "examples/**"]
+# eslint.config.mjs is ESM tooling, not shipped code; with `module_system`
+# set to commonjs the analyzer cannot parse it and fails the whole run.
+exclude_patterns = ["seed/**", "examples/**", "eslint.config.mjs"]
 
 # Tagged as tests so analyzer rules meant for shipped code (no-op stubs,
 # assert-shaped "redundant" literals) stop grading the harness files.
