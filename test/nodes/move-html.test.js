@@ -1233,45 +1233,50 @@ function actionVerdict(family, action, connection) {
   );
 }
 
-test('mavlink-move: button checkboxes compose the bitmask the operator used to hand-compute', () => {
+test('mavlink-move: the Buttons multi-select composes the bitmask the operator used to hand-compute', () => {
   // The raw field's built-in trap: "button 3" is the value 4, and an operator
-  // typing 3 pressed buttons 1 and 2. The checkboxes are a view over the same
-  // hidden canonical field — the config value, its validator, and
-  // msg.payload.buttons are all unchanged — so this extracts and executes the
-  // two pure helpers that do the composing, plus the invariants that keep the
-  // view honest.
-  const count = /var BUTTON_COUNT = (\d+);/.exec(html);
-  assert.ok(count, 'BUTTON_COUNT must be extractable');
-  assert.equal(count[1], '16', 'sixteen is the uint16 type width, not a guess');
-
-  const decompose = /function decomposeButtons\(value\) \{[\s\S]*?\n {2}\}/.exec(html);
-  const compose = /function composeButtons\(pressed\) \{[\s\S]*?\n {2}\}/.exec(html);
+  // typing 3 pressed buttons 1 and 2. Node-RED's typedInput owns the menu; the
+  // multi-select is a view over the same hidden canonical field — the config
+  // value, its validator, and msg.payload.buttons are all unchanged — so this
+  // extracts and executes the pure helpers that translate between the two.
+  const options = /var BUTTON_OPTIONS = \[\];\n\s*for \(var bit = 0; bit < 16; bit\+\+\) BUTTON_OPTIONS\.push\([^\n]*\);\n/.exec(html);
+  const toBits = /function buttonsToBits\(value\) \{[\s\S]*?\n {2}\}/.exec(html);
+  const toMask = /function bitsToButtons\(csv\) \{[\s\S]*?\n {2}\}/.exec(html);
   const maskPred = /function isValidButtonsMask\(n\) \{[\s\S]*?\n {2}\}/.exec(html);
-  assert.ok(decompose && compose && maskPred, 'all three helpers must be extractable');
+  assert.ok(options && toBits && toMask && maskPred, 'the helpers must be extractable');
   const RED = { mavlink: { isBlank: (v) => v === undefined || v === null || String(v).trim() === '' } };
-  const helpers = new Function('RED', `var BUTTON_COUNT = 16;\n${maskPred[0]}\n${decompose[0]}\n${compose[0]}\nreturn { decomposeButtons, composeButtons };`)(RED);
+  const helpers = new Function('RED', `${options[0]}\n${maskPred[0]}\n${toBits[0]}\n${toMask[0]}\nreturn { buttonsToBits, bitsToButtons, BUTTON_OPTIONS };`)(RED);
+
+  assert.equal(helpers.BUTTON_OPTIONS.length, 16, 'sixteen is the uint16 type width, not a guess');
+  assert.deepEqual(helpers.BUTTON_OPTIONS[2], { value: '2', label: 'Button 3' }, 'Button 3 is bit 2');
 
   // The off-by-one pin: Button 3 is bit 2 is the value 4.
-  const b3 = helpers.decomposeButtons('4');
-  assert.equal(b3[2], true, 'value 4 is Button 3 pressed');
-  assert.equal(b3.filter(Boolean).length, 1, 'and nothing else');
-  assert.equal(helpers.composeButtons(b3), '4', 'and it composes back');
+  assert.equal(helpers.buttonsToBits('4'), '2', 'value 4 selects Button 3 and nothing else');
+  assert.equal(helpers.bitsToButtons('2'), '4', 'and it composes back');
 
   // Round-trips at the edges.
-  assert.equal(helpers.composeButtons(helpers.decomposeButtons('65535')), '65535', 'all sixteen');
-  assert.equal(helpers.composeButtons(helpers.decomposeButtons('1')), '1', 'Button 1 is bit 0');
+  assert.equal(helpers.bitsToButtons(helpers.buttonsToBits('65535')), '65535', 'all sixteen');
+  assert.equal(helpers.buttonsToBits('1'), '0', 'Button 1 is bit 0');
   // All-off composes blank, not '0' — an untouched dialog round-trips
   // byte-identical to what it always saved, and blank is what the runtime
   // reads as BUTTONS_NONE.
-  assert.equal(helpers.composeButtons(helpers.decomposeButtons('')), '', 'blank stays blank');
-  assert.deepEqual(helpers.decomposeButtons('garbage'), new Array(16).fill(false), 'a hand-edited non-number decomposes all-off');
+  assert.equal(helpers.bitsToButtons(helpers.buttonsToBits('')), '', 'blank stays blank');
+  assert.equal(helpers.buttonsToBits('garbage'), '', 'a hand-edited non-number selects nothing');
   // Over-range too (Gitar, #305): 70000's low 16 bits used to tick while the
-  // grid's warning called the mask invalid — the two must agree.
-  assert.deepEqual(helpers.decomposeButtons('70000'), new Array(16).fill(false), 'an over-65535 mask decomposes all-off, matching its warning');
+  // grid's warning called the mask invalid — now nothing is selected and the
+  // 0-65535 validator is the one voice.
+  assert.equal(helpers.buttonsToBits('70000'), '', 'an over-65535 mask selects nothing');
 
-  // The canonical field survives as the save path and the deploy-time check.
+  // The canonical field survives as the save path and the deploy-time check,
+  // and the view is set before its change handler binds, so opening a dialog
+  // on an invalid mask cannot blank the value the validator is red-ringing.
   assert.match(html, /<input type="hidden" id="node-input-buttons">/, 'the hidden canonical field exists');
-  assert.match(html, /id="move-buttons-grid"/, 'inside the toggled row, so visibility just works');
+  assert.match(html, /id="move-buttons-pick"/, 'inside the toggled row, so visibility just works');
+  assert.match(
+    html,
+    /\$buttonsPick\.typedInput\(\{ types: \[\{ value: 'buttons', multiple: true, options: BUTTON_OPTIONS \}\] \}\);\s*\$buttonsPick\.typedInput\('value', buttonsToBits\(node\.buttons\)\);\s*\$buttonsPick\.on\('change'/,
+    "Node-RED's typedInput owns the menu; value set, then change bound"
+  );
   const validator = /buttons:\s*\{[\s\S]*?\n {6}\},/.exec(html);
   assert.match(validator[0], /65535/, 'the 0-65535 validator still guards hand-edited flows');
 });

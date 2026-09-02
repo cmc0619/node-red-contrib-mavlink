@@ -172,8 +172,7 @@
       }
       for (var i = 0; i < axes.length; i++) {
         if (axes[i] === name) continue;
-        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + axes[i]);
-        var sibling = $sibling ? $sibling.val() : this[axes[i]];
+        var sibling = fieldValue(this, axes[i]);
         if (!RED.mavlink.isBlank(sibling)) {
           return 'is required once another ' + label + ' axis is filled — a blank axis is '
             + 'commanded 0 under the type_mask, not left alone';
@@ -208,8 +207,7 @@
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
       for (var i = 0; i < ANGLES.length; i++) {
         if (ANGLES[i] === name) continue;
-        var $sibling = RED.mavlink.ownDialogField(this, '#node-input-' + ANGLES[i]);
-        var sibling = $sibling ? $sibling.val() : this[ANGLES[i]];
+        var sibling = fieldValue(this, ANGLES[i]);
         if (!RED.mavlink.isBlank(sibling)) {
           return 'is required once another angle is filled — the three share one ignore '
             + 'bit, so a blank angle is commanded 0 rather than left alone';
@@ -220,61 +218,34 @@
   }
 
   /**
-   * MANUAL_CONTROL's button count. The wire field is a bare uint16 — the
-   * shipped dialect carries `enum: null`, so unlike POSITION_TARGET_TYPEMASK
-   * there are no compiled names to enumerate, only the field's own positional
-   * rule: "the lowest bit corresponds to Button 1". Sixteen is the type
-   * width, not a guess; if upstream ever annotates the field with a bitmask
-   * enum, the honest upgrade is to prefer `field.enum` from the catalog over
-   * this constant and these generic labels.
+   * MANUAL_CONTROL's buttons. The wire field is a bare uint16 — the shipped
+   * dialect carries `enum: null`, so unlike POSITION_TARGET_TYPEMASK there are
+   * no compiled names to enumerate, only the field's own positional rule: "the
+   * lowest bit corresponds to Button 1". The editor offers the sixteen bits as
+   * one multi-select — Node-RED's typedInput with `multiple`, whose value is
+   * the comma-separated bit indices — and the two helpers translate between
+   * that and the mask the property holds. Button 3 is bit 2 is the value 4:
+   * the off-by-one an operator hand-composing the number used to fall into.
    */
-  var BUTTON_COUNT = 16;
+  var BUTTON_OPTIONS = [];
+  for (var bit = 0; bit < 16; bit++) BUTTON_OPTIONS.push({ value: String(bit), label: 'Button ' + (bit + 1) });
 
-  /**
-   * The one spelling of "a legal buttons mask": integer, 0..65535. Three
-   * places need this answer — decompose's zero-arm, the deploy validator, and
-   * the grid's invalid-saved warning — and when they were three inline
-   * spellings they drifted (Gitar, #305: decompose lacked the range arm the
-   * other two had, so 70000 warned while ticking its low bits).
-   *
-   * @param {number} n  the already-Number()ed candidate
-   * @returns {boolean}
-   */
   function isValidButtonsMask(n) {
     return Number.isInteger(n) && n >= 0 && n <= 65535;
   }
 
-  /**
-   * Saved bitmask → per-button booleans, positional per the dialect's rule
-   * (bit 0 = Button 1). Exists because the raw field has a built-in
-   * off-by-one trap: "button 3" is the value 4, and an operator typing 3
-   * presses buttons 1 and 2.
-   *
-   * @param {*} value  the saved `buttons` config value
-   * @returns {boolean[]} BUTTON_COUNT entries
-   */
-  function decomposeButtons(value) {
+  /** Saved mask → the multi-select's bit indices; blank or an invalid mask selects nothing. */
+  function buttonsToBits(value) {
     var n = RED.mavlink.isBlank(value) ? 0 : Number(value);
-    if (!isValidButtonsMask(n)) n = 0;
-    var pressed = [];
-    for (var i = 0; i < BUTTON_COUNT; i++) pressed.push((n & (1 << i)) !== 0);
-    return pressed;
+    if (!isValidButtonsMask(n)) return '';
+    return BUTTON_OPTIONS.map(function (o) { return o.value; })
+      .filter(function (v) { return (n & (1 << Number(v))) !== 0; }).join(',');
   }
 
-  /**
-   * Per-button booleans → the config value. All-unchecked composes blank, not
-   * '0': blank is what an untouched dialog always saved, so old and new
-   * configs stay byte-identical through a round-trip — and the runtime already
-   * reads blank as "no button pressed" (BUTTONS_NONE).
-   *
-   * @param {boolean[]} pressed
-   * @returns {string} the `buttons` config value
-   */
-  function composeButtons(pressed) {
+  /** Bit indices → the mask the property holds; none composes blank, not 0. */
+  function bitsToButtons(csv) {
     var n = 0;
-    for (var i = 0; i < BUTTON_COUNT; i++) {
-      if (pressed[i]) n |= (1 << i);
-    }
+    String(csv).split(',').forEach(function (v) { if (v !== '') n |= (1 << Number(v)); });
     return n === 0 ? '' : String(n);
   }
 
@@ -779,51 +750,20 @@
 
       RED.mavlink.refreshIdentitySelect(node);
 
-      // Button checkboxes: sixteen generated views over the one hidden
-      // canonical field (see the row markup). Generated rather than sixteen
-      // HTML literals so BUTTON_COUNT is the single width, decomposed from
-      // the saved value on open, composed back on every change — all-off
-      // composes blank, so an untouched dialog round-trips byte-identical.
-      (function () {
-        var $grid = $('#move-buttons-grid');
-        var pressed = decomposeButtons(node.buttons);
-        // An invalid saved mask (hand-edited flow) decomposes all-off — the
-        // over-65535 arm included, so the warning below and the box state
-        // never contradict (Gitar, #305: 70000 used to warn while ticking its
-        // low 16 bits) — and the
-        // 0-65535 validator's red ring now sits on a hidden input where nobody
-        // sees it — so the invalidity gets said in the grid instead (§9 ruling
-        // 6: red on saved, never silently rewritten without a word). The saved
-        // value itself is left untouched until the operator actually ticks.
-        var savedRaw = node.buttons;
-        var savedInvalid = !RED.mavlink.isBlank(savedRaw) && !isValidButtonsMask(Number(savedRaw));
-        if (savedInvalid) {
-          $('<div>', {
-            class: 'form-tips',
-            text: 'saved value "' + savedRaw + '" is not a 16-bit button mask — ticking a box replaces it',
-          }).appendTo($grid);
-        }
-        for (var i = 0; i < BUTTON_COUNT; i++) {
-          $('<label>', {
-            style: 'display:inline-block; width:70px; font-weight:normal; margin:0 4px 2px 0; white-space:nowrap',
-          })
-            .append($('<input>', {
-              type: 'checkbox', class: 'move-button-bit', 'data-bit': i,
-              checked: pressed[i],
-              style: 'width:auto; margin:0 3px 0 0; vertical-align:middle',
-            }))
-            .append(document.createTextNode(String(i + 1)))
-            .appendTo($grid);
-        }
-        $grid.on('change', '.move-button-bit', function () {
-          var next = [];
-          $grid.find('.move-button-bit').each(function () {
-            next[Number($(this).attr('data-bit'))] = this.checked;
-          });
-          $('#node-input-buttons').val(composeButtons(next));
-        });
-      })();
+      // Buttons: Node-RED's typedInput multi-select over the sixteen bits, a
+      // view over the one hidden canonical field (see the row markup). The
+      // view is set from the saved mask BEFORE the change handler binds: an
+      // invalid saved mask (hand-edited flow) selects nothing, and composing
+      // that back would blank the value the validator is red-ringing. Composed
+      // on every operator change — all-off composes blank, so an untouched
+      // dialog round-trips byte-identical.
       $('#node-input-buttons').val(RED.mavlink.isBlank(node.buttons) ? '' : node.buttons);
+      var $buttonsPick = $('#move-buttons-pick');
+      $buttonsPick.typedInput({ types: [{ value: 'buttons', multiple: true, options: BUTTON_OPTIONS }] });
+      $buttonsPick.typedInput('value', buttonsToBits(node.buttons));
+      $buttonsPick.on('change', function () {
+        $('#node-input-buttons').val(bitsToButtons($buttonsPick.typedInput('value')));
+      });
 
       // ▸ Advanced: the rarely-touched params live behind a plain show/hide
       // so the everyday dialog stays the intent and its coordinates.
@@ -1430,13 +1370,13 @@
     <div class="form-row" id="row-move-ackTimeout"><label for="node-input-ackTimeout">ACK timeout</label><input type="number" id="node-input-ackTimeout" style="width:80px" placeholder="10000"> ms</div>
     <div class="form-row" id="row-move-rollRate"><label for="node-input-rollRate">Roll rate</label><input type="text" id="node-input-rollRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
     <div class="form-row" id="row-move-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="text" id="node-input-pitchRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
-    <div class="form-row" id="row-move-buttons"><label for="node-input-buttons">Buttons</label>
+    <div class="form-row" id="row-move-buttons"><label for="move-buttons-pick">Buttons</label>
       <!-- The canonical value stays this one field, hidden: Node-RED's stock
            save path reads it, hand-edited flows still deploy through its
            validator, and msg.payload.buttons is untouched by any of this.
-           The checkboxes are a view, composed/decomposed in oneditprepare. -->
+           The multi-select is a view, composed/decomposed in oneditprepare. -->
       <input type="hidden" id="node-input-buttons">
-      <span id="move-buttons-grid" style="display:inline-block; vertical-align:top"></span>
+      <input type="text" id="move-buttons-pick" style="width:70%">
     </div>
     <div class="form-row" id="row-move-turnRate"><label for="node-input-turnRate">Turn rate</label><input type="text" id="node-input-turnRate" step="any" style="width:120px" placeholder="(vehicle default)"> deg/s</div>
     <div class="form-row" id="row-move-relative"><label for="node-input-relative">Relative</label><input type="checkbox" id="node-input-relative" style="display:inline-block;width:auto;"></div>

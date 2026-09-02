@@ -8,6 +8,29 @@ config-node shapes and message contracts may still change without a major bump.
 
 ### Changed
 
+- **Move's Buttons row is one multi-select.** The sixteen generated checkboxes
+  are replaced by Node-RED's typedInput multi-select over the same sixteen
+  bits; the saved value is still the uint16 mask, composed on every change,
+  blank for none. Same node type, same saved shape, nothing to redeploy.
+
+- **Advanced MAV_CMD can be typed.** A search box above the command select
+  takes a name, with or without the `MAV_CMD_` prefix, or the number, and
+  offers matches with their descriptions as you type; a typed exact name or
+  number lands in the select directly. The select stays the saved property
+  and keeps its browse list, validator and hover titles, so only a command
+  the dialect lists can be saved. The menu is Node-RED's own autocomplete
+  widget.
+
+- **The Connection dialog no longer offers an identity it cannot bind.** The
+  Identity picker leaves out a companion another Connection holds, and each
+  Extra identities row leaves out the primary and what the other rows hold,
+  refilled on every change. The save used to drop a repeated or primary
+  reference silently while the row kept showing it; the row now resets to
+  the placeholder instead. The red ring stays for the one route the menus
+  cannot see, an identity re-roled to companion after two Connections bound
+  it: that saved binding stays in its own menu, so it stays on screen for the
+  validator to red rather than vanishing from the save.
+
 - **Param id search uses Node-RED's own autocomplete widget.** The hand-rolled
   results panel — its keyboard navigation, blur handling and CSS — is gone;
   ranking by name and description is unchanged and now feeds the stock

@@ -144,6 +144,7 @@ function makeHarness() {
         return w;
       },
       hide: () => w, show: () => w, css: () => w, prop: () => w, toggle: () => w,
+      autoComplete: () => w,
       is: () => false, each: () => w, off: () => w, removeAttr: () => w,
       replaceWith: () => w, next: () => ({ length: 0 }), closest: () => dead(),
     };
