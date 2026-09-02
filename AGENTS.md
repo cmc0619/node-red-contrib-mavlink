@@ -187,6 +187,9 @@ receives untrusted wire input:
   invent a hidden timeout, retry, fallback, or recovery policy.
 - Once `mavlink-in` emits a `msg`, that message is trusted. No downstream node
   repeats ingress validation.
+- One recorded exception: the Connection drops frames from source sysid 0
+  before dispatch, because 0 is a destination address a peer table cannot
+  learn (DESIGN.md 14.138).
 
 Outbound specifics §0 does not restate:
 
