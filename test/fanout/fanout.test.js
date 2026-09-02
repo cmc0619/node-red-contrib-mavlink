@@ -1210,6 +1210,7 @@ test('PARAM_SET echo confirm compares wire values — a clamped value does not c
   const handlers = [];
   const makeConnection = () => ({
     peerTable: peerTableStub([peer(5)]),
+    vehicle: { firmware: null },
     sends: [],
     send(message, options) { this.sends.push({ message, options }); },
     resolveSourceIds: () => null,
@@ -1357,6 +1358,7 @@ test('cancel settles a param-echo wait instead of blocking on its timeout (CodeR
   let unsubscribed = 0;
   const connection = {
     peerTable: peerTableStub([peer(1)]),
+    vehicle: { firmware: null },
     sends: [],
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
     // Never echoes: only the cancel can end this wait.
@@ -1424,6 +1426,7 @@ test('a settled param-echo confirm leaves no abort listener on the run signal', 
   const handlers = [];
   const connection = {
     peerTable: peerTableStub([peer(1), peer(2), peer(3)]),
+    vehicle: { firmware: null },
     sends: [],
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
     resolveSourceIds: () => null,
@@ -1503,6 +1506,7 @@ test('a param-echo send that throws at dispatch releases its wait immediately', 
   let unsubscribed = 0;
   const connection = {
     peerTable: peerTableStub([peer(1)]),
+    vehicle: { firmware: null },
     sends: [],
     send() { throw new Error('control band saturated'); },
     resolveSourceIds: () => null,
@@ -1714,6 +1718,7 @@ function connectionStub(rows, options = {}) {
   return {
     id: options.id,
     peerTable,
+    vehicle: { firmware: null },
     sends: [],
     send(message, sendOptions) {
       if (options.failSysids && options.failSysids.has(message.fields.target_system)) {
