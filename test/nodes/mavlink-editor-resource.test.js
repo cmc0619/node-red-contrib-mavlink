@@ -975,7 +975,7 @@ const MSG = { numberKey: 'id' };
 
 test('rankEnumEntries offers a typed number first and lists partial numbers by prefix', () => {
   const { RED } = loadResource();
-  const values = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_COMMANDS, q, CMD)).map((e) => e.value);
+  const values = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_COMMANDS, q, CMD)).map((entry) => entry.value);
   assert.deepEqual(values('5100'), [5100]);
   assert.deepEqual(values('2'), [21, 22], 'a partial number lists the commands it starts');
   assert.deepEqual(values(''), [16, 21, 22, 176, 5100, 189], 'an empty box lists the catalog in order');
@@ -983,7 +983,7 @@ test('rankEnumEntries offers a typed number first and lists partial numbers by p
 
 test('rankEnumEntries takes a name with or without the prefix, descriptions last', () => {
   const { RED } = loadResource();
-  const values = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_COMMANDS, q, CMD)).map((e) => e.value);
+  const values = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_COMMANDS, q, CMD)).map((entry) => entry.value);
   assert.deepEqual(values('nav_land'), [21]);
   assert.deepEqual(values('MAV_CMD_NAV_LAND'), [21]);
   // NAV_LAND is a bare-name hit ahead of DO_LAND_START, which contains it;
@@ -995,7 +995,7 @@ test('rankEnumEntries takes a name with or without the prefix, descriptions last
 
 test('rankEnumEntries reads the code from numberKey for messages', () => {
   const { RED } = loadResource();
-  const names = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_MESSAGES, q, MSG)).map((e) => e.name);
+  const names = (q) => Array.from(RED.mavlink.rankEnumEntries(SEARCH_MESSAGES, q, MSG)).map((entry) => entry.name);
   assert.deepEqual(names('33'), ['GLOBAL_POSITION_INT']);
   assert.deepEqual(names('7'), ['COMMAND_LONG', 'COMMAND_INT'], 'id prefix, catalog order');
   assert.deepEqual(names('command'), ['COMMAND_LONG', 'COMMAND_INT'], 'name prefix');
@@ -1004,13 +1004,13 @@ test('rankEnumEntries reads the code from numberKey for messages', () => {
 
 test('resolveEnumEntry names an entry only by its exact number or exact name', () => {
   const { RED } = loadResource();
-  const cmd = (t) => { const e = RED.mavlink.resolveEnumEntry(SEARCH_COMMANDS, t, CMD); return e && e.value; };
+  const cmd = (text) => RED.mavlink.resolveEnumEntry(SEARCH_COMMANDS, text, CMD)?.value;
   assert.equal(cmd('5100'), 5100);
   assert.equal(cmd(' nav_rally_point '), 5100);
   assert.equal(cmd('MAV_CMD_NAV_RALLY_POINT'), 5100);
   assert.equal(cmd('51'), undefined, 'a partial number is not a command');
   assert.equal(cmd('rally'), undefined, 'a partial name is not a command');
-  const msg = (t) => { const e = RED.mavlink.resolveEnumEntry(SEARCH_MESSAGES, t, MSG); return e && e.name; };
+  const msg = (text) => RED.mavlink.resolveEnumEntry(SEARCH_MESSAGES, text, MSG)?.name;
   assert.equal(msg('33'), 'GLOBAL_POSITION_INT');
   assert.equal(msg('global_position_int'), 'GLOBAL_POSITION_INT');
   assert.equal(msg('3'), undefined);

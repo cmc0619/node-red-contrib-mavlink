@@ -998,9 +998,8 @@
   };
 
   const ENUM_SEARCH_HITS = 20;
-  function enumBareName(upperName, prefix) {
-    return prefix && upperName.indexOf(prefix) === 0 ? upperName.slice(prefix.length) : upperName;
-  }
+  const enumBareName = (upperName, prefix) =>
+    (prefix && upperName.startsWith(prefix) ? upperName.slice(prefix.length) : upperName);
 
   /**
    * Search over a closed enum vocabulary, ranked the way an operator types:
@@ -1015,23 +1014,21 @@
    * @param {{prefix?: string, numberKey?: string}} [opts]
    * @returns {Array<object>}
    */
-  RED.mavlink.rankEnumEntries = function (entries, query, opts) {
-    const prefix = (opts && opts.prefix) || '';
-    const numberKey = (opts && opts.numberKey) || 'value';
-    const q = String(query).trim().toUpperCase();
-    const bare = enumBareName(q, prefix);
+  RED.mavlink.rankEnumEntries = (entries, query, { prefix = '', numberKey = 'value' } = {}) => {
+    const typed = String(query).trim().toUpperCase();
+    const bare = enumBareName(typed, prefix);
     const exact = [];
     const starts = [];
     const contains = [];
     const described = [];
-    for (const e of entries) {
-      const name = enumBareName(String(e.name).toUpperCase(), prefix);
-      const number = String(e[numberKey]);
-      if (!q) { starts.push(e); if (starts.length >= ENUM_SEARCH_HITS) break; continue; }
-      if (number === q || name === bare) { exact.push(e); continue; }
-      if (name.indexOf(bare) === 0 || number.indexOf(q) === 0) { starts.push(e); continue; }
-      if (name.indexOf(bare) !== -1) { contains.push(e); continue; }
-      if (e.description && e.description.toUpperCase().indexOf(q) !== -1) described.push(e);
+    for (const entry of entries) {
+      const name = enumBareName(String(entry.name).toUpperCase(), prefix);
+      const number = String(entry[numberKey]);
+      if (!typed) { starts.push(entry); if (starts.length >= ENUM_SEARCH_HITS) break; continue; }
+      if (number === typed || name === bare) { exact.push(entry); continue; }
+      if (name.startsWith(bare) || number.startsWith(typed)) { starts.push(entry); continue; }
+      if (name.includes(bare)) { contains.push(entry); continue; }
+      if (entry.description && entry.description.toUpperCase().includes(typed)) described.push(entry);
     }
     return exact.concat(starts, contains, described).slice(0, ENUM_SEARCH_HITS);
   };
@@ -1045,14 +1042,11 @@
    * @param {{prefix?: string, numberKey?: string}} [opts]
    * @returns {object|undefined}
    */
-  RED.mavlink.resolveEnumEntry = function (entries, text, opts) {
-    const prefix = (opts && opts.prefix) || '';
-    const numberKey = (opts && opts.numberKey) || 'value';
-    const t = String(text).trim().toUpperCase();
-    const bare = enumBareName(t, prefix);
-    return entries.find(function (e) {
-      return String(e[numberKey]) === t || enumBareName(String(e.name).toUpperCase(), prefix) === bare;
-    });
+  RED.mavlink.resolveEnumEntry = (entries, text, { prefix = '', numberKey = 'value' } = {}) => {
+    const typed = String(text).trim().toUpperCase();
+    const bare = enumBareName(typed, prefix);
+    return entries.find((entry) =>
+      String(entry[numberKey]) === typed || enumBareName(String(entry.name).toUpperCase(), prefix) === bare);
   };
 
   /**
@@ -1078,41 +1072,38 @@
    *
    * @param {object} $box     jQuery text input
    * @param {object} $select  jQuery select — the saved property
-   * @param {{valueKey?: string, numberKey?: string, prefix?: string}} opts
+   * @param {{valueKey?: string, numberKey?: string, prefix?: string}} [opts]
    *   `valueKey` is the entry field the select's options hold (`value`);
    *   `numberKey` and `prefix` as for {@link RED.mavlink.rankEnumEntries}.
    * @returns {{setEntries: function(Array<object>): void}}  call whenever the
    *   select is refilled from a (new) catalog
    */
-  RED.mavlink.mountEnumSearch = function ($box, $select, opts) {
-    const valueKey = opts.valueKey || 'value';
+  RED.mavlink.mountEnumSearch = ($box, $select, { valueKey = 'value', ...ranking } = {}) => {
     let entries = [];
-    function sync() {
+    const sync = () => {
       const current = $select.val();
-      const hit = entries.find(function (e) { return String(e[valueKey]) === current; });
+      const hit = entries.find((entry) => String(entry[valueKey]) === current);
       $box.val(hit ? hit.name : '');
-    }
+    };
     $box.autoComplete({
       minLength: 0,
-      search: function (query) {
-        return RED.mavlink.rankEnumEntries(entries, query, opts).map(function (e) {
-          const $label = $('<div></div>')
-            .append($('<strong></strong>').text(e.label || RED.mavlink.enumOptionLabel(e)));
-          if (e.description) $label.append($('<span></span>').css('margin-left', '0.5em').text(e.description));
-          return { value: e.name, label: $label };
-        });
-      },
+      search: (query) => RED.mavlink.rankEnumEntries(entries, query, ranking).map((entry) => {
+        const $label = $('<div></div>')
+          .append($('<strong></strong>').text(entry.label || RED.mavlink.enumOptionLabel(entry)));
+        if (entry.description) $label.append($('<span></span>').css('margin-left', '0.5em').text(entry.description));
+        return { value: entry.name, label: $label };
+      }),
     });
-    $box.on('change', function () {
-      const hit = RED.mavlink.resolveEnumEntry(entries, $box.val(), opts);
+    $box.on('change', () => {
+      const hit = RED.mavlink.resolveEnumEntry(entries, $box.val(), ranking);
       if (hit && String(hit[valueKey]) !== $select.val()) $select.val(String(hit[valueKey])).trigger('change');
       sync();
     });
-    $box.on('keyup', function (evt) {
+    $box.on('keyup', (evt) => {
       if (evt.key === 'Enter' || evt.key === 'Tab') $box.trigger('change');
     });
     $select.on('change.mavEnumSearch', sync);
-    return { setEntries: function (next) { entries = next; sync(); } };
+    return { setEntries(next) { entries = next; sync(); } };
   };
 
   /**
