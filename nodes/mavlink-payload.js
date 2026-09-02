@@ -257,7 +257,7 @@ module.exports = function registerMavlinkPayload(RED) {
           // and keep the client response generic (CodeRabbit #36).
           if (RED.log && typeof RED.log.error === 'function') {
             RED.log.error(
-              `[mavlink-payload] field-tips unavailable: ${err && err.message ? err.message : String(err)}`
+              `[mavlink-payload] field-tips unavailable: ${err.message}`
             );
           }
           return res.status(400).json({

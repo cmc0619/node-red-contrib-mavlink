@@ -21,7 +21,7 @@ module.exports = function registerMavlinkState(RED) {
     // mode to name — so no context is built and outputs stay numbers-only.
     // An unresolvable Connection craters on first use instead — the feed
     // subscribe below at deploy, or per input in poll mode (§0).
-    const vehicle = connectionNode && connectionNode.vehicle;
+    const vehicle = connectionNode.vehicle;
     const modes = vehicle && {
       firmware: vehicle.firmware,
       vehicleFamily: vehicle.vehicleFamily,

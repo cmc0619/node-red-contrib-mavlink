@@ -14,6 +14,7 @@ function captureRoutes(nodesById) {
   const handlers = new Map();
   const permissions = [];
   const RED = {
+    settings: {},
     nodes: {
       types: {},
       createNode(node, config) {
