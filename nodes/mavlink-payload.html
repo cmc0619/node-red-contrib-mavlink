@@ -17,9 +17,9 @@
      * and no catalog fetched. A drift test pins it against the recipes
      * (test/nodes/payload-verb-html.test.js).
      */
-    var REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
+    const REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
 
-    var payloadDefaults = Object.assign(
+    const payloadDefaults = Object.assign(
       {
         name: { value: '' },
         identity: { value: '' },
@@ -42,11 +42,11 @@
         topic: { value: 'camera', validate: RED.mavlink.oneOf(Object.keys(RED.mavlink.PAYLOAD_VERBS)) },
         verb: {
           value: 'photo',
-          validate: function (v, _opt) {
-            var topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
-            var verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
-            return verbs.some(function (entry) { return entry.value === v; })
-              || 'is not a ' + topic + ' verb';
+          validate(v, _opt) {
+            const topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
+            const verbs = RED.mavlink.PAYLOAD_VERBS[topic] || [];
+            return verbs.some((entry) => entry.value === v)
+              || `is not a ${topic} verb`;
           },
         },
         path: { value: 'legacy', validate: RED.mavlink.oneOf(['legacy', 'manager', 'manager-cmd', 'attitude']) },
@@ -59,16 +59,16 @@
         // there is no #node-input-<slot> for Node-RED to read at save time.
         values: {
           value: {},
-          validate: function (v, _opt) {
-            var topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
-            var verb = RED.mavlink.liveOr(this, '#node-input-verb', this.verb, '');
-            var needed = REQUIRED_VALUES[topic + '|' + verb];
+          validate(v, _opt) {
+            const topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
+            const verb = RED.mavlink.liveOr(this, '#node-input-verb', this.verb, '');
+            const needed = REQUIRED_VALUES[`${topic}|${verb}`];
             if (!needed) return true;
-            var values = v || {};
-            for (var i = 0; i < needed.length; i++) {
+            const values = v || {};
+            for (let i = 0; i < needed.length; i++) {
               if (RED.mavlink.isBlank(values[needed[i]])) {
-                return 'needs ' + needed.join(', ') + ' — the command has no sentinel for '
-                  + 'an unset one, so a blank field is sent as 0';
+                return `needs ${needed.join(', ')} — the command has no sentinel for `
+                  + `an unset one, so a blank field is sent as 0`;
               }
             }
             return true;
@@ -86,17 +86,17 @@
     function humanize(key) {
       return key
         .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-        .replace(/^./, function (c) { return c.toUpperCase(); });
+        .replace(/^./, (c) => c.toUpperCase());
     }
 
     /** Read the generated rows back into a plain values object. */
     function collectValues() {
-      var values = {};
+      const values = {};
       $('#payload-fields .mav-payload-field').each(function () {
-        var $input = $(this);
-        var key = $input.attr('data-field');
+        const $input = $(this);
+        const key = $input.attr('data-field');
         if (!key) return;
-        var kind = $input.attr('data-kind') || 'number';
+        const kind = $input.attr('data-kind') || 'number';
         if (kind === 'boolean') {
           values[key] = RED.mavlink.booleanEnumValue($input);
           return;
@@ -105,7 +105,7 @@
           // Blank, not 0, when nothing is selected: 0 would assert "no flags"
           // as a deliberate choice. Recipe default is painted into the control
           // when unset so a save persists it.
-          var mask = RED.mavlink.bitmaskFromSelection($input.val());
+          const mask = RED.mavlink.bitmaskFromSelection($input.val());
           values[key] = mask === null ? '' : mask;
           return;
         }
@@ -124,7 +124,7 @@
       // verb's field has no meaning in the next verb's, and `mode` / `action`
       // are shared keys whose enums differ per device. Pick a new verb and you
       // get that verb's defaults.
-      var stash = Object.assign({}, node.values);
+      const stash = Object.assign({}, node.values);
 
       function selection() {
         return {
@@ -139,7 +139,7 @@
       }
 
       function forgetValues() {
-        Object.keys(stash).forEach(function (k) { delete stash[k]; });
+        Object.keys(stash).forEach((k) => { delete stash[k]; });
       }
 
       function notice(text) {
@@ -150,18 +150,18 @@
       /** One control, shaped by the metadata (§6): enum → select, FALSE/TRUE →
        *  checkbox, bitmask → multi-select, everything else → number. */
       function fieldInput(key, meta, entries) {
-        var stashed = stash[key];
-        var blank = stashed === undefined || stashed === null || stashed === '';
+        const stashed = stash[key];
+        const blank = stashed === undefined || stashed === null || stashed === '';
         // A control that must land on something — pulldown, checkbox, bitmask,
         // or number — takes the recipe default when unset so a save persists it.
-        var saved = blank
+        const saved = blank
           ? (meta.default === null || meta.default === undefined ? '' : meta.default)
           : stashed;
-        var $input;
+        let $input;
         if (entries && entries.length) {
           if (RED.mavlink.isFalseTrueEnum(entries)) {
             $input = RED.mavlink.booleanEnumInput(entries, {
-              saved: saved,
+              saved,
               title: meta.description || ''
             });
           } else if (meta.bitmask) {
@@ -170,7 +170,7 @@
               .attr('multiple', 'multiple')
               .attr('size', Math.min(6, entries.length))
               .attr('title', RED.mavlink.bitmaskTitle(meta.description));
-            entries.forEach(function (entry) {
+            entries.forEach((entry) => {
               $input.append($('<option></option>')
                 .val(String(entry.value))
                 .text(entry.label || entry.name));
@@ -180,7 +180,7 @@
             // No blank option: every slot has a recipe default, so blank would
             // only be a second spelling of it.
             $input = $('<select style="width:70%"></select>').attr('data-kind', 'enum');
-            RED.mavlink.fillEnumSelect($input, entries, { saved: saved });
+            RED.mavlink.fillEnumSelect($input, entries, { saved });
           }
         } else {
           // Numbers take the recipe default when unset so a save writes an
@@ -200,22 +200,22 @@
       }
 
       function renderFields(data) {
-        var $box = $('#payload-fields').empty();
-        var fields = (data && data.fields) || {};
-        var enums = (data && data.enums) || {};
+        const $box = $('#payload-fields').empty();
+        const fields = (data && data.fields) || {};
+        const enums = (data && data.enums) || {};
         // The route emits the recipe's own slot order (param1..param7), which
         // is how the protocol reads: lat, lon, alt — not alphabetically.
-        var keys = Object.keys(fields);
+        const keys = Object.keys(fields);
         if (!keys.length) {
           notice('No parameters for this verb.');
           return;
         }
-        keys.forEach(function (key) {
-          var meta = fields[key] || {};
-          var $row = $('<div class="form-row"></div>');
+        keys.forEach((key) => {
+          const meta = fields[key] || {};
+          const $row = $('<div class="form-row"></div>');
           $row.append($('<label></label>').text(meta.label || humanize(key)));
           $row.append(fieldInput(key, meta, meta.enum ? enums[meta.enum] : null));
-          if (meta.units) $row.append($('<span></span>').text(' ' + meta.units));
+          if (meta.units) $row.append($('<span></span>').text(` ${meta.units}`));
           $box.append($row);
         });
       }
@@ -224,7 +224,7 @@
       // put a stale choice on the wire. Reset to the editor default (3) when
       // the row hides — blank is no longer a legal saved frame.
       function applyFrameRow(carrierShown) {
-        var shown = carrierShown && $('#node-input-sendAs').val() === 'int';
+        const shown = carrierShown && $('#node-input-sendAs').val() === 'int';
         if (!shown) $('#node-input-frame').val('3');
         $('#row-payload-frame').toggle(shown);
       }
@@ -234,8 +234,8 @@
       // params 1–4. Pin the hidden control to what is actually sent so §6's
       // "hidden is not honored" holds without a runtime branch.
       function applyCarrier(data) {
-        var sel = selection();
-        var matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
+        const sel = selection();
+        const matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
           && !!(data && data.carrierMatters);
         if (!matters) $('#node-input-sendAs').val('int');
         $('#row-payload-sendAs').toggle(matters);
@@ -243,12 +243,12 @@
       }
 
       function refreshFields() {
-        var sel = selection();
+        const sel = selection();
         if (!sel.verb) {
           notice('Pick a verb.');
           return;
         }
-        var query = RED.mavlink.currentCatalogQuery() || {};
+        const query = RED.mavlink.currentCatalogQuery() || {};
         if (isBuild() && !(query.dialect || query.vehicle)) {
           notice('Pick a Dialect or Vehicle Profile to load this verb’s parameters.');
           return;
@@ -256,10 +256,10 @@
         query.topic = sel.topic;
         query.verb = sel.verb;
         query.path = sel.path;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, function (data) {
+        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, (data) => {
           renderFields(data);
           applyCarrier(data);
-        }).fail(function () {
+        }).fail(() => {
           notice('Could not load parameters for this verb.');
         });
       }
@@ -271,8 +271,8 @@
        * stays visible because it addresses a payload device, not the autopilot.
        */
       function refreshVisibility() {
-        var build = isBuild();
-        var isWire = !build;
+        const build = isBuild();
+        const isWire = !build;
         RED.mavlink.applyCompanionTargetVisibility({
           isBuild: build,
           identityId: isWire ? $('#node-input-identity').val() : '',
@@ -297,7 +297,7 @@
         $('#row-payload-timeout').toggle(isWire);
         $('#row-payload-maxRetries').toggle(isWire);
 
-        var sel = selection();
+        const sel = selection();
         // Gripper, winch and parachute have one command each, so their verb
         // select would offer a single choice. A control with nothing to decide
         // is noise; the value is still stamped by refreshVerbOptions.
@@ -324,14 +324,14 @@
       // Topics come from the shared verb table, not a baked <option> list (§6).
       // A topic is a device: camera, gimbal, servo, relay, gripper, winch,
       // parachute.
-      var $topic = $('#node-input-topic');
-      Object.keys(RED.mavlink.PAYLOAD_VERBS).forEach(function (topic) {
+      const $topic = $('#node-input-topic');
+      Object.keys(RED.mavlink.PAYLOAD_VERBS).forEach((topic) => {
         $topic.append($('<option></option>').val(topic).text(humanize(topic)));
       });
       $topic.val(node.topic || 'camera');
       if (!$topic.val()) $topic.val('camera');
 
-      $topic.on('change', function () {
+      $topic.on('change', () => {
         RED.mavlink.refreshVerbOptions();
         reselect();
         reloadCompIds();
@@ -339,27 +339,27 @@
       $('#node-input-verb').on('change', reselect);
       $('#node-input-path').on('change', reselect);
 
-      $('#node-input-sendAs').on('change', function () {
+      $('#node-input-sendAs').on('change', () => {
         applyFrameRow($('#row-payload-sendAs').is(':visible'));
       });
-      $('#node-input-delivery').on('change', function () {
+      $('#node-input-delivery').on('change', () => {
         refreshVisibility();
         refreshFields();
         reloadCompIds();
       });
       $('#node-input-identity').on('change', refreshVisibility);
-      $('#node-input-connection').on('change', function () {
+      $('#node-input-connection').on('change', () => {
         RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
         refreshFields();
         reloadCompIds();
       });
-      $('#node-input-vehicle').on('change', function () {
+      $('#node-input-vehicle').on('change', () => {
         refreshFields();
         reloadCompIds();
       });
-      var $dialect = $('#node-input-dialect');
-      $dialect.on('change', function () {
+      const $dialect = $('#node-input-dialect');
+      $dialect.on('change', () => {
         refreshVisibility();
         refreshFields();
         reloadCompIds();
@@ -386,9 +386,9 @@
       outputs: 2,
       outputLabels: ['continue', 'status'],
       icon: 'font-awesome/fa-camera',
-      label: function () { return this.name || 'mavlink payload'; },
-      oneditprepare: function () { preparePayload(this); },
-      oneditsave: function () {
+      label() { return this.name || 'mavlink payload'; },
+      oneditprepare() { preparePayload(this); },
+      oneditsave() {
         // Only the prepared closure knows whether the mounted rows belong to
         // the current selection; without it there is nothing safe to scrape.
         if (typeof this._payloadSave === 'function') this.values = this._payloadSave();

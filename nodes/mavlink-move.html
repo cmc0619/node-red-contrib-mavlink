@@ -11,7 +11,7 @@
    * @returns {*}
    */
   function fieldValue(owner, name) {
-    var $live = RED.mavlink.ownDialogField(owner, '#node-input-' + name);
+    const $live = RED.mavlink.ownDialogField(owner, `#node-input-${name}`);
     return $live ? $live.val() : owner[name];
   }
 
@@ -34,8 +34,8 @@
    */
   // Everything but Turn — no CONDITION_YAW handler. A boat IS Rover firmware,
   // so the two families share the row rather than repeating it.
-  var NO_YAW_ACTIONS = ['goto', 'steer', 'speed', 'attitude', 'manual'];
-  var ARDUPILOT_FAMILY_ACTIONS = {
+  const NO_YAW_ACTIONS = ['goto', 'steer', 'speed', 'attitude', 'manual'];
+  const ARDUPILOT_FAMILY_ACTIONS = {
     copter: ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
     sub: ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
     // Plane also takes frame 7 only, and its handler reads `z` alone.
@@ -50,7 +50,7 @@
   };
 
   /** The wire each action rides, for the refusal message. */
-  var ACTION_WIRE = {
+  const ACTION_WIRE = {
     goto: 'DO_REPOSITION',
     steer: 'SET_POSITION_TARGET_LOCAL_NED',
     turn: 'CONDITION_YAW',
@@ -59,12 +59,12 @@
     manual: 'MANUAL_CONTROL',
   };
 
-  var ACTION_LABEL = {
+  const ACTION_LABEL = {
     goto: 'Go to', steer: 'Steer', turn: 'Turn',
     speed: 'Speed', attitude: 'Attitude', manual: 'Manual',
   };
 
-  var FAMILY_LABEL = {
+  const FAMILY_LABEL = {
     copter: 'Copter', plane: 'Plane', rover: 'Rover', boat: 'Boat',
     sub: 'Sub', blimp: 'Blimp', 'antenna-tracker': 'Antenna Tracker',
   };
@@ -75,8 +75,8 @@
    * them up; a family that starts refusing needs a line here, and the test
    * matrix is what catches its absence.
    */
-  var NO_YAW_INSTEAD = 'give it a destination instead — Go to, or a Steer setpoint';
-  var FAMILY_INSTEAD = {
+  const NO_YAW_INSTEAD = 'give it a destination instead — Go to, or a Steer setpoint';
+  const FAMILY_INSTEAD = {
     plane: 'a fixed wing has no guided yaw command at all (GUIDED_CHANGE_HEADING is the '
       + 'forward entry, not built), so turn it by giving it somewhere to go — Go to',
     rover: NO_YAW_INSTEAD,
@@ -100,21 +100,20 @@
    *   from some action happening to be allowed.
    */
   function moveFamilyGate(source) {
-    var target = RED.mavlink.resolveCatalogTarget(source ? { source: source } : undefined);
-    var family = target.vehicleFamily || '';
-    var allowed = target.firmware === 'ardupilot' ? ARDUPILOT_FAMILY_ACTIONS[family] : null;
+    const target = RED.mavlink.resolveCatalogTarget(source ? { source } : undefined);
+    const family = target.vehicleFamily || '';
+    const allowed = target.firmware === 'ardupilot' ? ARDUPILOT_FAMILY_ACTIONS[family] : null;
     function allows(action) {
       return !allowed || allowed.indexOf(action) !== -1;
     }
     return {
-      family: family,
+      family,
       gated: !!allowed,
-      allows: allows,
-      reason: function (action) {
+      allows,
+      reason(action) {
         if (allows(action)) return null;
-        return ACTION_LABEL[action] + ' has no handler on ArduPilot ' + FAMILY_LABEL[family]
-          + ' — the vehicle never implements ' + ACTION_WIRE[action] + ', so the message '
-          + 'goes out and nothing happens. Instead: ' + FAMILY_INSTEAD[family];
+        return `${ACTION_LABEL[action]} has no handler on ArduPilot ${FAMILY_LABEL[family]} — the vehicle never implements ${ACTION_WIRE[action]}, so the message `
+          + `goes out and nothing happens. Instead: ${FAMILY_INSTEAD[family]}`;
       },
     };
   }
@@ -158,9 +157,9 @@
    * @returns {function(*, object): (boolean|string)} arity 2, so a returned
    *   reason counts as invalid rather than coercing truthy (§14)
    */
-  var POSITION_AXES = ['north', 'east', 'up'];
-  var VELOCITY_AXES = ['vNorth', 'vEast', 'vUp'];
-  var ACCEL_AXES = ['aNorth', 'aEast', 'aUp'];
+  const POSITION_AXES = ['north', 'east', 'up'];
+  const VELOCITY_AXES = ['vNorth', 'vEast', 'vUp'];
+  const ACCEL_AXES = ['aNorth', 'aEast', 'aUp'];
 
   function steerAxisValidator(axes, name, label) {
     return function (v, opt) {
@@ -170,12 +169,12 @@
         && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
         return true;
       }
-      for (var i = 0; i < axes.length; i++) {
+      for (let i = 0; i < axes.length; i++) {
         if (axes[i] === name) continue;
-        var sibling = fieldValue(this, axes[i]);
+        const sibling = fieldValue(this, axes[i]);
         if (!RED.mavlink.isBlank(sibling)) {
-          return 'is required once another ' + label + ' axis is filled — a blank axis is '
-            + 'commanded 0 under the type_mask, not left alone';
+          return `is required once another ${label} axis is filled — a blank axis is `
+            + `commanded 0 under the type_mask, not left alone`;
         }
       }
       return true;
@@ -199,15 +198,15 @@
    * @returns {function(*, object): (boolean|string)} arity 2 so a reason renders (§14)
    */
   function attitudeAngleValidator(name) {
-    var ANGLES = ['roll', 'pitch', 'yaw'];
+    const ANGLES = ['roll', 'pitch', 'yaw'];
     return function (v, opt) {
       if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'attitude') {
         return RED.validators.number(true).call(this, v, opt);
       }
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
-      for (var i = 0; i < ANGLES.length; i++) {
+      for (let i = 0; i < ANGLES.length; i++) {
         if (ANGLES[i] === name) continue;
-        var sibling = fieldValue(this, ANGLES[i]);
+        const sibling = fieldValue(this, ANGLES[i]);
         if (!RED.mavlink.isBlank(sibling)) {
           return 'is required once another angle is filled — the three share one ignore '
             + 'bit, so a blank angle is commanded 0 rather than left alone';
@@ -227,8 +226,8 @@
    * that and the mask the property holds. Button 3 is bit 2 is the value 4:
    * the off-by-one an operator hand-composing the number used to fall into.
    */
-  var BUTTON_OPTIONS = [];
-  for (var bit = 0; bit < 16; bit++) BUTTON_OPTIONS.push({ value: String(bit), label: 'Button ' + (bit + 1) });
+  const BUTTON_OPTIONS = [];
+  for (let bit = 0; bit < 16; bit++) BUTTON_OPTIONS.push({ value: String(bit), label: `Button ${bit + 1}` });
 
   function isValidButtonsMask(n) {
     return Number.isInteger(n) && n >= 0 && n <= 65535;
@@ -236,16 +235,16 @@
 
   /** Saved mask → the multi-select's bit indices; blank or an invalid mask selects nothing. */
   function buttonsToBits(value) {
-    var n = RED.mavlink.isBlank(value) ? 0 : Number(value);
+    const n = RED.mavlink.isBlank(value) ? 0 : Number(value);
     if (!isValidButtonsMask(n)) return '';
-    return BUTTON_OPTIONS.map(function (o) { return o.value; })
-      .filter(function (v) { return (n & (1 << Number(v))) !== 0; }).join(',');
+    return BUTTON_OPTIONS.map((o) => o.value)
+      .filter((v) => (n & (1 << Number(v))) !== 0).join(',');
   }
 
   /** Bit indices → the mask the property holds; none composes blank, not 0. */
   function bitsToButtons(csv) {
-    var n = 0;
-    String(csv).split(',').forEach(function (v) { if (v !== '') n |= (1 << Number(v)); });
+    let n = 0;
+    String(csv).split(',').forEach((v) => { if (v !== '') n |= (1 << Number(v)); });
     return n === 0 ? '' : String(n);
   }
 
@@ -273,7 +272,7 @@
           + 'thrust on an ArduSub z axis). Use the value that means "not moving" on '
           + 'this axis: 0 for pitch, roll and yaw, 0.5 for thrust on a Sub';
       }
-      var n = Number(v);
+      const n = Number(v);
       if (!Number.isFinite(n) || n < -1 || n > 1) {
         return 'must be -1..1 (stick deflection, not wire units)';
       }
@@ -312,13 +311,13 @@
    * @returns {boolean}
    */
   function isArduSubProfile(owner) {
-    var gate = moveFamilyGate(owner);
+    const gate = moveFamilyGate(owner);
     return gate.gated && gate.family === 'sub';
   }
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Move's mode field is `delivery` and it has no firmware selector.
-  var moveDefaults = Object.assign(
+  const moveDefaults = Object.assign(
     {
       name: { value: '' },
       identity: { value: '' },
@@ -330,8 +329,8 @@
       // tier. The editor knows both fields at deploy, so it says so here.
       delivery: {
         value: 'build',
-        validate: function (v, _opt) {
-          var action = RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer');
+        validate(v, _opt) {
+          const action = RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer');
           // Same class of finding as steer × confirm below, and caught the same
           // way: the dialog never offers this pair (refreshDeliveryOptions
           // withdraws the tier for Offset), but a hand-edited flow can hold it
@@ -352,9 +351,9 @@
           // would fall through to the Send branch and report `sent`. True of
           // the wire, a lie about the tier. Known at deploy, so said here.
           if (v === 'stream' && (action === 'turn' || action === 'speed')) {
-            return 'a command cannot stream — ' + action + ' rides an acknowledged MAV_CMD, '
-              + 'which is sent once and answered. Use Send, or Send & confirm to wait for '
-              + 'the acknowledgement';
+            return `a command cannot stream — ${action} rides an acknowledged MAV_CMD, `
+              + `which is sent once and answered. Use Send, or Send & confirm to wait for `
+              + `the acknowledgement`;
           }
           // Same family as Offset above and found by its absence: the dropdown
           // withholds Stream for Go to on a Blimp (no SET_POSITION_TARGET
@@ -364,7 +363,7 @@
           // other withheld option in this dialog reds on saved; this one now
           // does too.
           if (v === 'stream' && action === 'goto') {
-            var gate = moveFamilyGate(this);
+            const gate = moveFamilyGate(this);
             if (gate.gated && gate.family === 'blimp') {
               return 'a Blimp cannot stream Go to — it implements DO_REPOSITION but has no '
                 + 'SET_POSITION_TARGET handler, so streamed setpoints are silently '
@@ -397,14 +396,14 @@
       // Two args so the reason renders (§14).
       action: {
         value: 'goto',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           // The vehicle half of §9 ruling 6's "red on saved": the dropdown
           // stops offering an action the bound vehicle has no handler for, and
           // a node that already held one keeps it and lands here. Every entry
           // is a message the vehicle accepts and does nothing with — no NAK on
           // the setpoint carriers, so without this the operator has no symptom
           // to read at all.
-          var familyReason = moveFamilyGate(this).reason(v);
+          const familyReason = moveFamilyGate(this).reason(v);
           if (familyReason) return familyReason;
           // CONDITION_YAW is an ArduPilot command and PX4 has no handler for it
           // (§14). The family table above answers the ArduPilot half; this is
@@ -412,16 +411,15 @@
           // vehicle branch, so there is no family knowledge to gate on. The
           // message names the escape that works there: Steer's yaw field.
           if (v === 'turn') {
-            var firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
+            const firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
             if (firmware && firmware !== 'ardupilot') {
-              return 'Turn is an ArduPilot command (CONDITION_YAW) and this profile is '
-                + firmware + ' — on PX4, yaw with a Steer setpoint instead';
+              return `Turn is an ArduPilot command (CONDITION_YAW) and this profile is ${firmware} — on PX4, yaw with a Steer setpoint instead`;
             }
             return true;
           }
-          var owner = this;
-          var filled = function (names) {
-            return names.some(function (n) { return !RED.mavlink.isBlank(fieldValue(owner, n)); });
+          const owner = this;
+          const filled = function (names) {
+            return names.some((n) => !RED.mavlink.isBlank(fieldValue(owner, n)));
           };
           // Attitude has Steer's shape and needed Steer's rule: presence drives
           // ATTITUDE_TARGET_TYPEMASK, so an all-blank Attitude sets *every*
@@ -444,9 +442,9 @@
               + 'and no ack comes back to tell you';
           }
           if (v !== 'steer') return true;
-          var hasPos = filled(['north', 'east', 'up']);
-          var hasVel = filled(['vNorth', 'vEast', 'vUp']);
-          var hasAcc = filled(['aNorth', 'aEast', 'aUp']);
+          const hasPos = filled(['north', 'east', 'up']);
+          const hasVel = filled(['vNorth', 'vEast', 'vUp']);
+          const hasAcc = filled(['aNorth', 'aEast', 'aUp']);
           // Position + acceleration with no velocity is the one combination
           // the wire vocabulary does not carry (lib/move/frames.js MODES): no
           // named ArduPilot guided submode, no §14 measurement either way. A
@@ -480,10 +478,9 @@
         validate: RED.mavlink.oneOf(['home', 'msl', 'terrain'], function (v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-altRef', v, 'home') !== 'terrain') return true;
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'goto') return true;
-          var firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
+          const firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
           if (firmware && firmware !== 'ardupilot') {
-            return 'Above terrain is an ArduPilot frame (GLOBAL_TERRAIN_ALT) and this profile is '
-              + firmware + ' — use Above home or Absolute (MSL)';
+            return `Above terrain is an ArduPilot frame (GLOBAL_TERRAIN_ALT) and this profile is ${firmware} — use Above home or Absolute (MSL)`;
           }
           return true;
         }),
@@ -501,7 +498,7 @@
         // Membership first (oneOf), then the firmware/tier gates on the
         // members themselves.
         validate: RED.mavlink.oneOf(['world', 'body', 'offset'], function (v, _opt) {
-          var ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
+          const ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
           // 'steer' fallback like every other action gate in this file — two of
           // these read blank as 'goto' until 2026-08-14, so a hand-edited flow
           // with no action key skipped exactly the Steer checks it needed.
@@ -524,7 +521,7 @@
           // { return; }` (§14), so World and Body are the two that do nothing
           // there — silently, with no NAK. Offset is not a preference on a
           // plane, it is the only local frame there is.
-          var planeGate = moveFamilyGate(this);
+          const planeGate = moveFamilyGate(this);
           if (ref !== 'offset' && planeGate.gated && planeGate.family === 'plane') {
             return 'a fixed wing accepts only MAV_FRAME_LOCAL_OFFSET_NED — ArduPlane\'s handler '
               + 'returns immediately on every other frame, with no NAK. Use Offset from here';
@@ -550,10 +547,10 @@
       // flying. Two args so the reason renders (§14).
       heading: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'turn') return true;
           if (RED.mavlink.isBlank(v)) return 'is required for Turn';
-          var n = Number(v);
+          const n = Number(v);
           return (Number.isFinite(n) && n >= 0 && n <= 360)
             || 'must be within [0, 360] degrees — ArduPilot answers FAILED outside it';
         },
@@ -585,9 +582,9 @@
       // editor is where that gets caught rather than flown.
       thrust: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
-          var n = Number(v);
+          const n = Number(v);
           return (Number.isFinite(n) && n >= 0 && n <= 1)
             || 'must be 0..1 (normalised thrust, not a percentage)';
         },
@@ -608,7 +605,7 @@
       stickR: { value: '', validate: stickValidator() },
       buttons: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
           return isValidButtonsMask(Number(v))
             || 'must be a 16-bit button bitmask (0-65535)';
@@ -631,7 +628,7 @@
       // so the reason renders (§14).
       ackTimeout: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
           return (Number.isFinite(Number(v)) && Number(v) > 0)
             || 'must be a number of milliseconds greater than 0';
@@ -674,25 +671,25 @@
       // with no action yet validates as a steer form.
       lat: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'goto') return true;
           if (RED.mavlink.isBlank(v)) return 'is required for Go to (a blank coordinate must not become 0)';
-          var n = Number(v);
+          const n = Number(v);
           return (Number.isFinite(n) && n >= -90 && n <= 90) || 'must be within [-90, 90] degrees';
         },
       },
       lon: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'goto') return true;
           if (RED.mavlink.isBlank(v)) return 'is required for Go to (a blank coordinate must not become 0)';
-          var n = Number(v);
+          const n = Number(v);
           return (Number.isFinite(n) && n >= -180 && n <= 180) || 'must be within [-180, 180] degrees';
         },
       },
       alt: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'goto') return true;
           if (RED.mavlink.isBlank(v)) return 'is required for Go to (a blank altitude must not become ground level)';
           return Number.isFinite(Number(v)) || 'must be a number of metres';
@@ -717,14 +714,14 @@
       // mission's items). Two args so the reasons render (§14).
       rateHz: {
         value: 5,
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
           return (Number.isFinite(Number(v)) && Number(v) >= 0.1) || 'must be at least 0.1 Hz';
         },
       },
       ttlMs: {
         value: 1000,
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
           return (Number.isFinite(Number(v)) && Number(v) >= 0) || 'must be a number of milliseconds (0 = no TTL)';
         },
@@ -742,9 +739,9 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-location-arrow',
-    label: function () { return this.name || 'mavlink move'; },
-    oneditprepare: function () {
-      var node = this;
+    label() { return this.name || 'mavlink move'; },
+    oneditprepare() {
+      const node = this;
       RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
       RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
 
@@ -758,10 +755,10 @@
       // on every operator change — all-off composes blank, so an untouched
       // dialog round-trips byte-identical.
       $('#node-input-buttons').val(RED.mavlink.isBlank(node.buttons) ? '' : node.buttons);
-      var $buttonsPick = $('#move-buttons-pick');
+      const $buttonsPick = $('#move-buttons-pick');
       $buttonsPick.typedInput({ types: [{ value: 'buttons', multiple: true, options: BUTTON_OPTIONS }] });
       $buttonsPick.typedInput('value', buttonsToBits(node.buttons));
-      $buttonsPick.on('change', function () {
+      $buttonsPick.on('change', () => {
         $('#node-input-buttons').val(bitsToButtons($buttonsPick.typedInput('value')));
       });
 
@@ -769,9 +766,9 @@
       // so the everyday dialog stays the intent and its coordinates.
       $('#move-advanced-toggle').on('click', function (e) {
         e.preventDefault();
-        var $adv = $('#move-advanced');
+        const $adv = $('#move-advanced');
         $adv.toggle();
-        $(this).text(($adv.is(':visible') ? '▾' : '▸') + ' Advanced');
+        $(this).text(`${$adv.is(':visible') ? '▾' : '▸'} Advanced`);
       });
       // A configured Advanced value must be visible on open (CodeRabbit,
       // #277): an invalid ackTimeout hiding behind a collapsed section leaves
@@ -795,7 +792,7 @@
       // rebuilt per action so the select never offers a tier the action makes
       // illegal; the in-progress (then saved) value survives when still
       // legal, and an illegal one falls back to Send — still a wire tier.
-      var DELIVERY_OPTIONS = {
+      const DELIVERY_OPTIONS = {
         goto: [
           ['build', 'Build'],
           ['send', 'Send'],
@@ -834,7 +831,7 @@
       };
       // The Action list, rebuilt per bound vehicle. Same labels as the static
       // markup — that copy is what a browser renders before oneditprepare runs.
-      var ACTION_OPTIONS = [
+      const ACTION_OPTIONS = [
         ['goto', 'Go to (guided goto, acknowledged)'],
         ['steer', 'Steer (setpoints, fire-and-forget)'],
         ['turn', 'Turn (heading, acknowledged)'],
@@ -847,7 +844,7 @@
       // rebuilt per action. Offset is LOCAL_OFFSET_NED (7): a world-axis offset
       // from wherever the vehicle is, and the only local frame ArduPlane
       // accepts at all.
-      var REFERENCE_OPTIONS = [
+      const REFERENCE_OPTIONS = [
         ['world', 'World (Local NED)'],
         ['body', 'Body (adapts to firmware)'],
         ['offset', 'Offset from here (relative)']
@@ -858,7 +855,7 @@
       // practice — PX4's support is patchy — so it is withheld on a named
       // non-ArduPilot firmware; a saved value survives and the altRef
       // validator supplies the reason (§9 ruling 6).
-      var ALTREF_OPTIONS = [
+      const ALTREF_OPTIONS = [
         ['home', 'Above home'],
         ['msl', 'Absolute (MSL)'],
         ['terrain', 'Above terrain (ArduPilot)']
@@ -866,11 +863,11 @@
 
       // Rows applyCompanionTargetVisibility owns; `show` reports them, the
       // toggle loop leaves them alone.
-      var HELPER_ROWS = ['targetSystem', 'targetComponent'];
+      const HELPER_ROWS = ['targetSystem', 'targetComponent'];
 
       // Steer's optional groups, in disclosure order. Each is revealed by its
       // own checkbox and hidden — and cleared — when that box is cleared.
-      var STEER_GROUPS = [
+      const STEER_GROUPS = [
         ['position', ['north', 'east', 'up']],
         ['velocity', ['vNorth', 'vEast', 'vUp']],
         ['accel', ['aNorth', 'aEast', 'aUp']],
@@ -890,7 +887,7 @@
           select: '#node-input-action',
           options: ACTION_OPTIONS,
           saved: node.action,
-          withhold: function (value) { return !gate.allows(value); }
+          withhold(value) { return !gate.allows(value); }
         });
       }
 
@@ -909,12 +906,12 @@
        * @returns {string} the reference now selected
        */
       function refreshReferenceOptions(gate) {
-        var firmware = RED.mavlink.resolveCatalogTarget().firmware;
+        const firmware = RED.mavlink.resolveCatalogTarget().firmware;
         return RED.mavlink.refreshOptionSelect({
           select: '#node-input-reference',
           options: REFERENCE_OPTIONS,
           saved: node.reference,
-          withhold: function (value) {
+          withhold(value) {
             if (value === 'offset') return firmware === 'px4';
             return firmware === 'ardupilot' && gate.family === 'plane';
           }
@@ -929,12 +926,12 @@
        * @returns {string} the reference now selected
        */
       function refreshAltRefOptions() {
-        var firmware = RED.mavlink.resolveCatalogTarget().firmware;
+        const firmware = RED.mavlink.resolveCatalogTarget().firmware;
         return RED.mavlink.refreshOptionSelect({
           select: '#node-input-altRef',
           options: ALTREF_OPTIONS,
           saved: node.altRef,
-          withhold: function (value) {
+          withhold(value) {
             return value === 'terrain' && Boolean(firmware) && firmware !== 'ardupilot';
           }
         });
@@ -955,7 +952,7 @@
           select: '#node-input-delivery',
           options: DELIVERY_OPTIONS[action] || DELIVERY_OPTIONS.goto,
           saved: node.delivery,
-          withhold: function (value) {
+          withhold(value) {
             if (value !== 'stream') return false;
             // Streaming an offset walks the vehicle away. Every tick is
             // resolved against the vehicle's *current* position —
@@ -980,7 +977,7 @@
        * Which Steer groups the operator currently has open. Seeded from the
        * saved fields on first paint, then owned by the checkboxes.
        */
-      var disclosed = null;
+      let disclosed = null;
 
       /**
        * Seed the disclosure from the fields themselves: a group is open iff one
@@ -991,12 +988,10 @@
        * @returns {Object<string, boolean>}
        */
       function seedDisclosure() {
-        var seeded = {};
-        var any = false;
-        STEER_GROUPS.forEach(function (entry) {
-          seeded[entry[0]] = entry[1].some(function (name) {
-            return !RED.mavlink.isBlank(node[name]);
-          });
+        const seeded = {};
+        let any = false;
+        STEER_GROUPS.forEach((entry) => {
+          seeded[entry[0]] = entry[1].some((name) => !RED.mavlink.isBlank(node[name]));
           if (seeded[entry[0]]) any = true;
         });
         if (!any) seeded.position = true;
@@ -1031,11 +1026,11 @@
         // hidden underneath them, value and all, by a seed that ran before the
         // value existed.
         if (planeSteer) disclosed.position = true;
-        var shown = {};
-        STEER_GROUPS.forEach(function (entry) {
-          var name = entry[0];
+        const shown = {};
+        STEER_GROUPS.forEach((entry) => {
+          const name = entry[0];
           shown[name] = isSteer && (planeSteer ? name === 'position' : !!disclosed[name]);
-          var $box = $('#move-group-' + name);
+          const $box = $(`#move-group-${name}`);
           if ($box.length) $box.prop('checked', !!disclosed[name]);
         });
         return shown;
@@ -1127,18 +1122,18 @@
         // reads them back: the Action list depends on the bound vehicle, the
         // reference list on firmware and family, and the delivery list on both
         // the action and the reference (Offset has no streaming meaning).
-        var gate = moveFamilyGate();
-        var action = refreshActionOptions(gate) || 'goto';
-        var isGoto = action === 'goto';
-        var isTurn = action === 'turn';
-        var isSpeed = action === 'speed';
-        var isAttitude = action === 'attitude';
-        var isManual = action === 'manual';
+        const gate = moveFamilyGate();
+        const action = refreshActionOptions(gate) || 'goto';
+        const isGoto = action === 'goto';
+        const isTurn = action === 'turn';
+        const isSpeed = action === 'speed';
+        const isAttitude = action === 'attitude';
+        const isManual = action === 'manual';
         // Steer and Go to own the position surface; Turn and Speed own none of
         // it. Everything positional keys off this rather than !isGoto, so a
         // command action shows neither family's fields.
-        var isSteer = action === 'steer';
-        var reference = refreshReferenceOptions(gate) || 'world';
+        const isSteer = action === 'steer';
+        const reference = refreshReferenceOptions(gate) || 'world';
         refreshDeliveryOptions(action, reference, gate);
         // ArduPlane's local handler reads `z` and returns — no lateral axis, no
         // velocity, no acceleration, no yaw (§14). So Steer on a plane is a
@@ -1161,44 +1156,44 @@
         // are not the same condition — and a form that collapsed to one field
         // while the Reference still read World would be describing a message it
         // is not sending.
-        var planeSteer = isSteer && gate.gated && gate.family === 'plane'
+        const planeSteer = isSteer && gate.gated && gate.family === 'plane'
           && reference === 'offset';
-        var groups = applyGroupDisclosure(isSteer, planeSteer);
+        const groups = applyGroupDisclosure(isSteer, planeSteer);
 
-        var delivery = $('#node-input-delivery').val() || 'build';
-        var dialect = $('#node-input-dialect').val() || node.dialect || '';
-        var isBuild = delivery === 'build';
-        var isWire = !isBuild;
-        var isStream = delivery === 'stream';
+        const delivery = $('#node-input-delivery').val() || 'build';
+        const dialect = $('#node-input-dialect').val() || node.dialect || '';
+        const isBuild = delivery === 'build';
+        const isWire = !isBuild;
+        const isStream = delivery === 'stream';
         // Go to's command path: DO_REPOSITION on Build/Send/Send & confirm.
         // Its params have no meaning on a streamed setpoint (runtime refuses
         // them there), so Stream withdraws the rows.
-        var isCommandPath = isGoto && !isStream;
-        var isBody = !isGoto && reference === 'body';
-        var isOffset = !isGoto && reference === 'offset';
-        var altRef = refreshAltRefOptions() || 'home';
-        var tgt = RED.mavlink.applyCompanionTargetVisibility({
-          isBuild: isBuild,
+        const isCommandPath = isGoto && !isStream;
+        const isBody = !isGoto && reference === 'body';
+        const isOffset = !isGoto && reference === 'offset';
+        const altRef = refreshAltRefOptions() || 'home';
+        const tgt = RED.mavlink.applyCompanionTargetVisibility({
+          isBuild,
           identityId: isWire ? $('#node-input-identity').val() : '',
           targetSystemRow: '#row-move-targetSystem',
           targetComponentRow: '#row-move-targetComponent',
         });
 
         RED.mavlink.applyBuildTierRowVisibility({
-          isBuild: isBuild,
-          dialect: dialect,
+          isBuild,
+          dialect,
           dialectRow: '#row-move-dialect',
           vehicleRow: '#row-move-vehicle',
           connectionRow: '#row-move-connection'
         });
 
-        var show = moveRowVisibility({
-          isWire: isWire,
+        const show = moveRowVisibility({
+          isWire,
           identityIsChoice: RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || ''),
-          tgt: tgt, isGoto: isGoto, isSteer: isSteer, isTurn: isTurn,
-          isSpeed: isSpeed, isAttitude: isAttitude, isManual: isManual,
-          isCommandPath: isCommandPath, isStream: isStream, delivery: delivery,
-          planeSteer: planeSteer, groups: groups
+          tgt, isGoto, isSteer, isTurn,
+          isSpeed, isAttitude, isManual,
+          isCommandPath, isStream, delivery,
+          planeSteer, groups
         });
 
         // MANUAL_CONTROL's addressing field is `target` — a system id, with no
@@ -1218,9 +1213,9 @@
         // makes it unrepresentable rather than caught by review. The two
         // target rows are skipped because applyCompanionTargetVisibility
         // already toggled them above — listing them here would fight it.
-        Object.keys(show).forEach(function (key) {
+        Object.keys(show).forEach((key) => {
           if (HELPER_ROWS.indexOf(key) !== -1) return;
-          $('#row-move-' + key).toggle(!!show[key]);
+          $(`#row-move-${key}`).toggle(!!show[key]);
         });
 
         // Labels follow the reference so the operator never translates
@@ -1233,10 +1228,10 @@
         // source-read 2026-08-13), so velocity and acceleration keep their
         // world labels. isBody and isOffset are mutually exclusive — both read
         // the one reference select — so the qualifier composes safely.
-        var fromHere = isOffset ? ' (from here)' : '';
+        const fromHere = isOffset ? ' (from here)' : '';
         $('#label-move-north').text((isBody ? 'Metres forward' : 'Metres north') + fromHere);
         $('#label-move-east').text((isBody ? 'Metres right' : 'Metres east') + fromHere);
-        $('#label-move-up').text('Metres up' + fromHere);
+        $('#label-move-up').text(`Metres up${fromHere}`);
         // Go to's speed is "fly there at"; the Speed action's is "fly at from
         // now on". Same field, same units, different sentence.
         $('#label-move-speed').text(isSpeed ? 'Speed' : 'Ground speed');
@@ -1250,13 +1245,13 @@
 
       // Clearing a group clears its fields before the repaint, so the form and
       // the type_mask never disagree (see applyGroupDisclosure).
-      STEER_GROUPS.forEach(function (entry) {
-        $('#move-group-' + entry[0]).on('change', function () {
-          var open = $(this).is(':checked');
+      STEER_GROUPS.forEach((entry) => {
+        $(`#move-group-${entry[0]}`).on('change', function () {
+          const open = $(this).is(':checked');
           if (!disclosed) disclosed = seedDisclosure();
           disclosed[entry[0]] = open;
           if (!open) {
-            entry[1].forEach(function (name) { $('#node-input-' + name).val(''); });
+            entry[1].forEach((name) => { $(`#node-input-${name}`).val(''); });
           }
           refreshVisibility();
         });
@@ -1265,20 +1260,20 @@
       $('#node-input-action').on('change', refreshVisibility);
       $('#node-input-altRef').on('change', refreshVisibility);
       $('#node-input-reference').on('change', refreshVisibility);
-      $('#node-input-delivery').on('change', function () {
+      $('#node-input-delivery').on('change', () => {
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
       $('#node-input-identity').on('change', refreshVisibility);
-      $('#node-input-dialect').on('change', function () {
+      $('#node-input-dialect').on('change', () => {
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-vehicle').on('change', function () {
+      $('#node-input-vehicle').on('change', () => {
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-connection').on('change', function () {
+      $('#node-input-connection').on('change', () => {
         RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);

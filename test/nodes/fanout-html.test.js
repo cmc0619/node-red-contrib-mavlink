@@ -99,7 +99,7 @@ test('identity defaults to empty string and refreshIdentitySelect uses gcs+custo
   // must ask the same question, so both read the hoisted constant.
   assert.match(
     html,
-    /var IDENTITY_ROLES = \[\s*['"]gcs['"]\s*,\s*['"]custom['"]\s*\];/,
+    /const IDENTITY_ROLES = \[\s*['"]gcs['"]\s*,\s*['"]custom['"]\s*\];/,
     'the gcs+custom filter is named once'
   );
   assert.match(
@@ -117,7 +117,7 @@ test('identity defaults to empty string and refreshIdentitySelect uses gcs+custo
 
 test('identity is re-filled when connection selection changes', () => {
   const changeHandlerMatch = html.match(
-    /#node-input-connection['"]\)\.on\(['"]change['"][^)]*\)\s*\{([\s\S]*?)\}/
+    /#node-input-connection['"]\)\.on\(['"]change['"][^{]*\{([\s\S]*?)\}/
   );
   assert.ok(
     changeHandlerMatch && /refreshIdentitySelect/.test(changeHandlerMatch[0]),
@@ -128,7 +128,7 @@ test('identity is re-filled when connection selection changes', () => {
 test('members table replaces the sysids CSV: editableList rows saved through oneditsave (#163)', () => {
   assert.ok(!html.includes('node-input-sysids'), 'the sysids CSV field is gone — pre-1.0 rename, no alias');
   assert.match(html, /\$members\.editableList\(/, 'rows use the stock editableList widget');
-  assert.match(html, /oneditsave:/, 'a custom widget must save through oneditsave');
+  assert.match(html, /oneditsave\(\)/, 'a custom widget must save through oneditsave');
 });
 
 test('members validator: per-row reasons, offsets-vs-position-patch conflict reds (#163)', () => {
@@ -218,7 +218,7 @@ test('addItem syncs the mirror so an untouched new row cannot dodge validation',
   // addItem the validator judges the pre-add mirror while oneditsave reads
   // the live rows — an untouched blank row would save as sysid 0, a
   // broadcast member the red ring never saw.
-  const start = html.indexOf('addItem: function (container, _index, member) {');
+  const start = html.indexOf('addItem(container, _index, member) {');
   assert.ok(start >= 0, 'members editableList must define addItem');
   let i = html.indexOf('{', start) + 1;
   let depth = 1;

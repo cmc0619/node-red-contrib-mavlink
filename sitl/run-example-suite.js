@@ -509,7 +509,6 @@ function summarizeBlocks(blocks) {
 
 function verdictFrom(profile, summary, log) {
   const results = summary.debug.map((d) => d.result).filter(Boolean);
-  const errText = summary.errors.join('\n');
   const expect = profile.expect || '';
 
   if (/TEMPORARILY_REJECTED retried|temporarily rejected/i.test(expect)) {
@@ -1686,7 +1685,7 @@ async function prep(kind) {
   }
 }
 
-async function afterInjectHook(fileBase, startedAt) {
+async function afterInjectHook(fileBase, _startedAt) {
   if (fileBase === '32-fanout-member-expires') {
     await sleep(200);
     console.log('  killing nrc-ap-3 mid-run…');

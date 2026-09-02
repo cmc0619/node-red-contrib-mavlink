@@ -99,7 +99,7 @@ function readStdin() {
 
 function assertEqual(actual, expected, label) {
   if (actual !== expected) {
-    throw new Error(label + ': expected ' + expected + ', got ' + actual);
+    throw new Error(`${label  }: expected ${  expected  }, got ${  actual}`);
   }
 }
 

@@ -10,6 +10,10 @@ const nodeFiles = [
   'scripts/**/*.js',
   'test/**/*.js',
   'integration/**/*.js',
+  // The SITL measurement scripts and the repo hooks are Node programs too;
+  // unlisted, they were linted with no rules at all (found 2026-09-02).
+  'sitl/**/*.js',
+  '.cursor/**/*.js',
 ];
 
 const unusedVariables = [
@@ -30,9 +34,30 @@ const promiseRules = {
   'promise/valid-params': 'error',
 };
 
+// The codebase was written in 2026 and reads that way (owner ruling,
+// 2026-09-02): block scoping, arrow callbacks, shorthand, template strings,
+// strict equality. One gate — this file — says so, so a second linter's
+// opinion on the same points is noise, and there is nothing for a reviewer to
+// argue about that `eslint --fix` cannot settle. `eqeqeq` ignores `== null`:
+// that idiom is the deliberate "null or undefined" test, not a slip.
+const styleRules = {
+  'no-var': 'error',
+  'prefer-const': 'error',
+  'prefer-arrow-callback': 'error',
+  'arrow-body-style': ['error', 'as-needed'],
+  'object-shorthand': 'error',
+  'prefer-template': 'error',
+  'prefer-rest-params': 'error',
+  'prefer-spread': 'error',
+  'no-else-return': 'error',
+  'dot-notation': 'error',
+  eqeqeq: ['error', 'always', { null: 'ignore' }],
+};
+
 const correctnessRules = {
   ...js.configs.recommended.rules,
   ...promiseRules,
+  ...styleRules,
   // NUL stripping is intentional in MAVLink's fixed-width string fields.
   'no-control-regex': 'off',
   'no-empty': ['error', { allowEmptyCatch: true }],

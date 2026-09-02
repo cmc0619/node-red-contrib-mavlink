@@ -679,7 +679,7 @@ test('oneditsave clears only the derived SysID — the CompID is the operator\'s
   // The runtime reads sourceComponentId in every role now, so blanking it on
   // save would reach the wire as component 0 (Number('') === 0) and the
   // operator's chosen onboard slot would never persist.
-  const save = html.slice(html.indexOf('oneditsave: function'));
+  const save = html.slice(html.indexOf('oneditsave()'));
   const body = save.slice(0, save.indexOf('oneditcancel'));
   assert.match(
     body,

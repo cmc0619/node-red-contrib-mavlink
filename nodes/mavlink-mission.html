@@ -4,12 +4,12 @@
   // protector: fence vertices cannot be saved as a mission, a configured []
   // cannot be saved as an upload, and broadcast cannot be saved on
   // download/upload. Payload items ride.
-  var MISSION_FENCE_COMMANDS = [5000, 5001, 5002, 5003, 5004, 5005];
-  var MISSION_RALLY_COMMAND = 5100;
+  const MISSION_FENCE_COMMANDS = [5000, 5001, 5002, 5003, 5004, 5005];
+  const MISSION_RALLY_COMMAND = 5100;
 
   // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
   // (§6 Firmware XOR); Mission's mode field is `delivery` (default confirm).
-  var missionDefaults = Object.assign(
+  const missionDefaults = Object.assign(
     {
       name: { value: '' },
       identity: { value: '' },
@@ -23,13 +23,13 @@
       // (it inherits the profile default). Two args so the reason renders.
       targetSystem: {
         value: '',
-        validate: function (v, opt) {
-          var range = RED.mavlink.validateUint8(0).call(this, v, opt);
+        validate(v, opt) {
+          const range = RED.mavlink.validateUint8(0).call(this, v, opt);
           if (range !== true) return range;
           if (RED.mavlink.isBlank(v) || Number(v) !== 0) return true;
-          var op = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download');
+          const op = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download');
           if (op === 'clear') return true;
-          return 'broadcast (0) cannot ' + op + ' — no vehicle answers as sysid 0; address one vehicle';
+          return `broadcast (0) cannot ${op} — no vehicle answers as sysid 0; address one vehicle`;
         },
       },
       // Compid is a wire uint8; the select's catalog values all fit, so this
@@ -41,10 +41,10 @@
         // coerced truthy (§14). Blank means "items come from the payload".
         // Operation-aware like the shared tier validators: only Upload reads
         // items, so a leftover value must not red a Download or Clear node.
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-operation', this.operation) !== 'upload') return true;
           if (RED.mavlink.isBlank(v)) return true;
-          var arr;
+          let arr;
           try {
             arr = JSON.parse(v);
           } catch {
@@ -58,26 +58,26 @@
           // `command` is a uint16 (a fractional id truncates into the reserved
           // fence range on serialization), and an item must belong to the
           // selected plan's family so buffers cannot corrupt each other.
-          var type = RED.mavlink.liveOr(this, '#node-input-missionType', this.missionType, 'mission');
-          for (var i = 0; i < arr.length; i++) {
-            var item = arr[i];
+          const type = RED.mavlink.liveOr(this, '#node-input-missionType', this.missionType, 'mission');
+          for (let i = 0; i < arr.length; i++) {
+            const item = arr[i];
             // The raw value must be present and numeric before Number() runs:
             // '' / null / false all coerce to 0, a legal uint16, and would
             // upload command 0 instead of red-ringing the blank (Codex). An
             // explicit numeric 0 and a numeric string stay legal.
-            var raw = item && typeof item === 'object' ? item.command : undefined;
-            var cmd = typeof raw === 'number' ? raw
+            const raw = item && typeof item === 'object' ? item.command : undefined;
+            const cmd = typeof raw === 'number' ? raw
               : (typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN);
             if (!Number.isInteger(cmd) || cmd < 0 || cmd > 0xffff) {
-              return 'item ' + i + ' needs an integer command id (0–65535)';
+              return `item ${i} needs an integer command id (0–65535)`;
             }
-            var fence = MISSION_FENCE_COMMANDS.indexOf(cmd) !== -1;
-            var rally = cmd === MISSION_RALLY_COMMAND;
-            var wrongFamily = type === 'fence' ? !fence
+            const fence = MISSION_FENCE_COMMANDS.indexOf(cmd) !== -1;
+            const rally = cmd === MISSION_RALLY_COMMAND;
+            const wrongFamily = type === 'fence' ? !fence
               : type === 'rally' ? !rally
                 : (fence || rally);
             if (wrongFamily) {
-              return 'item ' + i + ' command ' + cmd + ' is not a valid ' + type + ' item';
+              return `item ${i} command ${cmd} is not a valid ${type} item`;
             }
           }
           return true;
@@ -98,11 +98,11 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-map-signs',
-    label: function () {
-      return this.name || ('mission ' + (this.operation || 'download'));
+    label() {
+      return this.name || (`mission ${this.operation || 'download'}`);
     },
-    oneditprepare: function () {
-      var node = this;
+    oneditprepare() {
+      const node = this;
 
       /* ── Connection and vehicle pickers ───────────────────────── */
       RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
@@ -110,47 +110,47 @@
 
       // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
       // carries mission/fence/rally; PX4 (and unknown stacks) carry mission only.
-      var TYPES_BY_FIRMWARE = {
+      const TYPES_BY_FIRMWARE = {
         ardupilot: [['mission', 'Mission (0)'], ['fence', 'Fence (1)'], ['rally', 'Rally (2)']],
         px4:       [['mission', 'Mission (0)']],
         custom:    [['mission', 'Mission (0)']]
       };
 
-      var $type = $('#node-input-missionType');
-      var $op   = $('#node-input-operation');
+      const $type = $('#node-input-missionType');
+      const $op   = $('#node-input-operation');
 
       function repopulateTypes() {
-        var saved = $type.val();
+        const saved = $type.val();
         // Effective firmware follows the shared catalog matrix (§6): the Build
         // Firmware field on a concrete dialect, the Build Vehicle Profile
         // escape's profile, or the connection's bound profile on wire tiers —
         // frozen `vehicle` snapshots included (vehicleIdFrom).
-        var fw = RED.mavlink.resolveCatalogTarget().firmware;
-        var list = TYPES_BY_FIRMWARE[fw] || TYPES_BY_FIRMWARE.custom;
+        const fw = RED.mavlink.resolveCatalogTarget().firmware;
+        const list = TYPES_BY_FIRMWARE[fw] || TYPES_BY_FIRMWARE.custom;
         $type.empty();
-        list.forEach(function (entry) {
+        list.forEach((entry) => {
           $type.append($('<option>').val(entry[0]).text(entry[1]));
         });
-        if (saved && list.some(function (e) { return e[0] === saved; })) {
+        if (saved && list.some((e) => e[0] === saved)) {
           $type.val(saved);
         }
       }
 
       function refreshRows() {
-        var op = $op.val();
+        const op = $op.val();
         $('.mavlink-mission-items').toggle(op === 'upload');
       }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
       function refreshVisibility() {
-        var delivery = $('#node-input-delivery').val() || 'confirm';
-        var dialect = $('#node-input-dialect').val() || node.dialect || '';
-        var isBuild = (delivery === 'build');
-        var isWire = !isBuild;
+        const delivery = $('#node-input-delivery').val() || 'confirm';
+        const dialect = $('#node-input-dialect').val() || node.dialect || '';
+        const isBuild = (delivery === 'build');
+        const isWire = !isBuild;
 
         RED.mavlink.applyBuildTierRowVisibility({
-          isBuild: isBuild,
-          dialect: dialect,
+          isBuild,
+          dialect,
           dialectRow: '#row-mission-dialect',
           vehicleRow: '#row-vehicle',
           firmwareRow: '#row-mission-firmware',
@@ -168,7 +168,7 @@
 
         /* role-driven rows: companion hides both target rows */
         RED.mavlink.applyCompanionTargetVisibility({
-          isBuild: isBuild,
+          isBuild,
           identityId: $('#node-input-identity').val() || '',
           targetSystemRow: '#row-targetSystem',
           targetComponentRow: '#row-targetComponent',
@@ -178,23 +178,23 @@
         repopulateTypes();
       }
 
-      $('#node-input-delivery').on('change', function () {
+      $('#node-input-delivery').on('change', () => {
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-connection').on('change', function () {
+      $('#node-input-connection').on('change', () => {
         RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-vehicle').on('change', function () {
+      $('#node-input-vehicle').on('change', () => {
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-identity').on('change', function () {
+      $('#node-input-identity').on('change', () => {
         refreshVisibility();
       });
-      $('#node-input-dialect').on('change', function () {
+      $('#node-input-dialect').on('change', () => {
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });

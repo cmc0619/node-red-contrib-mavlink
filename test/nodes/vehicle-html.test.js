@@ -88,7 +88,7 @@ test('parameter definitions use an explicit profile-keyed Update workflow', () =
   assert.match(html, /method:\s*'POST'/);
   assert.match(html, /vehicle:\s*node\.id/);
   assert.match(html, /const url = \$\('#node-config-input-paramDefsUrl'\)\.val\(\)\.trim\(\)/);
-  assert.match(html, /url:\s*url/);
+  assert.match(html, /JSON\.stringify\(\{ vehicle: node\.id, url \}\)/);
   assert.match(html, /used only by Update/i);
   assert.match(html, /pre-filled when firmware/i);
   // No known URL → hide the row (Custom firmware; ArduPilot + unknown family).

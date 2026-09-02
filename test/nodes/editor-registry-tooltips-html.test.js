@@ -96,7 +96,7 @@ test('Param node titles come from loaded param defs, not baked HTML', () => {
   assert.match(html, /parts\.push\(def\.description\)/, 'sourced from the definition');
   // …and the catalog that answered leads it, so "which definitions are these?"
   // is answerable before a parameter has been picked.
-  assert.match(html, /_defsCatalog \+ '\\n' \+ hover/, 'the catalog line leads the hover');
+  assert.match(html, /`\$\{_defsCatalog\}\\n\$\{hover\}`/, 'the catalog line leads the hover');
   // The value field goes through the shared helper, which sets the title on the
   // input *and* its label and maintains the units hint — one mechanism, not a
   // hand-set attribute plus a private units span.
@@ -199,7 +199,7 @@ test('Command params cannot be wiped by a premature Done (Codex #36)', () => {
   // Execute the actual oneditsave body, not just its source text: extract it
   // from the registration and run it against a node object (widget
   // persistence, per guidelines).
-  const start = html.indexOf('oneditsave: function () {');
+  const start = html.indexOf('oneditsave() {');
   assert.ok(start > 0, 'oneditsave handler exists');
   let i = html.indexOf('{', start);
   const bodyStart = i + 1;
@@ -260,7 +260,7 @@ test('Command reapplies preset option tips when Connection / Vehicle changes', (
   // One catalog load paints tips then refreshParamFields with the latest data.
   assert.match(
     html,
-    /loadCommandsCatalog\(_cmdCatalogSites\.presetTips, function \(catalog\) \{[\s\S]*applyPresetOptionTips\(null, catalog\);[\s\S]*refreshParamFields\(\);/
+    /loadCommandsCatalog\(_cmdCatalogSites\.presetTips, \(catalog\) => \{[\s\S]*applyPresetOptionTips\(null, catalog\);[\s\S]*refreshParamFields\(\);/
   );
   assert.match(
     html,

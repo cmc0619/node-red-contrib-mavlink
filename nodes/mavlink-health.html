@@ -3,7 +3,7 @@
     function positiveSecondsValidator(v, _opt) {
       // Blank reds: the runtime opens the lease timer at this value as saved
       // (§0), and Number('') is 0 — an already-expired lease, not "no default".
-      var n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
       if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of seconds';
       return true;
     }
@@ -38,7 +38,7 @@
      * liveOr so the check is scoped to this node's own open dialog (#217).
      */
     function boundIdentityValidator(v, _opt) {
-      var connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
+      const connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
       // No Connection resolved yet — its own required ring owns that.
       if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
       // Single-identity Connection: field hidden, value ignored — never ring.
@@ -46,7 +46,7 @@
       // Multi-identity: a bound identity must be chosen.
       if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
       if (!RED.nodes.node(v)) return 'references a missing Identity';
-      if (!RED.mavlink.identityOptionsFor(connId).some(function (o) { return o.id === v; })) {
+      if (!RED.mavlink.identityOptionsFor(connId).some((o) => o.id === v)) {
         return 'is not bound to the selected Connection — bind it there or pick a bound Identity';
       }
       return true;
@@ -66,14 +66,14 @@
       outputLabels: ['continue', 'status'],
       icon: 'font-awesome/fa-heartbeat',
       paletteLabel: 'health',
-      label: function () {
+      label() {
         return this.name || 'mavlink health';
       },
-      labelStyle: function () {
+      labelStyle() {
         return this.name ? 'node_label_italic' : '';
       },
-      oneditprepare: function () {
-        var node = this;
+      oneditprepare() {
+        const node = this;
         RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
         // The Identity is a choice only when the Connection carries more than
         // one identity. A single-identity Connection has exactly one — its
@@ -85,7 +85,7 @@
         // health asserts any bound identity, gcs included). Re-evaluate on
         // every Connection change.
         function refreshIdentityRow() {
-          var connId = $('#node-input-connection').val() || '';
+          const connId = $('#node-input-connection').val() || '';
           if (isSingleIdentity(connId)) {
             $('#row-health-identity').hide();
           } else {
@@ -96,13 +96,13 @@
         refreshIdentityRow();
         $('#node-input-connection').on('change', refreshIdentityRow);
       },
-      oneditsave: function () {
+      oneditsave() {
         // A single-identity Connection hides the field; store blank so nothing
         // stale is kept and the runtime resolves the sole Local Identity.
         // Clear the DOM element, not just the property: Node-RED harvests
         // #node-input-* values into the node after oneditsave, so setting only
         // this.identity would be overwritten by the select's value (Codacy).
-        var connId = $('#node-input-connection').val() || '';
+        const connId = $('#node-input-connection').val() || '';
         if (isSingleIdentity(connId)) {
           $('#node-input-identity').val('');
           this.identity = '';

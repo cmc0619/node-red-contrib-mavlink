@@ -132,7 +132,7 @@ test('mavlink-param has refreshVisibility and companion row hiding', () => {
 test('mavlink-param defs load delegates its catalog target to the shared resolver', () => {
   assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\)/,
     'the dialog resolves its target through the shared helper');
-  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\{\s*source:/,
+  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\{\s*source[,\s]/,
     'and validation resolves the same way from saved config');
 
   // The resolver owns query construction and the connection→profile hop, so
@@ -205,7 +205,7 @@ test('mavlink-param CompID reloads when catalog source changes', () => {
  * @returns {object} the VM context: validateForTest, keyForTest, seed
  */
 function mountValidator(liveParamId, nodeFor, fields = {}) {
-  const start = html.indexOf('var _paramDefsByKey = {};');
+  const start = html.indexOf('const _paramDefsByKey = {};');
   const end = html.indexOf("RED.nodes.registerType('mavlink-param'", start);
   assert.ok(start >= 0 && end > start, 'the keyed cache and key helper are present');
 
@@ -214,13 +214,13 @@ function mountValidator(liveParamId, nodeFor, fields = {}) {
   // silently point this harness at a different function.
   const valueKey = html.indexOf('value: {');
   assert.ok(valueKey > 0, 'the value default is present');
-  const valueStart = html.indexOf('validate: function (v) {', valueKey);
+  const valueStart = html.indexOf('validate(v) {', valueKey);
   assert.ok(valueStart > valueKey, 'the value validator is present');
   const valueEnd = html.indexOf('\n        },', valueStart);
   // Unguarded, a moved closing brace makes this -1: the slice loses its last
   // character and the failure surfaces as a SyntaxError that names nothing.
   assert.ok(valueEnd > valueStart, 'the value validator terminates at the expected anchor');
-  const body = html.slice(valueStart + 'validate: function (v) {'.length, valueEnd);
+  const body = html.slice(valueStart + 'validate(v) {'.length, valueEnd);
   assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
   const context = {
@@ -555,7 +555,7 @@ test('the mode radios write through to the field that persists', () => {
   );
   assert.match(
     html,
-    /\$\('input\[name=mav-param-lookup\]\[value="' \+\s*\(\$\('#node-input-lookup'\)\.val\(\)/,
+    /\$\(`input\[name=mav-param-lookup\]\[value="\$\{\$\('#node-input-lookup'\)\.val\(\)/,
     'and reopening checks the radio the saved field names'
   );
 

@@ -13,11 +13,11 @@ const Module = require('node:module');
 const path = require('node:path');
 
 const originalLoad = Module._load;
-Module._load = function stubMappings(request, _parent, _isMain) {
+Module._load = function stubMappings(request, ...rest) {
   if (request === 'mavlink-mappings') {
     throw new Error("Cannot find module 'mavlink-mappings'");
   }
-  return originalLoad.apply(this, arguments);
+  return originalLoad.call(this, request, ...rest);
 };
 
 const register = require(path.resolve(__dirname, '../../../nodes/mavlink-vehicle.js'));

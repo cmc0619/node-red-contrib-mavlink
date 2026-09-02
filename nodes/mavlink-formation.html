@@ -33,22 +33,22 @@
       shape: { value: 'line', validate: RED.mavlink.oneOf(['line', 'column', 'grid', 'wedge', 'circle', 'sphere']) },
       spacing: {
         value: 10,
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           // Spacing must be a positive distance: 0 stacks every vehicle on the
           // same point — a commanded collision, not a formation.
-          var n = Number(v);
+          const n = Number(v);
           if (Number.isFinite(n) && n > 0) return true;
           return 'must be a distance in metres > 0 — 0 stacks the fleet on one point';
         },
       },
       sysids: {
         value: '',
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
-          return String(v).split(',').every(function (part) {
+          return String(v).split(',').every((part) => {
             part = part.trim();
             if (!part) return true;
-            var n = Number(part);
+            const n = Number(part);
             return Number.isInteger(n) && n >= 1 && n <= 255;
           }) || 'each entry must be a SysID 1–255, comma-separated';
         },
@@ -59,8 +59,8 @@
       promoteLeader: { value: false },
       leader: {
         value: '',
-        validate: whenAnchorMode('leader', function (v, _opt) {
-          var n = Number(v);
+        validate: whenAnchorMode('leader', (v, _opt) => {
+          const n = Number(v);
           if (Number.isInteger(n) && n >= 1 && n <= 255) return true;
           return 'must be the leader\'s SysID (1–255)';
         }),
@@ -69,25 +69,19 @@
       // longitude ±180. Out of range is a typo, not a position.
       lat: {
         value: '',
-        validate: whenAnchorMode('fixed', function (v, _opt) {
-          return (finiteRequired(v) && Number(v) >= -90 && Number(v) <= 90)
-            || 'must be a latitude within ±90°';
-        }),
+        validate: whenAnchorMode('fixed', (v, _opt) => (finiteRequired(v) && Number(v) >= -90 && Number(v) <= 90)
+            || 'must be a latitude within ±90°'),
       },
       lon: {
         value: '',
-        validate: whenAnchorMode('fixed', function (v, _opt) {
-          return (finiteRequired(v) && Number(v) >= -180 && Number(v) <= 180)
-            || 'must be a longitude within ±180°';
-        }),
+        validate: whenAnchorMode('fixed', (v, _opt) => (finiteRequired(v) && Number(v) >= -180 && Number(v) <= 180)
+            || 'must be a longitude within ±180°'),
       },
       // alt is required whenever set as the fixed anchor: a blank altitude
       // must not become 0 — that commands a descent to home level.
       alt: {
         value: '',
-        validate: whenAnchorMode('fixed', function (v, _opt) {
-          return finiteRequired(v) || 'needs an altitude — blank would ride as ground level';
-        }),
+        validate: whenAnchorMode('fixed', (v, _opt) => finiteRequired(v) || 'needs an altitude — blank would ride as ground level'),
       },
       headingDeg: { value: '', validate: RED.mavlink.validateRange(0, 360) },
       pitchDeg: { value: 0, validate: RED.validators.number() },
@@ -97,7 +91,7 @@
         // The input's min="0" is not enforced on save, and the runtime reads a
         // present value as Number(): blank would ride as 0 and a negative
         // paces nothing — an unthrottled fleet send either way.
-        validate: function (v, _opt) {
+        validate(v, _opt) {
           return (finiteRequired(v) && Number(v) >= 0)
             || 'must be a number of milliseconds >= 0 — blank rides as an unthrottled 0';
         },
@@ -108,8 +102,8 @@
         // min="1" is not enforced on save: a saved 0 arms the confirm wait at
         // 0 ms, so every member reports unconfirmed before an ack could
         // arrive — silently blaming the vehicles for a config bug.
-        validate: function (v, _opt) {
-          var n = Number(v);
+        validate(v, _opt) {
+          const n = Number(v);
           if (Number.isInteger(n) && n >= 1) return true;
           return 'must be a whole number of milliseconds >= 1';
         }
@@ -119,13 +113,13 @@
     outputs: 2,
     outputLabels: ['continue', 'status'],
     icon: 'font-awesome/fa-th',
-    label: function () { return this.name || 'mavlink formation'; },
-    oneditprepare: function () {
-      var node = this;
+    label() { return this.name || 'mavlink formation'; },
+    oneditprepare() {
+      const node = this;
       RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       function refreshAnchorRows() {
-        var mode = $('#node-input-anchorMode').val() || 'leader';
+        const mode = $('#node-input-anchorMode').val() || 'leader';
         $('#row-formation-leader').toggle(mode === 'leader');
         $('#row-formation-promoteLeader').toggle(mode === 'leader');
         $('#row-formation-lat').toggle(mode === 'fixed');

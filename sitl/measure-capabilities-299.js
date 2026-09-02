@@ -147,7 +147,6 @@ async function measureStack(label, connOpts, results) {
   await sleep(2000);
   await waitPeer(conn, connOpts.sysid);
 
-  const passiveStart = Date.now();
   await sleep(PASSIVE_MS);
   const passiveSeen = passiveMessages.length;
   note(results, `${label}-passive`, passiveSeen === 0,

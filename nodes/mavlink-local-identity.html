@@ -14,7 +14,7 @@
       // Blank reds: the runtime opens the heartbeat timer at this value as
       // saved (§0), and Number('') is 0 — a zero-interval timer, not 1 Hz.
       // The 1000 default is this dialog's, not the runtime's.
-      var n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
       if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of milliseconds';
       return true;
     }
@@ -25,7 +25,7 @@
      * requirement is role-conditional; SysID's caller supplies one that does.
      */
     function mavIdentityIdValidator(min, reason) {
-      var rangeCheck = RED.mavlink.validateUint8(min);
+      const rangeCheck = RED.mavlink.validateUint8(min);
       return function (v, opt) {
         if (RED.mavlink.isBlank(v)) return reason;
         return rangeCheck.call(this, v, opt);
@@ -44,10 +44,10 @@
      * and the Connection reds with it through Node-RED's config cascade.
      */
     function mavSourceSysidValidator(min) {
-      var required = mavIdentityIdValidator(min, 'required for this role');
-      var rangeCheck = RED.mavlink.validateUint8(min);
+      const required = mavIdentityIdValidator(min, 'required for this role');
+      const rangeCheck = RED.mavlink.validateUint8(min);
       return function (v, opt) {
-        var role = RED.mavlink.liveOr(this, '#node-config-input-role', this.role, 'gcs');
+        const role = RED.mavlink.liveOr(this, '#node-config-input-role', this.role, 'gcs');
         if (role !== 'companion') return required.call(this, v, opt);
         return RED.mavlink.isBlank(v) ? true : rangeCheck.call(this, v, opt);
       };
@@ -55,11 +55,11 @@
 
     function companionRoleValidator(v, _opt) {
       if (v !== 'companion') return true;
-      var identityId = this.id;
-      var bindings = 0;
-      RED.nodes.eachConfig(function (connection) {
+      const identityId = this.id;
+      let bindings = 0;
+      RED.nodes.eachConfig((connection) => {
         if (connection.type !== 'mavlink-connection') return;
-        var identities = [connection.localIdentity].concat(connection.additionalIdentities || []);
+        const identities = [connection.localIdentity].concat(connection.additionalIdentities || []);
         if (identities.indexOf(identityId) !== -1) bindings += 1;
       });
       return bindings <= 1 || 'a Companion may have one Connection';
@@ -75,7 +75,7 @@
      * never filtered: custom names none and gets the flat list, and every
      * component stays reachable in all three roles.
      */
-    var ROLE_PRESETS = {
+    const ROLE_PRESETS = {
       gcs:       { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GCS', compIdSuggest: 'MISSIONPLANNER' },
       companion: { sysid: null, compid: 191, heartbeatType: 'MAV_TYPE_ONBOARD_CONTROLLER', compIdSuggest: 'ONBOARD_COMPUTER' },
       custom:    { sysid: 255, compid: 190, heartbeatType: 'MAV_TYPE_GENERIC', compIdSuggest: '' }
@@ -113,24 +113,24 @@
         heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID', required: true },
         heartbeatIntervalMs:{ value: 1000, validate: positiveNumberValidator }
       },
-      label: function () {
+      label() {
         if (this.role === 'companion') {
-          return (this.name || 'MAVLink Local Identity') + ' (vehicle SysID)';
+          return `${this.name || 'MAVLink Local Identity'} (vehicle SysID)`;
         }
-        var sysid = this.sourceSystemId;
-        var compid = this.sourceComponentId;
-        var ids = (sysid !== undefined && compid !== undefined) ? ' ' + sysid + '/' + compid : '';
+        const sysid = this.sourceSystemId;
+        const compid = this.sourceComponentId;
+        const ids = (sysid !== undefined && compid !== undefined) ? ` ${sysid}/${compid}` : '';
         return (this.name || 'MAVLink Local Identity') + ids;
       },
-      oneditprepare: function () {
-        var node = this;
-        var $role   = $('#node-config-input-role');
-        var $sysid  = $('#node-config-input-sourceSystemId');
-        var $compid = $('#node-config-input-sourceComponentId');
-        var $hbType = $('#node-config-input-heartbeatType');
-        var $hbAp   = $('#node-config-input-heartbeatAutopilot');
-        var prevRole = $role.val() || 'gcs';
-        var enumLoadToken = { cancelled: false };
+      oneditprepare() {
+        const node = this;
+        const $role   = $('#node-config-input-role');
+        const $sysid  = $('#node-config-input-sourceSystemId');
+        const $compid = $('#node-config-input-sourceComponentId');
+        const $hbType = $('#node-config-input-heartbeatType');
+        const $hbAp   = $('#node-config-input-heartbeatAutopilot');
+        let prevRole = $role.val() || 'gcs';
+        const enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
 
         // CompID is an empty <select> until /mavlink/enums returns. Node-RED
@@ -143,8 +143,8 @@
         // Local Identity has no Connection/Dialect row — request `common`
         // explicitly (owns MAV_TYPE / MAV_AUTOPILOT). CompID fetches its own,
         // per role, in refillCompIds below.
-        RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT'], function (catalog) {
-          var enums = (catalog && catalog.enums) || {};
+        RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT'], (catalog) => {
+          const enums = (catalog && catalog.enums) || {};
           // Prefer live dialog values so a role change before the catalog
           // resolves is not overwritten by the pre-edit saved snapshot.
           RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {
@@ -172,7 +172,7 @@
          * programmatically.
          */
         function refillCompIds(desired) {
-          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+          RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], (catalog) => {
             // `desired === null` rather than truthiness: component 0 is
             // MAV_COMP_ID_ALL, a real member of the enum.
             RED.mavlink.fillCompIdSelect($compid, ((catalog || {}).enums || {}).MAV_COMPONENT || [], {
@@ -199,21 +199,21 @@
          * previous role's suggestion — an explicit edit is never reverted.
          */
         function applyRole() {
-          var role = $role.val();
-          var prev = preset(prevRole);
-          var next = preset(role);
+          const role = $role.val();
+          const prev = preset(prevRole);
+          const next = preset(role);
 
           /* sysid */
           if (next.sysid !== null) {
-            var curSys = String($sysid.val()).trim();
+            const curSys = String($sysid.val()).trim();
             if (curSys === '' || Number($sysid.val()) === prev.sysid) {
               $sysid.val(next.sysid);
             }
           }
           /* compid */
-          var pickedCompId = null;
+          let pickedCompId = null;
           if (next.compid !== null) {
-            var curCmp = String($compid.val()).trim();
+            const curCmp = String($compid.val()).trim();
             if (curCmp === '' || Number($compid.val()) === prev.compid) {
               pickedCompId = next.compid;
               $compid.val(pickedCompId);
@@ -221,7 +221,7 @@
             }
           }
           /* heartbeat type */
-          var hb = String($hbType.val()).trim();
+          const hb = String($hbType.val()).trim();
           if (hb === '' || hb === prev.heartbeatType) {
             $hbType.val(next.heartbeatType);
             $hbType.trigger('change');
@@ -244,21 +244,21 @@
          * four onboard-computer slots, so it is a real choice (§14.135).
          */
         function applyVisibility(role) {
-          var isCompanion = (role === 'companion');
+          const isCompanion = (role === 'companion');
           $sysid.closest('.form-row').toggle(!isCompanion);
           $('#mav-companion-ids-note').toggle(isCompanion);
           $('.mav-role-hint').hide();
-          $('#mav-role-hint-' + role).show();
+          $(`#mav-role-hint-${role}`).show();
         }
 
         $role.on('change', applyRole);
 
         /* Show hint for saved role without rewriting saved values */
         $('.mav-role-hint').hide();
-        $('#mav-role-hint-' + prevRole).show();
+        $(`#mav-role-hint-${prevRole}`).show();
         applyVisibility(prevRole);
       },
-      oneditsave: function () {
+      oneditsave() {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
         /**
          * Companion role: SysID is derived from the vehicle, so a value a
@@ -272,7 +272,7 @@
           $('#node-config-input-sourceSystemId').val('');
         }
       },
-      oneditcancel: function () {
+      oneditcancel() {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
       }
     });

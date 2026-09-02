@@ -117,7 +117,7 @@ test('outbound timestamps are strictly increasing per stream', () => {
 });
 
 test('a stalled clock still yields strictly increasing outbound timestamps', () => {
-  let t = NOW_MS;
+  const t = NOW_MS;
   const s = new SigningState({ now: () => t });
   const a = s.nextOutboundTimestamp(1, 1);
   // clock does not advance between messages

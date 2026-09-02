@@ -1,7 +1,7 @@
 <script type="text/javascript">
   (function () {
     /** Messages catalog request sequence (DESIGN.md §6 shared loadCatalog). */
-    var _msgCatalog = { seq: 0 };
+    const _msgCatalog = { seq: 0 };
 
     function loadMessagesCatalog(cb) {
       // mavlink-in is wire-only (no Build tier): the bound Connection's Vehicle
@@ -14,7 +14,7 @@
     }
 
     /** Catalog the loader last handed this dialog — rows paint from this. */
-    var _currentMsgCatalog = null;
+    let _currentMsgCatalog = null;
 
     /**
      * Fill one row's select from the catalog, keeping whatever it already
@@ -26,7 +26,7 @@
      * @param {string} [saved]  value to select, when restoring a saved row
      */
     function paintRow($sel, saved) {
-      var want = saved !== undefined ? saved : $sel.val();
+      const want = saved !== undefined ? saved : $sel.val();
       RED.mavlink.fillEnumSelect($sel, (_currentMsgCatalog || {}).messages || [], {
         saved: want,
         preferLive: false,
@@ -39,7 +39,7 @@
     }
 
     function refreshMessageOptions() {
-      loadMessagesCatalog(function (catalog) {
+      loadMessagesCatalog((catalog) => {
         _currentMsgCatalog = catalog;
         $('#mav-in-messages').editableList('items').each(function () {
           paintRow($(this).find('select'));
@@ -59,15 +59,13 @@
         // the shape oneditsave produces: an array of non-blank names.
         messages:    {
           value: [],
-          validate: function (v, _opt) {
+          validate(v, _opt) {
             if (!Array.isArray(v)) return 'must be a list of message names';
             // Strings only: the runtime filter compares each entry strictly
             // against the decoded name, so a hand-edited number or object
             // matches nothing and the node listens while discarding every
             // frame (Codex) — the ring must not vouch for that.
-            return v.every(function (name) {
-              return typeof name === 'string' && !RED.mavlink.isBlank(name);
-            }) || 'every entry must be a non-blank message name string';
+            return v.every((name) => typeof name === 'string' && !RED.mavlink.isBlank(name)) || 'every entry must be a non-blank message name string';
           },
         },
         sysid:       { value: '', validate: RED.mavlink.validateUint8(1) },
@@ -82,19 +80,17 @@
         // red a control the operator cannot see.
         changedFields: {
           value: '',
-          validate: function (v, _opt) {
-            var $own = RED.mavlink.ownDialogField(this, '#node-input-changedOnly');
-            var changedOnly = $own ? $own.is(':checked') : this.changedOnly === true;
+          validate(v, _opt) {
+            const $own = RED.mavlink.ownDialogField(this, '#node-input-changedOnly');
+            const changedOnly = $own ? $own.is(':checked') : this.changedOnly === true;
             if (changedOnly !== true) return true;
             if (RED.mavlink.isBlank(v)) return true;
-            return String(v).split(',').every(function (token) {
-              return /^[A-Za-z_][A-Za-z0-9_]*$/.test(token.trim());
-            }) || 'must be comma-separated field names';
+            return String(v).split(',').every((token) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(token.trim())) || 'must be comma-separated field names';
           },
         },
         fieldName:   {
           value: '',
-          validate: function (v, _opt) {
+          validate(v, _opt) {
             if (RED.mavlink.isBlank(v)) return true;
             return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(v).trim())
               || 'must be a single field name';
@@ -103,7 +99,7 @@
         fieldValue:  { value: '' },
         rateLimit:   {
           value: 0,
-          validate: function (v) {
+          validate(v) {
             // Blank/number = global Hz; otherwise comma NAME=Hz pairs, with an
             // optional bare Hz default among them. Every token must be
             // *complete*: an empty token (a stray comma) or an empty value
@@ -111,17 +107,17 @@
             // "unlimited" at runtime — a typo must not quietly delete the
             // limit the operator asked for. Number('') is 0, so the emptiness
             // checks have to come before the numeric one.
-            var raw = String(v === undefined || v === null ? '' : v).trim();
+            const raw = String(v === undefined || v === null ? '' : v).trim();
             if (!raw) return true;
-            return raw.split(',').every(function (token) {
-              var part = token.trim();
+            return raw.split(',').every((token) => {
+              const part = token.trim();
               if (!part) return false;
-              var eq = part.indexOf('=');
-              var name = eq === -1 ? '' : part.slice(0, eq).trim();
-              var value = eq === -1 ? part : part.slice(eq + 1).trim();
+              const eq = part.indexOf('=');
+              const name = eq === -1 ? '' : part.slice(0, eq).trim();
+              const value = eq === -1 ? part : part.slice(eq + 1).trim();
               if (eq !== -1 && !name) return false;
               if (!value) return false;
-              var hz = Number(value);
+              const hz = Number(value);
               return Number.isFinite(hz) && hz >= 0;
             });
           },
@@ -132,18 +128,18 @@
       outputLabels: ['decoded message'],
       icon: 'font-awesome/fa-arrow-down',
       paletteLabel: 'in',
-      label: function () {
+      label() {
         if (this.name) return this.name;
-        var list = this.messages || [];
+        const list = this.messages || [];
         if (list.length === 1) return list[0];
-        if (list.length > 1) return list[0] + ' +' + (list.length - 1);
+        if (list.length > 1) return `${list[0]} +${list.length - 1}`;
         return 'mavlink in';
       },
-      labelStyle: function () {
+      labelStyle() {
         return this.name ? 'node_label_italic' : '';
       },
-      oneditprepare: function () {
-        var node = this;
+      oneditprepare() {
+        const node = this;
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
         // §6: the compare-fields row only exists while Changed only is on.
@@ -154,24 +150,24 @@
         refreshChangedFieldsRow();
         // Message filters (#211): one catalog-backed select per row. Same
         // stock widget the Connection and Fan-out dialogs use for their lists.
-        var $messages = $('#mav-in-messages');
+        const $messages = $('#mav-in-messages');
         $messages.editableList({
           addButton: 'add message',
           removable: true,
           sortable: true,
           height: 'auto',
-          addItem: function (container, _index, data) {
-            var $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
+          addItem(container, _index, data) {
+            const $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
             paintRow($sel, (data && data.name) || '');
           },
         });
-        (node.messages || []).forEach(function (name) {
-          $messages.editableList('addItem', { name: name });
+        (node.messages || []).forEach((name) => {
+          $messages.editableList('addItem', { name });
         });
 
         $('#node-input-connection').on('change', refreshMessageOptions);
         refreshMessageOptions();
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], (catalog) => {
           RED.mavlink.fillCompIdSelect(
             $('#node-input-compid'),
             (catalog.enums || {}).MAV_COMPONENT || [],
@@ -180,14 +176,14 @@
         });
       },
 
-      oneditsave: function () {
+      oneditsave() {
         // Blank rows and duplicates are dropped rather than refused: a blank
         // row is an unfinished thought, and a name repeated twice would
         // subscribe twice and deliver the message twice.
-        var seen = {};
-        var names = [];
+        const seen = {};
+        const names = [];
         $('#mav-in-messages').editableList('items').each(function () {
-          var name = String($(this).find('select').val() || '').trim();
+          const name = String($(this).find('select').val() || '').trim();
           if (!name || seen[name]) return;
           seen[name] = true;
           names.push(name);

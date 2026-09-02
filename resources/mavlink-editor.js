@@ -121,7 +121,7 @@
    */
   RED.mavlink.fillBandSelect = function ($select, saved) {
     $select.empty();
-    RED.mavlink.BAND_OPTIONS.forEach(function (opt) {
+    RED.mavlink.BAND_OPTIONS.forEach((opt) => {
       $('<option></option>').val(opt.value).text(opt.label).appendTo($select);
     });
     $select.val(saved !== undefined && saved !== null ? String(saved) : '2');
@@ -186,14 +186,14 @@
       const entry = verbs[i];
       $verb.append($('<option></option>').val(entry.value).text(entry.label));
     }
-    const valid = verbs.some(function (v) { return v.value === saved; });
+    const valid = verbs.some((v) => v.value === saved);
     $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
   };
 
   RED.mavlink.payloadVerbIgnoresCarrier = function (topic, verb, path) {
     // The two message-kind aim paths carry no MAV_CMD, so COMMAND_INT/LONG is
     // meaningless for them: manager pitch/yaw and the attitude quaternion.
-    var p = path || 'legacy';
+    const p = path || 'legacy';
     return topic === 'gimbal' && verb === 'aim' && (p === 'manager' || p === 'attitude');
   };
 
@@ -368,13 +368,11 @@
     if (Number(commandId) !== DO_SET_MODE || Number(paramIndex) !== 2) return null;
     const target = RED.mavlink.resolveCatalogTarget();
     if (target.firmware !== 'px4') return null;
-    return RED.mavlink.PX4_MODES.map(function (row) {
-      return {
+    return RED.mavlink.PX4_MODES.map((row) => ({
         name: row.name,
         value: RED.mavlink.px4PackCustomMode(row.main, row.sub),
         label: `${row.name} (main ${row.main}${row.sub ? `, sub ${row.sub}` : ''})`,
-      };
-    });
+      }));
   };
 
   /**
@@ -511,7 +509,7 @@
       if (isBitmask) {
         sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
       }
-      entries.forEach(function (entry) {
+      entries.forEach((entry) => {
         const $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
         if (entry.description) $opt.attr('title', entry.description);
         sel.append($opt);
@@ -793,14 +791,14 @@
       const dialect = (profile && profile.dialect) || '';
       const firmware = (profile && profile.firmware) || '';
       const family = (profile && profile.vehicleFamily) || '';
-      const query = { vehicle: vehicleId, dialect: dialect };
+      const query = { vehicle: vehicleId, dialect };
       if (firmware) query.firmware = firmware;
       if (family) query.vehicleFamily = family;
       return {
         key: [`vehicle:${vehicleId}`, dialect, firmware, family].join('|'),
-        query: query,
-        dialect: dialect,
-        vehicleId: vehicleId,
+        query,
+        dialect,
+        vehicleId,
         firmware,
         vehicleFamily: family,
         isBuild,
@@ -819,7 +817,7 @@
         if (firmwareVal) query.firmware = firmwareVal;
         return {
           key: `dialect:${dialectVal}${firmwareVal ? `|${firmwareVal}` : ''}`,
-          query: query,
+          query,
           dialect: dialectVal,
           vehicleId: '',
           firmware: firmwareVal,
@@ -880,7 +878,7 @@
     function finish(dialects) {
       $select.empty();
       appendOption('', '\u2014');
-      (dialects || []).forEach(function (dialect) {
+      (dialects || []).forEach((dialect) => {
         appendOption(String(dialect), String(dialect));
       });
       appendOption('__vehicle', 'from Vehicle Profile\u2026');
@@ -901,9 +899,9 @@
       $select.val(saved);
     }
 
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), function (data) {
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), (data) => {
       finish((data && data.dialects) || []);
-    }).fail(function () {
+    }).fail(() => {
       finish([]);
     });
   };
@@ -935,13 +933,13 @@
       }
       return;
     }
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, function (data) {
+    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, (data) => {
       if (token && token.cancelled) return;
       cb({
         dialect: data.dialect,
         enums: data.enums || {}
       });
-    }).fail(function () {
+    }).fail(() => {
       if (token && token.cancelled) return;
       cb({ dialect: '', enums: {} });
     });
@@ -1142,7 +1140,7 @@
     // for stay top level. Used to float the components a payload topic
     // plausibly means above the rest of MAV_COMPONENT.
     const groups = {};
-    (entries || []).forEach(function (entry) {
+    (entries || []).forEach((entry) => {
       const value = String(entry[valueKey]);
       const label = entry.label || RED.mavlink.enumOptionLabel(entry);
       const $opt = $('<option></option>').val(value).text(label);
@@ -1249,7 +1247,7 @@
     }
     const suggested = split.suggested;
     RED.mavlink.fillEnumSelect($select, suggested.concat(split.others), Object.assign({}, opts, {
-      groupOf: function (entry) {
+      groupOf(entry) {
         return suggested.indexOf(entry) !== -1 ? 'Suggested' : 'Other components';
       },
     }));
@@ -1286,7 +1284,7 @@
         ? opts.initialSaved
         : $select.val());
 
-    RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+    RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], (catalog) => {
       if (Number($select.data(seqKey)) !== seq) return;
       RED.mavlink.fillCompIdSelect(
         $select,
@@ -1319,13 +1317,11 @@
     const all = entries || [];
     const name = String(topic || '').toUpperCase();
     if (!name) return { suggested: [], others: all };
-    const suggested = all.filter(function (entry) {
-      return String(entry.name || '').toUpperCase().indexOf(name) !== -1;
-    });
+    const suggested = all.filter((entry) => String(entry.name || '').toUpperCase().indexOf(name) !== -1);
     if (!suggested.length) return { suggested: [], others: all };
     return {
-      suggested: suggested,
-      others: all.filter(function (entry) { return suggested.indexOf(entry) === -1; }),
+      suggested,
+      others: all.filter((entry) => suggested.indexOf(entry) === -1),
     };
   };
 
@@ -1401,11 +1397,11 @@
       return;
     }
 
-    $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, function (data) {
+    $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, (data) => {
       if (seq !== state.seq) return;
       const catalog = fromData(data || {});
       render(catalog);
-    }).fail(function (_xhr, _status, err) {
+    }).fail((_xhr, _status, err) => {
       if (seq !== state.seq) return;
       render(emptyShape(target.dialect, String(err || 'load failed')));
     });
@@ -1439,14 +1435,14 @@
     if (!conn) return out;
     const ids = [conn.localIdentity].concat(conn.additionalIdentities || []);
     const seen = {};
-    ids.forEach(function (id) {
+    ids.forEach((id) => {
       if (!id || seen[id]) return;
       seen[id] = true;
       const idNode = RED.nodes.node(id);
       if (!idNode) return;
       const role = RED.mavlink.identityRole(id);
       if (rolesAllowed && rolesAllowed.indexOf(role) === -1) return;
-      out.push({ id: id, role: role, label: `${idNode.name || 'identity'} (${role})` });
+      out.push({ id, role, label: `${idNode.name || 'identity'} (${role})` });
     });
     return out;
   };
@@ -1498,7 +1494,7 @@
     const sysid = Number(rawSysid);
     const compid = Number(idNode.sourceComponentId);
     if (!Number.isFinite(sysid) || !Number.isFinite(compid)) return null;
-    return { sysid: sysid, compid: compid, label: idNode.name || 'identity' };
+    return { sysid, compid, label: idNode.name || 'identity' };
   };
 
   /**
@@ -1546,10 +1542,10 @@
     opts = opts || {};
     const options = RED.mavlink.identityOptionsFor(connectionId, opts.rolesAllowed);
     $select.empty();
-    options.forEach(function (o) {
+    options.forEach((o) => {
       $select.append($('<option></option>').val(o.id).text(o.label));
     });
-    const eligible = options.some(function (o) { return o.id === opts.saved; });
+    const eligible = options.some((o) => o.id === opts.saved);
     const selected = eligible ? opts.saved : (options.length ? options[0].id : '');
     $select.val(selected);
     return selected;
@@ -1866,7 +1862,7 @@
     return {
       value: '',
       type: 'mavlink-connection',
-      validate: function (v, _opt) {
+      validate(v, _opt) {
         if (RED.mavlink.liveOr(this, modeSelector, this && this[modeField]) === 'build') return true;
         // '_ADD_' is what the platform's "none" option carries until save
         // rewrites it to ''; treat it as blank too, so the field reds while
@@ -1900,12 +1896,12 @@
     const defaults = {
       dialect: {
         value: '',
-        validate: function (v) {
+        validate(v) {
           if (currentMode(this) === 'build') return !!v;
           return true;
         },
       },
-      connection: RED.mavlink.connectionDefault({ modeField: modeField }),
+      connection: RED.mavlink.connectionDefault({ modeField }),
       vehicle: {
         // No `required: false`. Paired with a validate, it short-circuits an
         // empty value to valid *before* the validator runs (measured on the
@@ -1913,7 +1909,7 @@
         // the blank it exists to catch.
         value: '',
         type: 'mavlink-vehicle',
-        validate: function (v) {
+        validate(v) {
           if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') return !!v;
           return true;
         },
@@ -1923,7 +1919,7 @@
     if (opts.withFirmware) {
       defaults.firmware = {
         value: '',
-        validate: function (v) {
+        validate(v) {
           const dialect = currentDialect(this);
           if (currentMode(this) === 'build' && dialect && dialect !== '__vehicle') return !!v;
           return true;
@@ -1998,9 +1994,9 @@
     toggle(opts.targetSystemRow, targetSystem);
     toggle(opts.targetComponentRow, targetComponent);
     return {
-      isCompanion: isCompanion,
-      targetSystem: targetSystem,
-      targetComponent: targetComponent,
+      isCompanion,
+      targetSystem,
+      targetComponent,
     };
   };
 
@@ -2043,12 +2039,10 @@
     const live = $select.val();
     const saved = opts.saved;
 
-    const options = opts.options.filter(function (opt) {
-      return !withhold(opt[0]) || opt[0] === live || opt[0] === saved;
-    });
+    const options = opts.options.filter((opt) => !withhold(opt[0]) || opt[0] === live || opt[0] === saved);
 
     $select.empty();
-    options.forEach(function (opt) {
+    options.forEach((opt) => {
       $('<option></option>').val(opt[0]).text(opt[1]).appendTo($select);
     });
 
@@ -2057,9 +2051,7 @@
     // and setting a select to a value it does not offer leaves it showing one
     // thing while the code reads another. So every candidate, the fallback
     // included, has to be in the rebuilt list; the first option is the floor.
-    let value = [live, saved, opts.fallback].filter(function (candidate) {
-      return options.some(function (opt) { return opt[0] === candidate; });
-    })[0];
+    let value = [live, saved, opts.fallback].filter((candidate) => options.some((opt) => opt[0] === candidate))[0];
     if (value === undefined && options.length) value = options[0][0];
     $select.val(value);
     return value;

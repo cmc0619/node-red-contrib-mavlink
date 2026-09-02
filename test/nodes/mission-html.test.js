@@ -100,7 +100,7 @@ test('mavlink-mission firmware type list follows dialect, vehicle, or connection
   assert.match(html, /function repopulateTypes/, 'repopulateTypes function present');
   assert.match(
     html,
-    /=\s*RED\.mavlink\.resolveCatalogTarget\(\)\.firmware/,
+    /[=]\s*RED\.mavlink\.resolveCatalogTarget\(\)\.firmware/,
     'repopulateTypes reads the shared resolver'
   );
 });
@@ -126,7 +126,7 @@ test('mavlink-mission items validator rejects a configured empty array (#241)', 
   // A configured [] would upload MISSION_COUNT 0 — the wire's "erase the
   // plan" — so the editor rejects it statically; blank stays valid (items may
   // come from the payload, whose empty case the runtime refuses).
-  const itemsValidator = /items:\s*\{[\s\S]*?validate:\s*function[\s\S]*?\n {6}\},/.exec(html);
+  const itemsValidator = /items:\s*\{[\s\S]*?validate\([\s\S]*?\n {6}\},/.exec(html);
   assert.ok(itemsValidator, 'items validate function must be extractable');
   assert.match(itemsValidator[0], /isBlank\(v\)\)\s*return true/, 'blank stays valid');
   assert.match(itemsValidator[0], /length === 0/, 'empty array is checked');
@@ -186,11 +186,11 @@ test('mavlink-mission items validator reds per-item: uint16 command and family r
 });
 
 test('mavlink-mission editor family tables name the dialect fence and rally ids', () => {
-  const fence = /var MISSION_FENCE_COMMANDS = \[([^\]]*)\];/.exec(html);
+  const fence = /const MISSION_FENCE_COMMANDS = \[([^\]]*)\];/.exec(html);
   assert.ok(fence, 'MISSION_FENCE_COMMANDS must be extractable');
   const fromEditor = fence[1].split(',').map((s) => Number(s.trim()));
   assert.deepEqual(fromEditor, [5000, 5001, 5002, 5003, 5004, 5005]);
-  const rally = /var MISSION_RALLY_COMMAND = (\d+);/.exec(html);
+  const rally = /const MISSION_RALLY_COMMAND = (\d+);/.exec(html);
   assert.ok(rally, 'MISSION_RALLY_COMMAND must be extractable');
   assert.equal(Number(rally[1]), 5100);
 });

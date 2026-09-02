@@ -872,7 +872,7 @@ test('fillBandSelect rebuilds options and restores the saved band', () => {
   };
   const context = {
     RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
-    $: function (html) {
+    $(html) {
       if (typeof html === 'string' && html.startsWith('<option')) {
         const opt = { _val: '', _text: '' };
         opt.val = function (v) { opt._val = v; return opt; };
@@ -1152,7 +1152,7 @@ function paramHarness() {
       options,
       value: undefined,
       addClass(c) {
-        attrs.class = ((attrs.class || '') + ' ' + c).trim();
+        attrs.class = (`${attrs.class || ''  } ${  c}`).trim();
         return api;
       },
       css() { return api; },

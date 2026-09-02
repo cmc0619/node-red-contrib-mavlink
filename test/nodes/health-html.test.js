@@ -85,7 +85,7 @@ test('oneditsave clears the Identity (DOM and property) for a single-identity Co
   // (Codacy). Clearing the DOM element makes the harvested value blank too.
   assert.match(
     html,
-    /oneditsave:\s*function[\s\S]*?if \(isSingleIdentity\(connId\)\)\s*\{\s*\$\('#node-input-identity'\)\.val\(''\);\s*this\.identity = ''/,
+    /oneditsave\(\) \{[\s\S]*?if \(isSingleIdentity\(connId\)\)\s*\{\s*\$\('#node-input-identity'\)\.val\(''\);\s*this\.identity = ''/,
     'a hidden field clears both the select and the property'
   );
 });

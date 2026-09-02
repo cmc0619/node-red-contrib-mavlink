@@ -1,7 +1,7 @@
 <script type="text/javascript">
   (function () {
     /** Must stay in sync with lib/state DEFAULT_EVENTS (full peer-table set). */
-    var STATE_EVENTS = [
+    const STATE_EVENTS = [
       'peer-new',
       'component-new',
       'heartbeat',
@@ -22,17 +22,17 @@
     function parseSavedEvents(raw) {
       if (Array.isArray(raw)) return raw.map(String);
       if (typeof raw === 'string' && raw.trim()) {
-        return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        return raw.split(',').map((s) => s.trim()).filter(Boolean);
       }
       return [];
     }
 
     function buildEventsMultiSelect(node) {
-      var $select = $('#mav-state-events-select');
-      var saved = parseSavedEvents(node.events);
+      const $select = $('#mav-state-events-select');
+      const saved = parseSavedEvents(node.events);
       $select.empty();
-      for (var i = 0; i < STATE_EVENTS.length; i++) {
-        var name = STATE_EVENTS[i];
+      for (let i = 0; i < STATE_EVENTS.length; i++) {
+        const name = STATE_EVENTS[i];
         $select.append($('<option></option>').val(name).text(name));
       }
       $select.val(saved.length ? saved : STATE_EVENTS);
@@ -49,14 +49,12 @@
     // the save path; a real re-pick is written by the change handler as the
     // operator makes it.
     function savedEventsAllOffered(node) {
-      return parseSavedEvents(node.events).every(function (name) {
-        return STATE_EVENTS.indexOf(name) !== -1;
-      });
+      return parseSavedEvents(node.events).every((name) => STATE_EVENTS.indexOf(name) !== -1);
     }
 
     function syncEventsHiddenFromSelect() {
-      var raw = $('#mav-state-events-select').val();
-      var values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      const raw = $('#mav-state-events-select').val();
+      const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
       // The full selection IS the blank default — write it as blank, so an
       // open-and-save cannot freeze today's event list into the config (an
       // event lib/state grows later would silently fall out of a frozen list).
@@ -80,11 +78,9 @@
         // split(',') cannot read — it reds rather than vouching for it.
         events: {
           value: 'stale,expired,statustext',
-          validate: function (v, _opt) {
+          validate(v, _opt) {
             if (typeof v !== 'string') return 'is the comma-joined picks string, not a list';
-            return parseSavedEvents(v).every(function (name) {
-              return STATE_EVENTS.indexOf(name) !== -1;
-            }) || 'names an event the peer table does not emit';
+            return parseSavedEvents(v).every((name) => STATE_EVENTS.indexOf(name) !== -1) || 'names an event the peer table does not emit';
           }
         },
         targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
@@ -94,15 +90,15 @@
       outputs: 2,
       outputLabels: ['continue', 'status'],
       icon: 'font-awesome/fa-table',
-      label: function () { return this.name || 'mavlink state'; },
-      oneditprepare: function () {
-        var node = this;
+      label() { return this.name || 'mavlink state'; },
+      oneditprepare() {
+        const node = this;
         RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
-        var enumLoadToken = { cancelled: false };
+        const enumLoadToken = { cancelled: false };
         node._mavEnumLoadToken = enumLoadToken;
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], function (catalog) {
+        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], (catalog) => {
           RED.mavlink.fillCompIdSelect(
             $('#node-input-targetComponent'),
             ((catalog || {}).enums || {}).MAV_COMPONENT || [],
@@ -110,11 +106,11 @@
           );
         }, enumLoadToken);
       },
-      oneditsave: function () {
+      oneditsave() {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
         if (savedEventsAllOffered(this)) syncEventsHiddenFromSelect();
       },
-      oneditcancel: function () {
+      oneditcancel() {
         if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
       }
     });

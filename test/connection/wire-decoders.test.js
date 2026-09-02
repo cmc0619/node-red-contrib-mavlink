@@ -105,7 +105,7 @@ test('default max decoder cap is 100', () => {
 test('decoder map LRU-evicts when over maxDecoders (UDP churn bound)', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
   const full = heartbeatFrame(wire);
-  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const ep = (n) => ({ address: `10.0.0.${  n}`, port: 14550 });
   // Same `now` for every call — Map re-insertion order must decide warmth, not
   // millisecond Date.now() advancement (CodeRabbit #33).
   const t = 1_000_000;
@@ -132,7 +132,7 @@ test('decoder map LRU-evicts when over maxDecoders (UDP churn bound)', () => {
 test('cap pressure prefers never-validated pipelines over a live peer mid-frame', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
   const full = heartbeatFrame(wire);
-  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const ep = (n) => ({ address: `10.0.0.${  n}`, port: 14550 });
   const t = 2_000_000;
   const junk = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
 
@@ -194,7 +194,7 @@ test('an UNKNOWN_<id> frame surfaces but does not earn eviction standing', () =>
 test('cap pressure prefers empty-buffer validated over a mid-frame peer', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
   const full = heartbeatFrame(wire);
-  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const ep = (n) => ({ address: `10.0.0.${  n}`, port: 14550 });
   const t = 3_000_000;
 
   // Both peers validate. ep(1) then parks a partial; ep(2) stays buffer-empty.
@@ -215,7 +215,7 @@ test('cap pressure prefers empty-buffer validated over a mid-frame peer', () => 
 test('cap pressure keeps a never-validated first-frame partial over junk', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), maxDecoders: 2 });
   const full = heartbeatFrame(wire);
-  const ep = (n) => ({ address: '10.0.0.' + n, port: 14550 });
+  const ep = (n) => ({ address: `10.0.0.${  n}`, port: 14550 });
   const t = 4_000_000;
   const junk = Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
 

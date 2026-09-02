@@ -116,12 +116,12 @@ test('payload rows are generated, with dialect labels, units and real ceilings',
   // editor does not assert them.
   assert.ok(!/meta\.minValue/.test(payloadHtml), 'no min attribute on generated numbers');
   // Recipe order, not alphabetical: gimbal roi-set reads lat, lon, alt.
-  assert.match(payloadHtml, /var keys = Object\.keys\(fields\);/);
+  assert.match(payloadHtml, /const keys = Object\.keys\(fields\);/);
   assert.ok(!/Object\.keys\(fields\)\.sort\(\)/.test(payloadHtml));
   // Numbers initialize to the recipe default when unset so a save stores an
   // explicit value; pulldowns do the same. The driver does not invent defaults.
   assert.match(payloadHtml, /\.val\(saved\)/, 'numbers take the recipe default when unset');
-  assert.match(payloadHtml, /var saved = blank[\s\S]{0,140}meta\.default/, 'unset controls take the recipe default');
+  assert.match(payloadHtml, /const saved = blank[\s\S]{0,140}meta\.default/, 'unset controls take the recipe default');
   assert.match(
     payloadHtml,
     /sel\.topic === 'gimbal' && sel\.verb === 'aim'/,
@@ -414,8 +414,8 @@ test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden
   }
 
   const table = payloadHtml.slice(
-    payloadHtml.indexOf('var REQUIRED_VALUES = '),
-    payloadHtml.indexOf('var payloadDefaults')
+    payloadHtml.indexOf('const REQUIRED_VALUES = '),
+    payloadHtml.indexOf('const payloadDefaults')
   );
   for (const [key, slots] of Object.entries(expected)) {
     assert.ok(
