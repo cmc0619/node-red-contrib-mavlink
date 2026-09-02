@@ -23,7 +23,6 @@ const { Connection, STATE, PeerTable } = require('../lib/connection');
 const { listSerialPorts } = require('../lib/connection/transport/serial');
 const { resolveIdentity } = require('../lib/identity');
 const { capBadge } = require('../lib/delivery');
-const { numberOr } = require('../lib/addressing');
 
 /** Admin endpoint path listing host serial ports for the editor (§6). */
 const SERIAL_PORTS_ROUTE = '/mavlink/serial-ports';
@@ -99,6 +98,10 @@ module.exports = function registerMavlinkConnection(RED) {
     // loads and fails at send time. `send` refuses instead — swallowing a
     // frame would let the sender report "sent" over a link that moved
     // nothing (§2).
+    // The Local Identity id, read live by a node whose editor hides the
+    // Identity field on a single-identity Connection (mavlink-health).
+    node.localIdentity = config.localIdentity;
+
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
@@ -139,7 +142,6 @@ module.exports = function registerMavlinkConnection(RED) {
     });
 
     node.connection = new Connection({
-        disabled: false,
         transport: buildTransportConfig(config),
         vehicle: {
           ...vehicleDescriptor,
@@ -149,11 +151,11 @@ module.exports = function registerMavlinkConnection(RED) {
         defaultIdentityId: config.localIdentity,
         boundIdentityIds: identityIds,
         signing,
-        // Blank stays `undefined` — PeerTable's own default (5s/15s) applies.
-        // The editor's number validator owns the rest (§14).
+        // The editor owns both thresholds (5000/15000 defaults, blank reds);
+        // Number() is Node-RED serialization plumbing, not validation (§0).
         heartbeat: {
-          staleMs: numberOr(config.staleMs, undefined),
-          expireMs: numberOr(config.expireMs, undefined),
+          staleMs: Number(config.staleMs),
+          expireMs: Number(config.expireMs),
         },
     }, {
         logger: {
@@ -283,7 +285,7 @@ function buildTransportConfig(config) {
  */
 function buildSigning(config, credentials) {
   const passphrase = credentials && credentials.signingPassphrase;
-  const keyHex = credentials && credentials.signingKeyHex && credentials.signingKeyHex.trim();
+  const keyHex = credentials && credentials.signingKeyHex;
 
   const signing = {
     linkId: Number(config.linkId),
@@ -382,7 +384,7 @@ function enumValue(bundle, enumName, entryName) {
 /**
  * Map a runtime state to a §6 config-node status badge. Config nodes report a
  * state machine: green dot connected, yellow ring connecting, grey ring
- * idle/closed/disabled, red ring error. Shape carries meaning independently of
+ * idle/closed, red ring error. Shape carries meaning independently of
  * colour — ring is not-running/not-ok, dot is active/settled-good.
  *
  * @param {object} node
@@ -409,6 +411,5 @@ const STATUS_BADGES = {
   [STATE.RECONNECTING]: { fill: 'yellow', shape: 'ring', text: 'reconnecting' },
   [STATE.IDLE]: { fill: 'grey', shape: 'ring', text: 'idle' },
   [STATE.CLOSED]: { fill: 'grey', shape: 'ring', text: 'closed' },
-  [STATE.DISABLED]: { fill: 'grey', shape: 'ring', text: 'disabled' },
   [STATE.ERROR]: { fill: 'red', shape: 'ring', text: 'error' },
 };

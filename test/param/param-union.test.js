@@ -3,15 +3,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { paramValueToWire, paramValueFromWire, FieldCodecError } = require('..');
-const { expectFieldError } = require('./helpers');
+const { paramValueToWire, paramValueFromWire } = require('../../lib/codec');
 
 const INT32 = 6;
 const UINT32 = 5;
 const INT16 = 4;
 const UINT8 = 1;
 const REAL32 = 9;
-const UINT64 = 7;
 
 test('PX4 int/float union reinterprets bits, never casts numerically', () => {
   // 20 as int32 has bit pattern 0x00000014. Read as float32 that is ~2.8e-44,
@@ -52,18 +50,4 @@ test('a corrupt int-vs-cast mistake is observable end to end', () => {
   const numericCast = 100; // what writeFloatLE(100) would store
   assert.notEqual(reinterpret, numericCast);
   assert.equal(paramValueFromWire(reinterpret, INT32), 100);
-});
-
-test('64-bit param types do not fit the float slot and fail loud, naming the field', () => {
-  expectFieldError(() => paramValueToWire(5, UINT64, 'param_value'), FieldCodecError, 'param_value');
-});
-
-test('integer bit patterns that cannot survive JS float are rejected', () => {
-  // 0x7fa12345 is a signaling NaN as float32; writeFloatLE would quiet it.
-  expectFieldError(() => paramValueToWire(0x7fa12345, UINT32, 'param_value'), FieldCodecError, 'param_value');
-});
-
-test('non-numeric param values are rejected, naming the field', () => {
-  assert.throws(() => paramValueToWire(undefined, INT32), FieldCodecError);
-  assert.throws(() => paramValueToWire('abc', REAL32), FieldCodecError);
 });

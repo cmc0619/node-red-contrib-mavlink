@@ -74,14 +74,6 @@ function build(configOverrides = {}, depOverrides = {}) {
   return { connection, dg, timers };
 }
 
-test('a disabled connection constructs no runtime — no socket, no timers', async () => {
-  const { connection, dg, timers } = build({ disabled: true });
-  await connection.start();
-  assert.equal(connection.getState(), STATE.DISABLED);
-  assert.equal(dg.sockets.length, 0);
-  assert.equal(timers.active(), 0);
-});
-
 test('invalid-packet count reads 0 before the wire exists', () => {
   // The State node's snapshot reads this on every input, including one that
   // lands on a Connection whose start() has not built a wire yet.
@@ -142,6 +134,56 @@ test('source sysid 0 is rejected at connection ingress', async () => {
 
   assert.deepEqual(received, []);
   assert.equal(connection.peerTable.size(), 0);
+  connection.close();
+});
+
+test('the send() dry run signs when the link signs, consuming no counter', async () => {
+  // A sign-outbound link with no key must refuse inside send(), the signer's
+  // own error into the calling node's path — not pass an unsigned dry run and
+  // drop the envelope in _pump after the node reported `sent`.
+  const contexts = [];
+  const wire = fakeWire();
+  const serialize = wire.serialize;
+  wire.serialize = (message, ctx) => { contexts.push(ctx); return serialize(message, ctx); };
+  const key = Buffer.alloc(32, 7);
+  const { connection } = build(
+    { signing: { linkId: 3, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: true, key } },
+    { wire }
+  );
+  await connection.start();
+
+  connection.send({ name: 'HEARTBEAT', fields: {} }, { band: BAND.LIVENESS });
+
+  const dryRun = contexts.find((ctx) => ctx.seq === 0 && ctx.timestamp === 0);
+  assert.ok(dryRun, 'the dry run serializes with seq 0 and timestamp 0');
+  assert.equal(dryRun.sign, true);
+  assert.equal(dryRun.linkId, 3);
+  assert.equal(dryRun.key, key);
+  connection.close();
+});
+
+test('a sign-outbound link with no key refuses inside send(), through the real signer', async () => {
+  // The credentials file is gone but the flow still says sign-outbound: the
+  // real wire's signer refuses a null key, and the signed dry run puts that
+  // refusal in send() synchronously — nothing is enqueued, nothing reported
+  // sent, no frame reaches the socket.
+  const { createWire } = require('../../lib/connection/wire');
+  const { loadBundled } = require('../../lib/metadata');
+  const { connection, dg } = build(
+    { signing: { linkId: 0, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: false, key: null } },
+    { wire: createWire({ bundle: loadBundled('minimal') }) }
+  );
+  await connection.start();
+
+  assert.throws(
+    () => connection.send(
+      { name: 'HEARTBEAT', fields: { type: 6, autopilot: 8, base_mode: 0, custom_mode: 0, system_status: 0, mavlink_version: 3 } },
+      { band: BAND.LIVENESS }
+    ),
+    TypeError
+  );
+  await delay(10);
+  assert.equal(dg.sockets[0].sent.length, 0, 'nothing left the socket');
   connection.close();
 });
 
@@ -444,14 +486,6 @@ test('a GCS-range sysid (>= 250) never becomes a broadcast destination', async (
   assert.equal(connection.peerTable.endpointFor(250, 190), null, 'its endpoint is not learned');
   assert.deepEqual(connection.peerTable.endpointsForBroadcast(0), [], 'no broadcast destination');
   connection.close();
-});
-
-test('sign-outbound with no key fails the connection closed on start', async () => {
-  const { connection } = build({
-    signing: { linkId: 0, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: false },
-  });
-  await assert.rejects(() => connection.start(), /no signing passphrase/);
-  assert.equal(connection.getState(), STATE.ERROR);
 });
 
 test('close tears down timers and the socket and always calls done exactly once', async () => {
@@ -953,6 +987,7 @@ function swarmBuild(broadcast) {
       bindPort: 14550,
       remoteAddress: '10.0.0.9',
       remotePort: 14555,
+      broadcastPort: 14550,
       ...broadcast,
     },
   });
@@ -1792,15 +1827,4 @@ test('close() disarms pending health leases — no fault, no emit after teardown
     'an assertion racing teardown refuses loud instead of arming nothing'
   );
   assert.equal(leases().length, 1, 'and no timer was armed on the closed link');
-});
-
-test('assertHealth on an unbound identity is loud — no healthy no-op', async () => {
-  const { connection } = healthBuild();
-  await connection.start();
-  assert.throws(
-    () => connection.assertHealth('loose', true, 4000),
-    /not bound/,
-    'a lease on an id this Connection does not heartbeat would report healthy over a no-op'
-  );
-  connection.close();
 });

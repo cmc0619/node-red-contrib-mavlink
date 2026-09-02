@@ -110,7 +110,7 @@ test('UDP transport setDscp marks the live socket without sending data', async (
   const dg = mockDgram();
   const calls = [];
   const transport = new UdpTransport(
-    { bindPort: 14550, remoteAddress: '10.0.0.9', remotePort: 14555 },
+    { bindAddress: '0.0.0.0', bindPort: 14550, remoteAddress: '10.0.0.9', remotePort: 14555 },
     {
       dgram: dg.module,
       markDscp: (socket, dscp, options) => {

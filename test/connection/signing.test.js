@@ -147,15 +147,6 @@ test('each source component gets its own sequence stream (issue #92)', () => {
   assert.equal(s.nextSeq(255, 190), 3); // original stream still independent
 });
 
-test('sign-outbound with no key fails the connection closed', () => {
-  const on = new SigningState({ signOutbound: true, hasKey: false });
-  assert.equal(on.validate().ok, false);
-  const ok = new SigningState({ signOutbound: true, hasKey: true });
-  assert.equal(ok.validate().ok, true);
-  const off = new SigningState({ signOutbound: false, hasKey: false });
-  assert.equal(off.validate().ok, true); // signing off is the normal case
-});
-
 test('two connections sharing a key still carry distinct link IDs', () => {
   const a = new SigningState({ linkId: 1 });
   const b = new SigningState({ linkId: 2 });

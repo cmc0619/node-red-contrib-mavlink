@@ -12,10 +12,14 @@
  *   1. Node config `fields` (JSON string of default field values)
  *   2. `msg.payload` object fields — overrides per-key if payload is an object
  *
+ * Field values are raw wire values — the numbers `mavlink-in` emits and the
+ * editor saves. The one shape JSON cannot carry is a 64-bit integer, so a
+ * string on a `uint64_t`/`int64_t` field is read as the BigInt the writer takes.
+ *
  * **Delivery tiers** (§9):
- *   - Build  (always available): encode fields, emit the message on output 0;
+ *   - Build  (always available): merge fields, emit the message on output 0;
  *     the downstream can inspect, modify, or forward to `mavlink-out`.
- *   - Send   (requires a Connection): encode + enqueue fire-and-forget;
+ *   - Send   (requires a Connection): merge + enqueue fire-and-forget;
  *     output 0 carries the input msg as a pass-through trigger.
  *
  * **Repeat interval**: when `repeatMs > 0` the node fires independently of
@@ -30,7 +34,6 @@
  *   `msg.payload === false`   → silent suppress; neither output fires
  */
 
-const { encodeMessage } = require('../lib/codec');
 const {
   makeStatusRecord,
   shouldSuppress,
@@ -92,9 +95,12 @@ module.exports = function registerMavlinkBuild(RED) {
       bundle = dialectFromConnection(RED, connectionNode);
     }
     const messageMeta = bundle.messages[messageName];
+    const bigIntFields = messageMeta.fields
+      .filter((f) => f.type === 'uint64_t' || f.type === 'int64_t')
+      .map((f) => f.name);
 
     /**
-     * Core action: merge fields, encode, and emit based on the tier.
+     * Core action: merge fields and emit based on the tier.
      *
      * @param {object|null} triggerMsg  the inbound Node-RED msg, or null when
      *   fired from the repeat timer
@@ -130,17 +136,18 @@ module.exports = function registerMavlinkBuild(RED) {
 
       // Merge config defaults with any per-message overrides from the trigger.
       const overrides = triggerMsg ? triggerMsg.payload : {};
-      const rawFields = { ...configFields, ...overrides };
-
-      // Encode: apply the field codec to produce wire-ready values.
-      let encodedFields;
+      const fields = { ...configFields, ...overrides };
       try {
-        encodedFields = encodeMessage(messageMeta, rawFields, { enums: bundle.enums });
+        for (const name of bigIntFields) {
+          if (typeof fields[name] === 'string') fields[name] = BigInt(fields[name]);
+        }
       } catch (err) {
-        return failRun(new Error(`encode: ${err.message}`));
+        // BigInt's own refusal of a string it cannot read, on the run's error
+        // path: a repeat-timer run has no input handler above it to catch it.
+        return failRun(err);
       }
 
-      const builtMessage = { name: messageName, fields: encodedFields };
+      const builtMessage = { name: messageName, fields };
 
       switch (tier) {
         case 'build': {
@@ -230,7 +237,6 @@ module.exports = function registerMavlinkBuild(RED) {
     registerDialectCatalogRoute(RED, {
       path: '/mavlink/build/messages',
       logLabel: 'mavlink-build',
-      unavailableMessage: 'message catalog unavailable',
       fromBundle: (api, bundle, dialect) => api.catalogMessagesFromBundle(bundle, dialect),
       fromDialect: (api, dialect) => api.listMessagesCatalog(dialect),
     });

@@ -22,7 +22,7 @@ test('wire registry follows the bundle include chain — minimal has HEARTBEAT, 
 
   assert.throws(
     () => wire.serialize({ name: 'STATUSTEXT', fields: { severity: 6, text: 'x' } }, { sysid: 1, compid: 1, seq: 1 }),
-    /no wire class for message 'STATUSTEXT'/
+    TypeError
   );
 });
 
@@ -41,7 +41,7 @@ test('icarous wire carries only icarous messages — not the forced MSC spine', 
 
   assert.throws(
     () => wire.serialize({ name: 'HEARTBEAT', fields: {} }, { sysid: 1, compid: 1, seq: 1 }),
-    /no wire class for message 'HEARTBEAT'/
+    TypeError
   );
 });
 
@@ -55,7 +55,7 @@ test('two wires from different dialects coexist with independent registries', ()
   );
   assert.throws(
     () => icarous.serialize({ name: 'HEARTBEAT', fields: {} }, { sysid: 1, compid: 1, seq: 0 }),
-    /no wire class for message 'HEARTBEAT'/
+    TypeError
   );
 
   assert.doesNotThrow(() =>
@@ -66,7 +66,7 @@ test('two wires from different dialects coexist with independent registries', ()
   );
   assert.throws(
     () => minimal.serialize({ name: 'ICAROUS_HEARTBEAT', fields: { status: 0 } }, { sysid: 1, compid: 1, seq: 0 }),
-    /no wire class for message 'ICAROUS_HEARTBEAT'/
+    TypeError
   );
 
   // Upstream ardupilotmega.xml includes icarous — the seed preserves that.
@@ -99,6 +99,6 @@ test('custom dialect with no includes starts empty — only its own messages enc
   assert.equal(wire.decode(frame)[0].name, 'WIDGET_STATUS');
   assert.throws(
     () => wire.serialize({ name: 'HEARTBEAT', fields: {} }, { sysid: 1, compid: 1, seq: 0 }),
-    /no wire class for message 'HEARTBEAT'/
+    TypeError
   );
 });

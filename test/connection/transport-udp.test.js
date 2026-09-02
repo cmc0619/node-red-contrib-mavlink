@@ -62,20 +62,8 @@ test('an ordinary UDP connection touches neither option', async () => {
   assert.equal(transport.broadcastDestination(), null, 'no swarm address means fan-out stays in charge');
 });
 
-test('the swarm port defaults to the bind port', async () => {
-  // Multicast members join one group *and* port, so the port we bound is the
-  // port the group speaks on — the default is the answer, not a guess.
-  const { transport } = build({ broadcastAddress: '239.255.145.50' });
-  await transport.open();
-
-  assert.deepEqual(transport.broadcastDestination(), {
-    address: '239.255.145.50',
-    port: 14550,
-  });
-});
-
-test('an explicit swarm port overrides the bind port', async () => {
-  // Real hardware listening on a port that is not the one we bound.
+test('broadcastDestination is the configured swarm address and port', async () => {
+  // The editor requires the port alongside the address; it rides as saved.
   const { transport } = build({ broadcastAddress: '255.255.255.255', broadcastPort: 14560 });
   await transport.open();
 

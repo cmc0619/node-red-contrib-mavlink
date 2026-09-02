@@ -130,7 +130,7 @@ function inConfig(overrides = {}) {
     changedFields: '',
     fieldName: '',
     fieldValue: '',
-    rateLimit: 0,
+    rateLimit: '0',
     ...overrides,
   };
 }
@@ -209,7 +209,7 @@ function makeConnectionStub() {
 /**
  * Build a minimal vehicle stub exposing a tiny in-memory dialect bundle.
  * The bundle's HEARTBEAT message has two fields: `type` (uint8_t) and
- * `autopilot` (uint8_t), enough to exercise the codec path.
+ * `autopilot` (uint8_t), enough to exercise the merge path.
  *
  * @returns {object} vehicle node stub
  */
@@ -840,7 +840,7 @@ test('mavlink-in: rate limit drops excess messages within the window', () => {
   const Constructor = RED._nodeTypes['mavlink-in'];
   const node = makeNodeInstance({ connection: 'conn-1' });
   // 1 msg/s → minimum 1000 ms between deliveries.
-  Constructor.call(node, inConfig({ connection: 'conn-1', rateLimit: 1 }));
+  Constructor.call(node, inConfig({ connection: 'conn-1', rateLimit: '1' }));
 
   // Fire 5 messages in rapid succession (same ms timestamp in practice).
   for (let i = 0; i < 5; i++) {
@@ -1168,10 +1168,11 @@ test('mavlink-build Send tier: enqueues on the connection and emits on both outp
   const inMsg = { payload: { marker: 'from-upstream' } };
   node._input(inMsg);
 
-  // Connection must have received the message.
+  // Connection must have received the message. msg.payload is merged whole
+  // into the fields bag; the pack reads only the message's own field names.
   assert.equal(sent.length, 1);
   assert.equal(sent[0].message.name, 'HEARTBEAT');
-  assert.deepEqual(sent[0].message.fields, { type: 6, autopilot: 3 });
+  assert.deepEqual(sent[0].message.fields, { type: 6, autopilot: 3, marker: 'from-upstream' });
 
   // §9: output 0 is a pass-through trigger on Send — it preserves the inbound
   // payload rather than replacing it with a Build envelope.
@@ -1210,29 +1211,47 @@ test('mavlink-build Send tier: a connection send throw becomes a failed status r
   assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
-test('mavlink-build Build tier: codec error emits error status on output 1', () => {
+test('mavlink-build: a string on a 64-bit field rides as the BigInt the writer takes', () => {
+  // JSON carries no BigInt, so the editor and msg.payload spell a uint64 as a
+  // decimal string; every other field rides exactly as given.
   const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
   const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1' });
+  const node = makeNodeInstance();
   Constructor.call(node, {
-    vehicle: 'v1',
-    dialect: '__vehicle',
-    messageName: 'HEARTBEAT',
+    dialect: 'common',
+    messageName: 'SYSTEM_TIME',
     tier: 'build',
-    // 'type' is uint8_t — passing undefined triggers a FieldCodecError.
-    fields: JSON.stringify({ type: undefined }),
+    fields: JSON.stringify({ time_unix_usec: '1700000000000000', time_boot_ms: '5' }),
   });
 
-  // Force the bad encode by setting type to null via override (undefined survives JSON.parse as the key is absent).
-  node._input({ payload: { type: null } });
+  node._input({ payload: {} });
 
-  assert.equal(node._sends.length, 1);
+  const [out0] = node._sends[0];
+  assert.equal(out0.payload.message.fields.time_unix_usec, 1700000000000000n);
+  assert.equal(out0.payload.message.fields.time_boot_ms, '5', 'only 64-bit fields are read as BigInt');
+});
+
+test('mavlink-build: a 64-bit string BigInt cannot read fails the run, not the process', () => {
+  // The conversion runs for repeat-timer runs too, where no input handler sits
+  // above it to catch a throw; BigInt's own SyntaxError rides failRun instead.
+  const RED = makeRED();
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance();
+  Constructor.call(node, {
+    dialect: 'common',
+    messageName: 'SYSTEM_TIME',
+    tier: 'build',
+    fields: JSON.stringify({ time_unix_usec: 'not a number' }),
+  });
+
+  assert.doesNotThrow(() => node._input({ payload: {} }));
   const [out0, out1] = node._sends[0];
-  assert.equal(out0, null, 'output 0 must not fire on codec error');
+  assert.equal(out0, null, 'output 0 must not fire');
   assert.equal(out1.result, 'failed');
-  assert.ok(typeof out1.detail === 'string');
+  assert.match(out1.detail, /BigInt/);
+  assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
 test('mavlink-build: a typo\'d tier matches no arm — nothing built, nothing sent', () => {

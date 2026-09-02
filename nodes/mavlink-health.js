@@ -36,15 +36,12 @@ module.exports = function registerMavlinkHealth(RED) {
 
     const connectionNode = RED.nodes.getNode(config.connection);
 
-    // Which identity's health this asserts. Blank config (the editor writes
-    // blank for a single-identity Connection whose field is hidden) means the
-    // Connection's Local Identity — the same absent-override rule
-    // resolveIdentity uses for outbound sends. A non-blank saved pick rides as
-    // given. assertHealth refuses an id this Connection does not heartbeat, so
-    // a hand-edited unbound pick is loud rather than a silent healthy no-op.
-    const identityId = config.identity !== undefined && config.identity !== null && config.identity !== ''
-      ? config.identity
-      : connectionNode.localIdentity;
+    // Which identity's health this asserts. The editor writes blank for a
+    // single-identity Connection (its field is hidden), and blank reads the
+    // Connection's Local Identity live — a Connection whose identity was
+    // changed is followed without re-saving this node. A multi-identity pick
+    // rides as saved.
+    const identityId = config.identity === '' ? connectionNode.localIdentity : config.identity;
 
     // The editor owns the default and the positive-number ring — just convert
     // it. msg.payload.ttl_s overrides by presence (§0 presence-fallback).
@@ -85,12 +82,12 @@ module.exports = function registerMavlinkHealth(RED) {
         switch (payload.health) {
           case 'ok': {
             const ttlS = payload.ttl_s ?? defaultTtlS;
-            connectionNode.assertHealth(identityId, true, Number(ttlS) * 1000);
+            connectionNode.assertHealth(identityId, true, ttlS * 1000);
             applyActionStatus(node, 'ok', `healthy (${ttlS}s lease)`);
             send([msg, makeStatusRecord(node.type, {
               result: 'healthy',
               identity: identityId,
-              ttlS: Number(ttlS),
+              ttlS,
             })]);
             break;
           }

@@ -1,63 +1,27 @@
-# Field codec
+# Wire-value helpers
 
-Standalone conversion between JavaScript values and MAVLink field values, driven
-by compiled dialect metadata passed as an argument (DESIGN.md §5).
+Two small modules the send path reads. Neither imports `node-mavlink`,
+`lib/metadata`, or anything Node-RED.
 
-Imports nothing above itself — no `node-mavlink`, no `lib/metadata`, nothing
-Node-RED. Own directory, tests, and this README so publishing later is a move
-and a `package.json`, not a refactor.
+## `types.js`
 
-## API
+The MAVLink scalar type table — size, `kind`, and byte width per type string —
+plus `normalizeType` (collapses `uint8_t_mavlink_version` to `uint8_t`) and
+`is64BitKind`. `lib/connection/wire.js` and `wire-classes.js` read it to lay
+out payloads and synthesize message classes.
 
-```js
-const {
-  encodeField, decodeField,
-  encodeMessage, decodeMessage,
-  assembleBitmask, decodeBitmask,
-  paramValueToWire, paramValueFromWire,
-  FieldCodecError,
-} = require('.');
-```
+## `param-union.js`
 
-| Function | Role |
-|---|---|
-| `encodeField(field, value, enumMeta?)` | One field → wire-ready value |
-| `decodeField(field, wireValue)` | Wire value → JS |
-| `encodeMessage(message, values, { enums }?)` | Message object → wire-ready object |
-| `decodeMessage(message, wireValues)` | Wire object → JS object |
-| `assembleBitmask(enumMeta, bits, use64?, fieldName?)` | Entry names / bit indexes → mask |
-| `decodeBitmask(enumMeta, mask, use64?)` | Mask → entry names |
-| `paramValueToWire(value, paramType, fieldName?)` | PX4 int/float union → float slot |
-| `paramValueFromWire(wireFloat, paramType, fieldName?)` | Float slot → JS (bit reinterpret) |
+The PX4 parameter int/float union (DESIGN.md §11). `PARAM_VALUE` / `PARAM_SET`
+carry the value in a `float` slot; PX4 places an integer parameter's bit
+pattern into that slot rather than casting the number. `paramValueToWire`
+writes the integer into a 4-byte `Buffer` and reads it back as float32;
+`paramValueFromWire` is the inverse. REAL32 passes through untouched.
+`PARAM_TYPES` is the MAV_PARAM_TYPE subset that fits the slot, by code.
 
-Errors are `FieldCodecError` with a `.field` property naming the offender.
+`Buffer.write*` is the only range check: an integer that overflows its declared
+width throws `ERR_OUT_OF_RANGE` there.
 
-## Wire-value domain
+## Lint
 
-What later feeds `node-mavlink` / `Buffer.write*`:
-
-| MAVLink type | Encode returns | Decode returns |
-|---|---|---|
-| `int8_t` … `uint32_t` | `number` (integer) | `number` |
-| `int64_t` / `uint64_t` | `bigint` | decimal `string` |
-| `float` / `double` | `number` (NaN preserved) | `number` |
-| `char` / `char[n]` | Latin-1 `string`, length `n`, NUL-padded | `string`, NULs stripped |
-| numeric `type[n]` | `Array` of element wire values | `Array` of decoded elements |
-
-## Rules (binding)
-
-- Never coerce `undefined` / `null` / `''` / non-numeric strings — they would
-  become `0` or NaN in `Buffer` with no error.
-- Blank, explicit `0`, and absent are three states (message level uses
-  own-property presence).
-- No bitwise operators — masks are built arithmetically; `uint64` masks use
-  BigInt. Bit 31 is `2147483648`, never `1 << 31`.
-- Floats are not range-checked; integers are, including declared min/max.
-- PX4 parameter union reinterprets bits via `Buffer`; never numeric cast.
-
-## Tests
-
-```bash
-node --test lib/codec/test/*.test.js
-npx eslint lib/codec
-```
+`no-bitwise` is enforced over this directory.

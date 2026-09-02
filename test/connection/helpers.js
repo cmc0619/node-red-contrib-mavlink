@@ -11,7 +11,7 @@
  *   waits on.
  * - {@link fakeWire} — a trivial JSON wire so the runtime's queue driver, peer
  *   table, and subscription plumbing are exercised without `node-mavlink`.
- * - {@link fakeTimers} — non-firing interval stubs that record clear() calls so
+ * - {@link fakeTimers} — non-firing interval stubs that track live handles so
  *   teardown can be asserted.
  */
 
@@ -126,23 +126,26 @@ function frameBuffer(frame) {
 
 /**
  * Interval stubs that never fire on their own (tests drive `tick()` / `sweep()`
- * explicitly) but record how many were cleared, so teardown is assertable.
+ * explicitly) but track which handles are live, so teardown is assertable.
+ * Like Node's own clearInterval, clearing a null or already-cleared handle is
+ * a no-op.
  *
  * @returns {{setInterval: Function, clearInterval: Function, cleared: () => number, active: () => number}}
  */
 function fakeTimers() {
-  let created = 0;
+  const live = new Set();
   let cleared = 0;
   return {
     setInterval() {
-      created += 1;
-      return { unref() {} };
+      const handle = { unref() {} };
+      live.add(handle);
+      return handle;
     },
-    clearInterval() {
-      cleared += 1;
+    clearInterval(handle) {
+      if (live.delete(handle)) cleared += 1;
     },
     cleared: () => cleared,
-    active: () => created - cleared,
+    active: () => live.size,
   };
 }
 

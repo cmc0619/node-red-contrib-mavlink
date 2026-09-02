@@ -120,10 +120,17 @@
       } },
       broadcastHost: { value: '' },
       // UDP-only, like its row: TCP and serial hide the field, and a stale
-      // value must not red a control the operator cannot see.
+      // value must not red a control the operator cannot see. Required once a
+      // swarm address is set — the runtime sends to this port as saved, and a
+      // blank would reach the socket as port 0. Sibling read as remoteHost's.
       broadcastPort: { value: '', validate(v, opt) {
         const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode !== 'udp') return true;
+        if (RED.mavlink.isBlank(v)) {
+          const $host = RED.mavlink.ownDialogField(this, '#node-config-input-broadcastHost');
+          if (RED.mavlink.isBlank($host ? $host.val() : this.broadcastHost)) return true;
+          return 'swarm port is required with a swarm address — for multicast, the bind port';
+        }
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
       } },
       serialPath: { value: '', validate(v) {
@@ -203,10 +210,24 @@
         if (Number.isInteger(n) && n >= 0 && n <= 255) return true;
         return 'the signing link id is a byte — 0 to 255';
       } },
-      // Blank means "use the peer table's 5s/15s defaults"; a set value must
-      // be a positive interval, or staleness silently never fires.
-      staleMs: { value: '', validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
-      expireMs: { value: '', validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
+      // The runtime sweeps on these as saved (§0), so the editor owns the
+      // 5000/15000 defaults and blank reds; a set value must be a positive
+      // interval, or staleness silently never fires.
+      staleMs: { value: 5000, validate(v, opt) {
+        if (RED.mavlink.isBlank(v)) return 'stale threshold is required';
+        return RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
+      } },
+      // Cross-field (the dependency-between-fields case AGENTS.md names): a
+      // peer must go stale before it expires, or the sweep drops it with the
+      // stale event never fired. Read live through liveOr (#217).
+      expireMs: { value: 15000, validate(v, opt) {
+        if (RED.mavlink.isBlank(v)) return 'expire threshold is required';
+        const shape = RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
+        if (shape !== true) return shape;
+        const staleMs = Number(RED.mavlink.liveOr(this, '#node-config-input-staleMs', this.staleMs, ''));
+        if (Number(v) <= staleMs) return 'must be greater than the stale threshold';
+        return true;
+      } },
       disabled: { value: false },
     },
     credentials: {
@@ -236,7 +257,10 @@
          */
         validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
-          const val = String(v).trim();
+          // The exact saved value: the runtime hands it to Buffer.from(…, 'hex')
+          // as saved, so surrounding whitespace reds here rather than
+          // yielding a short key on the wire.
+          const val = String(v);
           if (!/^[0-9a-fA-F]{64}$/.test(val)) {
             return 'must be exactly 64 hex characters (a raw 32-byte key)';
           }
@@ -433,7 +457,7 @@
   </div>
   <div class="form-row" id="row-conn-broadcastPort">
     <label for="node-config-input-broadcastPort"><i class="fa fa-bullhorn"></i> Swarm port</label>
-    <input type="text" id="node-config-input-broadcastPort" placeholder="(optional, defaults to bind port)" />
+    <input type="text" id="node-config-input-broadcastPort" placeholder="(with a swarm address; multicast: the bind port)" />
   </div>
 
   <div class="form-row" id="row-conn-serialPath">
@@ -552,9 +576,9 @@
     <code>0.0.0.0</code>; binding to a specific interface address does not
     receive broadcast traffic.</li>
   </ul>
-  <p><b>Swarm port</b> defaults to the bind port, which is the right answer for
-  multicast — members join one group <i>and</i> port. Set it only when the
-  vehicles listen somewhere else.</p>
+  <p><b>Swarm port</b> is required alongside the address. For multicast it is
+  the bind port — members join one group <i>and</i> port; set it to wherever the
+  vehicles listen otherwise.</p>
   <p>Directed traffic never uses this address. TCP has no broadcast of any kind
   and does not need one: a TCP server writes to every connected vehicle already.</p>
 

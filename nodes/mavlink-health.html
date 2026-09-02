@@ -98,10 +98,10 @@
       },
       oneditsave() {
         // A single-identity Connection hides the field; store blank so nothing
-        // stale is kept and the runtime resolves the sole Local Identity.
-        // Clear the DOM element, not just the property: Node-RED harvests
+        // stale is kept and the runtime reads the Connection's Local Identity
+        // live. Clear the DOM element, not just the property: Node-RED harvests
         // #node-input-* values into the node after oneditsave, so setting only
-        // this.identity would be overwritten by the select's value (Codacy).
+        // this.identity would be overwritten by the select's value.
         const connId = $('#node-input-connection').val() || '';
         if (isSingleIdentity(connId)) {
           $('#node-input-identity').val('');

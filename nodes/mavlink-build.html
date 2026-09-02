@@ -46,11 +46,9 @@
           return;
         }
         const raw = $(this).val();
-        if (kind === 'bitmask') {
-          fields[name] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-          return;
-        }
         if (kind === 'bitmask-mask') {
+          // Nothing selected omits the field — the same shape as the blank
+          // option on a scalar enum select.
           const mask = RED.mavlink.bitmaskFromSelection(raw);
           if (mask !== null) fields[name] = mask;
           return;
@@ -68,8 +66,7 @@
           return;
         }
         if (kind === 'enum') {
-          const asNum = Number(raw);
-          fields[name] = !Number.isNaN(asNum) && String(asNum) === String(raw) ? asNum : raw;
+          fields[name] = Number(raw);
           return;
         }
         const n = Number(raw);
@@ -257,26 +254,26 @@
                 className: 'mav-field-input',
               }).attr('data-field', spec.name);
             }
+            // Options carry the wire value, so Done saves the number
+            // mavlink-in emits and pymavlink accepts.
             const multi = spec.display === 'bitmask';
             const sel = $('<select class="mav-field-input"></select>')
               .attr('data-field', spec.name)
-              .attr('data-kind', multi ? 'bitmask' : 'enum')
+              .attr('data-kind', multi ? 'bitmask-mask' : 'enum')
               .attr('title', multi ? RED.mavlink.bitmaskTitle(spec.description) : (spec.description || ''));
             if (multi) sel.attr('multiple', 'multiple').attr('size', Math.min(6, entries.length));
             else sel.append($('<option></option>').val('').text('\u2014'));
             entries.forEach((entry) => {
-              const $opt = $('<option></option>').val(entry.name).text(entry.label);
+              const $opt = $('<option></option>').val(String(entry.value)).text(entry.label);
               if (entry.description) $opt.attr('title', entry.description);
               sel.append($opt);
             });
             if (multi) {
-              const selected = Array.isArray(saved) ? saved.map(String) : (saved !== undefined && saved !== null && saved !== '' ? [String(saved)] : []);
-              sel.val(selected);
+              sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
             } else if (saved !== undefined && saved !== null && saved !== '') {
-              // Accept saved numeric value or entry name.
-              const match = entries.find((e) => String(e.value) === String(saved) || e.name === saved);
+              const match = entries.find((e) => String(e.value) === String(saved));
               if (match) {
-                sel.val(match.name);
+                sel.val(String(match.value));
               } else {
                 // A saved value the table lacks — a dialect switch, a newer
                 // firmware's entry — must survive open-and-save, not silently
@@ -594,8 +591,11 @@
   <h3>Inputs</h3>
   <dl class="message-properties">
     <dt class="optional">payload <span class="property-type">object</span></dt>
-    <dd>Field value overrides merged on top of the node's configured defaults.
-        Set to <code>false</code> to suppress the node silently.</dd>
+    <dd>Field value overrides merged on top of the node's configured defaults,
+        keyed by wire field name. Values are raw wire values — the numbers
+        <b>mavlink-in</b> emits and pymavlink accepts: an enum field takes the
+        entry's number, a bitmask field one mask number, a 64-bit field a
+        decimal string. Set to <code>false</code> to suppress the node silently.</dd>
     <dt class="optional">band <span class="property-type">number</span></dt>
     <dd>Queue band override (0–4).</dd>
     <dt class="optional">target <span class="property-type">object</span></dt>
@@ -614,12 +614,13 @@
   form: enum-typed fields become dropdowns; scalars are number inputs; strings
   are text. <code>COMMAND_LONG</code> / <code>COMMAND_INT</code> use a MAV_CMD
   dropdown and that command's named params — never a Param 1–7 grid. Bitmask
-  fields use native multi-selects; Ctrl/Cmd-click multiple flags.</p>
+  fields use native multi-selects; Ctrl/Cmd-click multiple flags. Every field
+  saves as its wire number; the blank option leaves a field out.</p>
   <p><b>Dialect</b> (Build delivery): pick a bundled dialect from the dropdown.
   Choose <i>from Vehicle Profile…</i> to use a custom XML dialect; the Vehicle
   Profile field then appears. On wire deliveries the connection's profile
   governs, so the Dialect and Vehicle rows are hidden.</p>
-  <p><b>Delivery</b>: <i>Build</i> encodes and emits without sending; no
+  <p><b>Delivery</b>: <i>Build</i> emits the merged message without sending; no
   connection needed. <i>Send</i> enqueues directly on the Connection.</p>
   <p><b>Repeat</b>: when set, the node fires independently of inbound triggers at
   the configured interval. The status badge shows the achieved rate alongside the

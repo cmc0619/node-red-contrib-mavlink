@@ -89,13 +89,6 @@ test('multi-identity Connection honours a bound, existing saved pick', () => {
   assert.equal(conn._asserts[0].healthy, false);
 });
 
-test('multi-identity Connection with a blank pick falls back to the Local Identity', () => {
-  const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: ['gcs'] });
-  const node = build({ identity: '' }, conn);
-  node._input({ payload: { health: 'ok' } });
-  assert.equal(conn._asserts[0].id, 'comp');
-});
-
 test('a saved id the Connection does not bind still rides — assertHealth is the loud path', () => {
   const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: ['dangling'] });
   const node = build({ identity: 'loose' }, conn);
