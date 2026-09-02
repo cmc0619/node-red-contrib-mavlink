@@ -62,9 +62,9 @@ test('a raw hex key becomes the key bytes verbatim — no hashing', () => {
   assert.equal(signing.key.toString('hex'), hex, 'raw bytes pass through untouched');
 });
 
-test('raw key hex is case-insensitive and tolerates surrounding whitespace', () => {
+test('raw key hex is case-insensitive', () => {
   const hex = `${'AbCdEf'.repeat(10)  }AbCd`; // 64 chars mixed case
-  const signing = buildSigning({ linkId: 0 }, { signingKeyHex: `  ${hex}  ` });
+  const signing = buildSigning({ linkId: 0 }, { signingKeyHex: hex });
   assert.equal(signing.key.toString('hex'), hex.toLowerCase());
 });
 

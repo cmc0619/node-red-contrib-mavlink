@@ -478,6 +478,11 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   );
   assert.equal(defaults.broadcastPort.validate.call({ id: 'c1' }, '', {}), true);
   assert.match(String(defaults.broadcastPort.validate.call({ id: 'c1' }, '65536', {})), portReason);
+  // With a swarm address the port rides to the socket as saved, so blank reds.
+  assert.match(
+    String(defaults.broadcastPort.validate.call({ id: 'c1', broadcastHost: '239.255.145.50' }, '', {})),
+    /swarm port is required/
+  );
   // Hidden by the mode → stale values must not red what cannot be seen:
   // remote is IP-only, swarm is UDP-only (Codex, #331).
   assert.equal(
@@ -501,7 +506,7 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'udp' }, 'garbage', {}), true);
 });
 
-test('link id is a wire byte; peer-freshness overrides are blank or positive', () => {
+test('link id is a wire byte; peer-freshness thresholds are required positive integers', () => {
   const defaults = loadNodeDefaults('mavlink-connection');
 
   // The signature block carries the link id as one byte — the runtime writes
@@ -511,11 +516,13 @@ test('link id is a wire byte; peer-freshness overrides are blank or positive', (
   assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '256', {})), /byte — 0 to 255/);
   assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '', {})), /byte — 0 to 255/);
 
+  assert.equal(defaults.staleMs.value, 5000);
+  assert.equal(defaults.expireMs.value, 15000);
   for (const field of ['staleMs', 'expireMs']) {
-    assert.equal(
-      defaults[field].validate.call({ id: 'c1' }, '', {}),
-      true,
-      `${field} blank means the peer table's built-in default`
+    assert.match(
+      String(defaults[field].validate.call({ id: 'c1' }, '', {})),
+      /required/,
+      `${field} blank reds — the editor owns the default the runtime sweeps on`
     );
     assert.equal(defaults[field].validate.call({ id: 'c1' }, '5000', {}), true);
     assert.match(

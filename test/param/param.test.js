@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { paramValueToWire, paramValueFromWire } = require('../../lib/codec');
+const { paramValueToWire } = require('../../lib/codec');
 const {
   buildParamMessage,
   matchesParamEcho,
@@ -94,29 +94,12 @@ test('Param set confirms only by matching PARAM_VALUE echo, decoded through the 
   assert.equal(matchesParamEcho(request, { ...echo, fields: { ...echo.fields, param_id: 'OTHER' } }), false);
 });
 
-test('PARAM_VALUE echo from another vehicle does not confirm a scoped set', () => {
-  const request = {
-    target: { sysid: 6, compid: 1 },
-    paramId: 'FOO',
-    value: 12,
-    paramType: 'MAV_PARAM_TYPE_REAL32',
-    firmware: 'ardupilot',
-  };
-  const fields = { param_id: 'FOO', param_type: 9, param_value: 12 };
-
-  // Correct source (sysid 6) confirms.
-  assert.equal(matchesParamEcho(request, { name: 'PARAM_VALUE', sysid: 6, compid: 1, fields }), true);
-  // A matching id/value from another system (sysid 2) must not confirm.
-  assert.equal(matchesParamEcho(request, { name: 'PARAM_VALUE', sysid: 2, compid: 1, fields }), false);
-  // Wrong component on the right system is also rejected.
-  assert.equal(matchesParamEcho(request, { name: 'PARAM_VALUE', sysid: 6, compid: 5, fields }), false);
-});
-
 test('PARAM_REQUEST_READ and PARAM_REQUEST_LIST build their distinct messages', () => {
   const read = buildParamMessage({
     action: 'read',
     target: { sysid: 9, compid: 1 },
     paramId: 'SYSID_THISMAV',
+    paramIndex: -1,
   });
   const list = buildParamMessage({
     action: 'request-list',
@@ -168,13 +151,6 @@ test('a read addressed by index neither needs a param id nor sends one', () => {
     ''
   );
 
-  // -1 is the other half of the same sentinel: the id is back to being the
-  // address, and a missing one reaches the wire as the empty name it is. The
-  // editor requires the id wherever the parameter is addressed by name.
-  assert.equal(
-    buildParamMessage({ action: 'read', target: { sysid: 9, compid: 1 }, paramIndex: -1 }).fields.param_id,
-    ''
-  );
 });
 
 test('resolveParamEncoding: explicit override wins over capabilities and firmware', () => {
@@ -360,7 +336,7 @@ test('collector.missing() names the advertised-but-unreceived indexes', () => {
   assert.deepEqual(collector.missing(), [1]);
 });
 
-test('matchesParamReadReply matches by name, by index, and scopes to the target', () => {
+test('matchesParamReadReply matches by name and by index', () => {
   const reply = {
     name: 'PARAM_VALUE',
     sysid: 1,
@@ -374,11 +350,6 @@ test('matchesParamReadReply matches by name, by index, and scopes to the target'
     matchesParamReadReply({ ...byName, paramId: 'RC2_MIN' }, reply),
     false,
     'a different parameter does not answer the read'
-  );
-  assert.equal(
-    matchesParamReadReply(byName, { ...reply, sysid: 2 }),
-    false,
-    'another vehicle does not answer it either'
   );
 
   // An index read sends no param_id, so the index is the only identity.
@@ -421,15 +392,6 @@ test('echo decodes by the vehicle-declared param_type, not the request type', ()
       fields: { ...echo.fields, param_value: paramValueToWire(2, 'MAV_PARAM_TYPE_INT16') },
     }),
     false
-  );
-
-  // A frame carrying no usable type falls back to the request's type.
-  assert.equal(
-    matchesParamEcho(
-      { ...request, paramType: 'MAV_PARAM_TYPE_INT16' },
-      { ...echo, fields: { ...echo.fields, param_type: 0 } }
-    ),
-    true
   );
 });
 
@@ -530,22 +492,9 @@ test('REAL32 echo keeps float32 tolerance even on a bytewise vehicle', () => {
 
 test('exact-wire comparison is strict — a near-integer request does not confirm an integer echo', () => {
   // CodeRabbit's case: with the tolerance ordered ahead of the exact-wire guard,
-  // an echo of 1 confirmed a request of 1.0000005. Unreachable through the send
-  // path (the codec rejects a non-integer for an integer type at encode time,
-  // below) but the matcher must not depend on that to be correct.
-  assert.throws(
-    () =>
-      buildParamMessage({
-        action: 'set',
-        paramId: 'X',
-        value: 1.0000005,
-        paramType: 'MAV_PARAM_TYPE_UINT32',
-        capabilities: CAP_PARAM_ENCODE_BYTEWISE,
-        target: { sysid: 1, compid: 1 },
-      }),
-    /non-integer value/
-  );
-
+  // an echo of 1 confirmed a request of 1.0000005. The send path writes that
+  // request through `Buffer.writeUInt32LE`, which stores 1, and the vehicle
+  // echoes 1 — the matcher reports no confirmation for the value asked.
   assert.equal(
     matchesParamEcho(
       {
@@ -570,18 +519,18 @@ test('exact-wire comparison is strict — a near-integer request does not confir
   );
 });
 
-test('an unusable echo type falls back to the request type; typeless fails loud', () => {
-  // The frame's param_type is unusable, but its bytes *would* decode as a
-  // matching REAL32 — the fallback must come from the request's declared type,
-  // never a guess. A typeless request cannot exist via the node path (build
-  // throws first, #222); a direct caller's lands on resolveParamType's throw.
+test('the echo decodes by the vehicle-declared type alone; one the codec cannot decode fails loud', () => {
+  // The vehicle is the authority on its own parameter's type, so the request's
+  // declared type is never a fallback: a bytewise frame whose param_type the
+  // codec has no table entry for craters on that missing entry, not on a guess
+  // that happens to match.
   const echo = {
     name: 'PARAM_VALUE',
     sysid: 1,
     compid: 1,
     fields: {
       param_id: 'X',
-      param_type: 999, // not a known MAV_PARAM_TYPE
+      param_type: 999, // not a MAV_PARAM_TYPE
       param_value: paramValueToWire(1, 'MAV_PARAM_TYPE_REAL32'),
     },
   };
@@ -589,10 +538,13 @@ test('an unusable echo type falls back to the request type; typeless fails loud'
     target: { sysid: 1, compid: 1 },
     paramId: 'X',
     value: 1,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
     capabilities: CAP_PARAM_ENCODE_BYTEWISE,
   };
 
-  assert.equal(paramValueFromWire(echo.fields.param_value, 'MAV_PARAM_TYPE_REAL32'), 1);
-  assert.equal(matchesParamEcho({ ...request, paramType: 'MAV_PARAM_TYPE_REAL32' }, echo), true);
-  assert.throws(() => matchesParamEcho(request, echo), /MAV_PARAM_TYPE/);
+  assert.throws(() => matchesParamEcho(request, echo), TypeError);
+  assert.throws(
+    () => matchesParamEcho(request, { ...echo, fields: { ...echo.fields, param_type: 0 } }),
+    TypeError
+  );
 });

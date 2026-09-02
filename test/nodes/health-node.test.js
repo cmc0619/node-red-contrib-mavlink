@@ -27,7 +27,6 @@ function makeRED(configNodes) {
 /** A connection stub recording assertHealth calls and its identity shape. */
 function makeConnection(shape) {
   return {
-    localIdentity: shape.localIdentity,
     additionalIdentities: shape.additionalIdentities,
     _asserts: [],
     assertHealth(id, healthy, ttlMs) { this._asserts.push({ id, healthy, ttlMs }); },
@@ -65,12 +64,12 @@ function build(config, connection, extraNodes = {}) {
   return node;
 }
 
-test('single-identity Connection with a blank pick asserts its Local Identity', () => {
+test('single-identity Connection asserts the identity the editor wrote', () => {
   const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: [] });
-  const node = build({ identity: '' }, conn);
+  const node = build({ identity: 'comp' }, conn);
   node._input({ payload: { health: 'ok' } });
   assert.equal(conn._asserts.length, 1);
-  assert.equal(conn._asserts[0].id, 'comp', 'blank means the Connection Local Identity');
+  assert.equal(conn._asserts[0].id, 'comp');
   assert.equal(conn._asserts[0].healthy, true);
 });
 
@@ -87,13 +86,6 @@ test('multi-identity Connection honours a bound, existing saved pick', () => {
   node._input({ payload: { health: 'fatal' } });
   assert.equal(conn._asserts[0].id, 'gcs');
   assert.equal(conn._asserts[0].healthy, false);
-});
-
-test('multi-identity Connection with a blank pick falls back to the Local Identity', () => {
-  const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: ['gcs'] });
-  const node = build({ identity: '' }, conn);
-  node._input({ payload: { health: 'ok' } });
-  assert.equal(conn._asserts[0].id, 'comp');
 });
 
 test('a saved id the Connection does not bind still rides — assertHealth is the loud path', () => {

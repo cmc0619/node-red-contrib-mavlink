@@ -136,7 +136,7 @@ test('Build oneditprepare ensures standard config-node pickers', () => {
   assert.match(html, /ensureConfigNodePicker\(node,\s*'connection'/);
 });
 
-test('Build message-field bitmasks use multi-select tokens accepted by the codec', () => {
+test('Build message-field enums and bitmasks save wire numbers', () => {
   const collector = sliceBetween('function collectFieldInputsFromDom', 'RED.nodes.registerType');
   const fieldRenderer = sliceBetween('function fieldInput', 'function syncSavedFieldsFromDom');
 
@@ -148,9 +148,12 @@ test('Build message-field bitmasks use multi-select tokens accepted by the codec
     'FALSE/TRUE fields early-return to the shared checkbox (numeric 0/1 saving is pinned in mavlink-editor-resource.test.js)'
   );
   assert.match(fieldRenderer, /\.attr\(['"]multiple['"],\s*['"]multiple['"]\)/, 'message field bitmasks use native multi-select');
-  assert.match(fieldRenderer, /\.val\(entry\.name\)/, 'message field bitmasks save enum entry names');
-  assert.match(collector, /fields\[name\]\s*=\s*Array\.isArray\(raw\) \? raw/, 'collector keeps selected token array');
-  assert.match(collector, /kind === ['"]enum['"]/, 'FALSE/TRUE enum select is collected through numeric enum save');
+  assert.match(fieldRenderer, /\.val\(String\(entry\.value\)\)/, 'options carry the wire value, never the entry name');
+  assert.match(fieldRenderer, /multi \? ['"]bitmask-mask['"] : ['"]enum['"]/, 'a bitmask field folds to one mask through the same collector branch as command params');
+  assert.match(fieldRenderer, /RED\.mavlink\.selectedBitmaskValues\(saved, entries\)/, 'a saved mask re-selects its bits on open');
+  assert.match(fieldRenderer, /sel\.val\(String\(match\.value\)\)/, 'a saved value or entry name selects by value');
+  assert.match(collector, /kind === ['"]enum['"]\) \{\s*fields\[name\] = Number\(raw\)/, 'the enum branch saves the option number');
+  assert.doesNotMatch(collector, /kind === ['"]bitmask['"]\)/, 'no name-array branch');
 });
 
 test('Build COMMAND_LONG/INT command params render through the shared paramControl', () => {
@@ -182,8 +185,8 @@ test('Build COMMAND_LONG/INT command params render through the shared paramContr
 test('Build fieldInput keeps a saved enum value the table lacks (#198)', () => {
   // Same gap the command-param ladder had: a saved value the current dialect
   // lacks silently deselected, and open-and-save dropped the field. The
-  // message-field enum path keys options by entry NAME, so it stays local —
-  // with the shared sentinel in its no-match arm.
+  // message-field enum path also matches a saved entry name, so it stays local
+  // — with the shared sentinel in its no-match arm.
   const fieldRenderer = sliceBetween('function fieldInput', 'function syncSavedFieldsFromDom');
   assert.match(
     fieldRenderer,
@@ -279,9 +282,9 @@ test('Build catalog targeting delegates to the shared loader (no local copy)', (
 test('build command-param pulldowns drop the blank; message fields keep it', () => {
   // Different meanings, so different treatment. An unset *command param*
   // resolves to 0 (the builder fills the slot), so blank duplicated an enum
-  // entry. An unset *message field* is skipped entirely by
-  // lib/codec/message.js, so blank there is the only way to leave a field off
-  // the wire — removing it would change what gets sent, not just what shows.
+  // entry. An unset *message field* is left out of the saved fields, so blank
+  // there is the only way to leave a field to msg.payload — removing it would
+  // change what gets sent, not just what shows.
   const commandParams = sliceBetween('function commandParamInput', 'function refreshCommandParams');
   assert.ok(commandParams.length > 0, 'located the command-param renderer');
   assert.match(commandParams, /RED\.mavlink\.paramControl\(/, 'slice really is the renderer');

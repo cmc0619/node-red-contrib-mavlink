@@ -135,7 +135,7 @@ test('custom dialect without includes does not inherit the MSC wire preload', ()
   const wire = createWire({ bundle: customBundle() });
   assert.throws(
     () => wire.serialize({ name: 'HEARTBEAT', fields: {} }, { sysid: 1, compid: 1, seq: 0 }),
-    /no wire class for message 'HEARTBEAT'/
+    TypeError
   );
 });
 

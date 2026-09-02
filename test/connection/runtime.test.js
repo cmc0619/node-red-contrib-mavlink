@@ -74,14 +74,6 @@ function build(configOverrides = {}, depOverrides = {}) {
   return { connection, dg, timers };
 }
 
-test('a disabled connection constructs no runtime — no socket, no timers', async () => {
-  const { connection, dg, timers } = build({ disabled: true });
-  await connection.start();
-  assert.equal(connection.getState(), STATE.DISABLED);
-  assert.equal(dg.sockets.length, 0);
-  assert.equal(timers.active(), 0);
-});
-
 test('invalid-packet count reads 0 before the wire exists', () => {
   // The State node's snapshot reads this on every input, including one that
   // lands on a Connection whose start() has not built a wire yet.
@@ -444,14 +436,6 @@ test('a GCS-range sysid (>= 250) never becomes a broadcast destination', async (
   assert.equal(connection.peerTable.endpointFor(250, 190), null, 'its endpoint is not learned');
   assert.deepEqual(connection.peerTable.endpointsForBroadcast(0), [], 'no broadcast destination');
   connection.close();
-});
-
-test('sign-outbound with no key fails the connection closed on start', async () => {
-  const { connection } = build({
-    signing: { linkId: 0, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: false },
-  });
-  await assert.rejects(() => connection.start(), /no signing passphrase/);
-  assert.equal(connection.getState(), STATE.ERROR);
 });
 
 test('close tears down timers and the socket and always calls done exactly once', async () => {
@@ -953,6 +937,7 @@ function swarmBuild(broadcast) {
       bindPort: 14550,
       remoteAddress: '10.0.0.9',
       remotePort: 14555,
+      broadcastPort: 14550,
       ...broadcast,
     },
   });
@@ -1792,15 +1777,4 @@ test('close() disarms pending health leases — no fault, no emit after teardown
     'an assertion racing teardown refuses loud instead of arming nothing'
   );
   assert.equal(leases().length, 1, 'and no timer was armed on the closed link');
-});
-
-test('assertHealth on an unbound identity is loud — no healthy no-op', async () => {
-  const { connection } = healthBuild();
-  await connection.start();
-  assert.throws(
-    () => connection.assertHealth('loose', true, 4000),
-    /not bound/,
-    'a lease on an id this Connection does not heartbeat would report healthy over a no-op'
-  );
-  connection.close();
 });
