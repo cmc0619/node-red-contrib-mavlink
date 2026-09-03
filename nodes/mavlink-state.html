@@ -67,10 +67,14 @@
         // table never emits, so it reds too. The dialog always writes a string
         // (the hidden input joins the multi-select), so a non-string is
         // hand-edit drift the runtime's split(',') cannot read — it reds
-        // rather than vouching for it.
+        // rather than vouching for it. Only the feed reads the selection —
+        // snapshot answers an input from the peer table — so a snapshot node
+        // is not red-ringed over a field it never reads (same liveOr gating as
+        // Move's stream rows).
         events: {
           value: 'stale,expired,statustext',
           validate(v, _opt) {
+            if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode) !== 'feed') return true;
             if (typeof v !== 'string') return 'is the comma-joined picks string, not a list';
             const picks = parseSavedEvents(v);
             if (picks.length === 0) return 'selects no event';

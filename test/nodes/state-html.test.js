@@ -93,16 +93,21 @@ test('mode is a closed vocabulary — the select offers exactly snapshot and fee
 test('events red-rings blank and a token the peer table never emits', () => {
   const { events } = loadNodeDefaults('mavlink-state');
   assert.equal(events.validate.length, 2, 'two args, or a reason string reads as valid (§14)');
+  const feed = { id: 's1', mode: 'feed' };
   // Blank picks nothing: the feed would subscribe to no event, so it reds.
-  assert.match(String(events.validate.call({}, '', {})), /no event/);
-  assert.match(String(events.validate.call({}, ' , ', {})), /no event/, 'separators alone pick nothing');
-  assert.equal(events.validate.call({}, 'stale,expired,statustext', {}), true);
-  assert.equal(events.validate.call({}, STATE_EVENTS.join(','), {}), true, 'the full set passes');
-  assert.match(String(events.validate.call({}, 'stale,exipred', {})), /does not emit/);
+  assert.match(String(events.validate.call(feed, '', {})), /no event/);
+  assert.match(String(events.validate.call(feed, ' , ', {})), /no event/, 'separators alone pick nothing');
+  assert.equal(events.validate.call(feed, 'stale,expired,statustext', {}), true);
+  assert.equal(events.validate.call(feed, STATE_EVENTS.join(','), {}), true, 'the full set passes');
+  assert.match(String(events.validate.call(feed, 'stale,exipred', {})), /does not emit/);
+  // Snapshot never reads the selection, so nothing about it can red a
+  // snapshot node — two shipped snapshot examples save it blank.
+  assert.equal(events.validate.call({ id: 's2', mode: 'snapshot' }, '', {}), true, 'snapshot ignores a blank selection');
+  assert.equal(events.validate.call({ id: 's2', mode: 'snapshot' }, ['stale'], {}), true, 'snapshot ignores the shape too');
   // The dialog always writes the comma-joined string; a hand-edited array
   // would crater the runtime's split(','), so the ring must not vouch for it
   // (Codex, #331).
-  assert.match(String(events.validate.call({}, ['stale'], {})), /comma-joined/);
+  assert.match(String(events.validate.call(feed, ['stale'], {})), /comma-joined/);
 });
 
 test('target filters carry the uint8 range ring, compid included', () => {
