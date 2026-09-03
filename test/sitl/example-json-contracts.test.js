@@ -36,6 +36,46 @@ function blank(value) {
   return value == null || value === '';
 }
 
+test('mavlink-connection nodes serialize staleMs/expireMs (Admin-API deploy)', () => {
+  // Editor defaults are 5000/15000; Admin deploy never materializes them.
+  // Number('') === 0, so the peer-table sweep expires every peer on the first
+  // tick and directed sends fall back to "no known endpoint".
+  const missing = [];
+  for (const { file, nodes } of loadFlows()) {
+    for (const n of nodes) {
+      if (n.type !== 'mavlink-connection') continue;
+      if (blank(n.staleMs) || blank(n.expireMs)) {
+        missing.push(`${file}:${n.name || n.id}`);
+        continue;
+      }
+      const stale = Number(n.staleMs);
+      const expire = Number(n.expireMs);
+      if (!(stale > 0) || !(expire > stale)) {
+        missing.push(`${file}:${n.name || n.id} (${n.staleMs}/${n.expireMs})`);
+      }
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    'blank staleMs/expireMs → Number("")=0 → peer table empty at send time'
+  );
+});
+
+test('mavlink-in rateLimit is a string (Admin-API deploy)', () => {
+  // parseRateLimit calls .split; a JSON number throws TypeError at deploy.
+  const bad = [];
+  for (const { file, nodes } of loadFlows()) {
+    for (const n of nodes) {
+      if (n.type !== 'mavlink-in') continue;
+      if (n.rateLimit != null && typeof n.rateLimit !== 'string') {
+        bad.push(`${file}:${n.name || n.id} (${typeof n.rateLimit})`);
+      }
+    }
+  }
+  assert.deepEqual(bad, [], 'numeric rateLimit → TypeError in parseRateLimit');
+});
+
 test('mavlink-param confirm/collect nodes serialize timeout (Admin-API deploy)', () => {
   const missing = [];
   for (const { file, nodes } of loadFlows()) {
