@@ -465,7 +465,8 @@ Every reference *raw* layer is unit-blind (pymavlink generated senders, node-mav
 classes, MAVSDK passthrough); scaling lives one layer up in the command/move/payload/
 mission builders. Locally decisive: `mavlink-in` emits raw wire fields, so a scaling
 Build could not consume mavlink-in's own output.
-*Check:* `node --test lib/codec/test/field.test.js`.
+*Check:* `rg -n -E "1e7|1e-7|10000000|degE7|Math\.PI" lib/codec` — no matches; the same
+search over `lib/command/carrier.js` and `lib/mission/items.js` finds the scaling one layer up.
 
 **14.67 Bit 31 is a sign bit three times over.** ✔
 JS bitwise ops coerce to signed int32; the param wire decodes int32 so a full mask
