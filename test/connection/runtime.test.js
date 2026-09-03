@@ -263,11 +263,11 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
       // TCP open needs a transport factory — inject a no-op transport.
       transportFactory: () => {
         const { EventEmitter } = require('node:events');
-        const t = new EventEmitter();
-        t.open = async () => {};
-        t.close = (cb) => cb && cb();
-        t.send = (_b, _e, cb) => cb && cb();
-        return t;
+        const transport = new EventEmitter();
+        transport.open = async () => {};
+        transport.close = (cb) => cb?.();
+        transport.send = (_b, _e, cb) => cb?.();
+        return transport;
       },
       setInterval: (fn, ms) => {
         tcpIntervals.push({ fn, ms });
@@ -1096,15 +1096,15 @@ function hangingWriteBuild() {
   const errors = [];
   const timers = fakeTimers();
   const transportFactory = () => {
-    const t = new EventEmitter();
-    t.mode = 'udp';
-    t.open = async () => {};
-    t.close = (cb) => cb && cb();
-    t.send = (buffer, _endpoint, cb) => {
+    const transport = new EventEmitter();
+    transport.mode = 'udp';
+    transport.open = async () => {};
+    transport.close = (cb) => cb?.();
+    transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       writeCallbacks.push(cb);
     };
-    return t;
+    return transport;
   };
   const { connection } = build(
     {},
@@ -1725,15 +1725,15 @@ function healthBuild() {
   const clock = fakeClock(1000);
   const timers = fakeTimers();
   const transportFactory = () => {
-    const t = new EventEmitter();
-    t.mode = 'udp';
-    t.open = async () => {};
-    t.close = (cb) => cb && cb();
-    t.send = (buffer, _endpoint, cb) => {
+    const transport = new EventEmitter();
+    transport.mode = 'udp';
+    transport.open = async () => {};
+    transport.close = (cb) => cb?.();
+    transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       cb();
     };
-    return t;
+    return transport;
   };
   const { connection } = build(
     {},
