@@ -54,8 +54,8 @@
     "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
-    "staleMs": "",
-    "expireMs": "",
+    "staleMs": "5000",
+    "expireMs": "15000",
     "disabled": false
   },
   {
@@ -74,7 +74,7 @@
     "changedFields": "",
     "fieldName": "",
     "fieldValue": "",
-    "rateLimit": 0,
+    "rateLimit": "0",
     "x": 200,
     "y": 120,
     "wires": [
@@ -99,7 +99,7 @@
     "changedFields": "",
     "fieldName": "",
     "fieldValue": "",
-    "rateLimit": 4,
+    "rateLimit": "4",
     "x": 200,
     "y": 180,
     "wires": [
@@ -124,7 +124,7 @@
     "changedFields": "",
     "fieldName": "",
     "fieldValue": "",
-    "rateLimit": 5,
+    "rateLimit": "5",
     "x": 200,
     "y": 240,
     "wires": [
@@ -149,7 +149,7 @@
     "changedFields": "",
     "fieldName": "",
     "fieldValue": "",
-    "rateLimit": 0,
+    "rateLimit": "0",
     "x": 200,
     "y": 300,
     "wires": [
@@ -174,7 +174,7 @@
     "changedFields": "",
     "fieldName": "",
     "fieldValue": "",
-    "rateLimit": 0,
+    "rateLimit": "0",
     "x": 200,
     "y": 360,
     "wires": [

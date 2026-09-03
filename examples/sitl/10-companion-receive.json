@@ -55,8 +55,8 @@
     "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
-    "staleMs": "",
-    "expireMs": "",
+    "staleMs": "5000",
+    "expireMs": "15000",
     "disabled": false
   },
   {
@@ -123,7 +123,7 @@
     "changedFields": "",
     "fieldName": "",
     "fieldValue": "",
-    "rateLimit": 1,
+    "rateLimit": "1",
     "x": 390,
     "y": 280,
     "wires": [
@@ -148,7 +148,7 @@
     "changedFields": "",
     "fieldName": "",
     "fieldValue": "",
-    "rateLimit": 0,
+    "rateLimit": "0",
     "x": 390,
     "y": 360,
     "wires": [
