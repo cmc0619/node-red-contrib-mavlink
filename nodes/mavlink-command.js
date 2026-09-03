@@ -137,21 +137,14 @@ module.exports = function registerMavlinkCommand(RED) {
     let _coordKindsResolved = false;
     function coordKinds() {
       if (_coordKindsResolved) return _coordKinds;
-      let bundle;
-      switch (delivery) {
-        case 'build':
-          bundle = config.dialect === '__vehicle'
-            ? dialectFromVehicleId(RED, config.vehicle)
-            : metadataApi(RED).loadBundled(config.dialect);
-          break;
-        case 'send':
-        case 'confirm':
-        case 'complete':
-          // Connection snapshot has no bundle — resolve the profile node (§7).
-          bundle = dialectFromConnection(RED, connNode);
-          break;
-        default: break; // This space intentionally left blank (§5)
-      }
+      // Build names its dialect in the editor; the wire tiers (send, confirm,
+      // complete) ride the Connection, whose snapshot has no bundle — resolve
+      // the profile node (§7).
+      const bundle = delivery !== 'build'
+        ? dialectFromConnection(RED, connNode)
+        : config.dialect === '__vehicle'
+          ? dialectFromVehicleId(RED, config.vehicle)
+          : metadataApi(RED).loadBundled(config.dialect);
       _coordKinds = intCoordKinds(bundle, commandId);
       _coordKindsResolved = true;
       return _coordKinds;
