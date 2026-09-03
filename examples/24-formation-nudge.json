@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex24-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex24-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex24-inject-dry",
@@ -112,6 +119,28 @@
     "yawRate": "",
     "rateHz": 10,
     "ttlMs": 1000,
+    "altRef": "home",
+    "speed": "",
+    "radius": "",
+    "changeMode": false,
+    "heading": "",
+    "turnRate": "",
+    "direction": "0",
+    "relative": false,
+    "roll": "",
+    "pitch": "",
+    "rollRate": "",
+    "pitchRate": "",
+    "thrust": "",
+    "stickX": "",
+    "stickY": "",
+    "stickZ": "",
+    "stickR": "",
+    "buttons": 0,
+    "throttle": "",
+    "speedType": "groundspeed",
+    "ackTimeout": "10000",
+    "vehicle": "",
     "x": 260,
     "y": 200,
     "wires": [
@@ -154,6 +183,10 @@
     "intervalMs": 150,
     "delivery": "build",
     "timeoutMs": 10000,
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
+    "maxRetries": 0,
     "x": 320,
     "y": 160,
     "wires": [
@@ -196,6 +229,10 @@
     "intervalMs": 150,
     "delivery": "send",
     "timeoutMs": 10000,
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
+    "maxRetries": 0,
     "x": 320,
     "y": 280,
     "wires": [
@@ -221,6 +258,11 @@
     "intervalMs": 150,
     "delivery": "send",
     "timeoutMs": 10000,
+    "identity": "",
+    "members": [],
+    "concurrency": 1,
+    "stopOnError": false,
+    "maxRetries": 0,
     "x": 320,
     "y": 400,
     "wires": [

@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex27-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex27-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex27-inject-force-disarm",
@@ -98,6 +105,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
     "params": "{\"2\":21196}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 320,
     "y": 160,
     "wires": [
@@ -152,6 +163,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
     "params": "{\"1\":1}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 320,
     "y": 280,
     "wires": [

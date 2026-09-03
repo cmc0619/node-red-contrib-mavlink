@@ -278,8 +278,7 @@
   function localFrameSelected(owner) {
     if (!intCarrierSelected(owner)) return false;
     const frame = Number(RED.mavlink.liveOr(owner, '#node-input-frame', owner.frame, ''));
-    return frame === 1 || frame === 7 || frame === 8 || frame === 9 ||
-      frame === 20 || frame === 21;
+    return frame === 1;
   }
 
   /**
@@ -1079,7 +1078,7 @@
     </select>
   </div>
 
-  <div class="form-row" id="row-cmd-sendAs">
+  <div class="form-row">
     <!-- Label says what the options are: the literal wire messages. "Carrier"
          was a metaphor the ecosystem doesn't share (-ai says "Send as"), and
          the word collided with Move's former protocol selector. -->

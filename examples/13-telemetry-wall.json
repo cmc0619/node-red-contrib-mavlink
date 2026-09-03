@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex13-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex13-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex13-in-heartbeat",
@@ -198,6 +205,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{\"1\":33,\"2\":250000}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 480,
     "y": 180,
     "wires": [

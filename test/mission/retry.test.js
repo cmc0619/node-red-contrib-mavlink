@@ -131,6 +131,53 @@ test('a livelocked upload — same-seq re-requests forever — terminates at the
   assert.equal(clock.pending(), 0, 'no timer left armed after the deadline abort');
 });
 
+test('a livelocked upload — alternating re-requests of two answered items — terminates at the no-progress deadline', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+
+  // Same ping-pong as above, but the vehicle alternates seq 0 and seq 1, so
+  // every re-request is a *distinct* step label. Progress is the frontier —
+  // a sequence never answered before — not the label, so once both items
+  // have been answered no re-request re-arms the deadline.
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
+    } else if (message.name === 'MISSION_ITEM_INT') {
+      const next = message.fields.seq === 0 ? 1 : 0;
+      clock.setTimeout(
+        () => deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: next, mission_type: 0 } }),
+        500
+      );
+    }
+  });
+
+  const machine = new MissionUpload({
+    send: (m) => stub.send(m),
+    subscribe: (f, h) => stub.subscribe(f, h),
+    target: TARGET,
+    missionType: MISSION_TYPE.MISSION,
+    items: [
+      { frame: 3, command: 16, x: 1, y: 2, z: 3 },
+      { frame: 3, command: 16, x: 4, y: 5, z: 6 },
+    ],
+    maxRetries: 2,
+    timeoutMs: 1000,
+    ...fakeDeps(clock),
+  });
+
+  const done = machine.start();
+  clock.flush();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'aborted');
+  assert.match(outcome.reason, /no progress .* \(transfer deadline\)/);
+  // Item 1 was the last frontier: its first answer re-armed the deadline once.
+  assert.equal(outcome.elapsed, DEFAULT_TRANSFER_DEADLINE_MS + 500);
+  assert.ok(stub.sent.filter((s) => s.message.name === 'MISSION_ITEM_INT').length > 10);
+  assert.equal(clock.pending(), 0, 'no timer left armed after the deadline abort');
+});
+
 test('a download advancing distinct items past the deadline is not aborted (#249)', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();

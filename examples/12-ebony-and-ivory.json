@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex12-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex12-vehicle-px4",
@@ -47,7 +50,9 @@
     "dialect": "common",
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex12-conn-ap",
@@ -67,7 +72,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex12-conn-px4",
@@ -87,7 +96,11 @@
     "linkId": 1,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex12-cmd-ap-arm",
@@ -104,6 +117,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 320,
     "y": 120,
     "wires": [
@@ -133,6 +150,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{\"1\":1,\"2\":4}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 500,
     "y": 120,
     "wires": [
@@ -162,6 +183,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{\"7\":10}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 680,
     "y": 120,
     "wires": [
@@ -191,6 +216,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 320,
     "y": 240,
     "wires": [
@@ -220,6 +249,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{\"7\":10}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 500,
     "y": 240,
     "wires": [
@@ -249,6 +282,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 320,
     "y": 360,
     "wires": [
@@ -278,6 +315,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 500,
     "y": 360,
     "wires": [
