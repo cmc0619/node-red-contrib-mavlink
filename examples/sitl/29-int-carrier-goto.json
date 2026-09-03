@@ -24,7 +24,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl17-vehicle",
@@ -36,7 +37,8 @@
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl17-connection",
@@ -56,7 +58,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl17-inject",
@@ -99,7 +105,10 @@
     "completionTimeout": "30000",
     "params": "{}",
     "sendAs": "long",
-    "frame": "",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 350,
     "y": 160,
     "wires": [
@@ -149,7 +158,10 @@
     "completionTimeout": "30000",
     "params": "{}",
     "sendAs": "long",
-    "frame": "",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 790,
     "y": 160,
     "wires": [
@@ -220,6 +232,25 @@
     "yawRate": "",
     "rateHz": 5,
     "ttlMs": 3000,
+    "reference": "world",
+    "heading": "",
+    "turnRate": "",
+    "direction": "0",
+    "relative": false,
+    "roll": "",
+    "pitch": "",
+    "rollRate": "",
+    "pitchRate": "",
+    "thrust": "",
+    "stickX": "",
+    "stickY": "",
+    "stickZ": "",
+    "stickR": "",
+    "buttons": 0,
+    "throttle": "",
+    "speedType": "groundspeed",
+    "dialect": "",
+    "vehicle": "",
     "x": 1200,
     "y": 160,
     "wires": [

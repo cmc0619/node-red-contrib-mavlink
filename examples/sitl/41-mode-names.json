@@ -38,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl41-vehicle-px4",
@@ -50,7 +51,8 @@
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl41-connection-ap",
@@ -70,7 +72,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl41-connection-px4",
@@ -90,7 +96,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl41-inject-ap",
@@ -133,6 +143,9 @@
     "completionTimeout": "30000",
     "params": "{\"1\":435,\"2\":0}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 350,
     "y": 140,
     "wires": [
@@ -208,6 +221,9 @@
     "completionTimeout": "30000",
     "params": "{}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 640,
     "y": 220,
     "wires": [
@@ -254,6 +270,9 @@
     "completionTimeout": "30000",
     "params": "{}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 800,
     "y": 140,
     "wires": [
@@ -309,6 +328,9 @@
     "completionTimeout": "30000",
     "params": "{\"1\":435,\"2\":0}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 360,
     "y": 340,
     "wires": [
@@ -359,6 +381,9 @@
     "completionTimeout": "30000",
     "params": "{}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 810,
     "y": 340,
     "wires": [

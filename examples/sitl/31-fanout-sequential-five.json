@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex07-vehicle",
@@ -37,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "ex07-connection",
@@ -57,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex07-inject-dry",
@@ -103,6 +109,9 @@
     "params": "{}",
     "targetSystem": "",
     "targetComponent": "",
+    "frame": "3",
+    "identity": "",
+    "vehicle": "",
     "x": 180,
     "y": 160,
     "wires": [
@@ -143,6 +152,10 @@
     "intervalMs": 200,
     "delivery": "build",
     "maxRetries": 0,
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
+    "timeoutMs": 10000,
     "x": 320,
     "y": 160,
     "wires": [
@@ -198,6 +211,9 @@
     "params": "{}",
     "targetSystem": "",
     "targetComponent": "",
+    "frame": "3",
+    "identity": "",
+    "vehicle": "",
     "x": 190,
     "y": 280,
     "wires": [
@@ -238,6 +254,9 @@
     "intervalMs": 200,
     "delivery": "confirm",
     "maxRetries": 3,
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
     "x": 330,
     "y": 280,
     "wires": [

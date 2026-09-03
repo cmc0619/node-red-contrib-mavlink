@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl29-vehicle",
@@ -37,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl29-connection",
@@ -57,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl29-inject",
@@ -101,6 +107,9 @@
     "paramIndex": -1,
     "value": "1",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "timeout": "10000",
+    "vehicle": "",
     "x": 440,
     "y": 160,
     "wires": [
@@ -144,6 +153,9 @@
     "delivery": "confirm",
     "maxRetries": 2,
     "timeoutMs": 10000,
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
     "x": 700,
     "y": 160,
     "wires": [

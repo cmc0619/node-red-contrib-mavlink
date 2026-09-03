@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl18-tab",
     "name": "COMMAND_INT frame matrix: GLOBAL_INT vs LOCAL_NED",
-    "info": "Four one-shot DO_SET_HOME probes: ArduPilot GLOBAL_INT, ArduPilot LOCAL_NED, PX4 GLOBAL_INT, PX4 LOCAL_NED.\n\nGlobal cases enter latitude/longitude as decimal degrees and use MAV_FRAME_GLOBAL_INT (5). Local cases enter x/y as metres in the same param slots and use MAV_FRAME_LOCAL_NED (1); the command node scales those to metres x 1e4 on COMMAND_INT.\n\nExpected result per DESIGN.md section 14: GLOBAL_INT ACCEPTED on both stacks; LOCAL_NED DENIED on ArduPilot and ACCEPTED on PX4.\n\nArduPilot Connection: bind 0.0.0.0:14550 -> remote 127.0.0.1:14551, sysid 1.\nPX4 Connection: bind 0.0.0.0:14560 -> remote 127.0.0.1:14561, sysid 11.",
+    "info": "Four one-shot DO_SET_HOME probes: ArduPilot GLOBAL_INT, ArduPilot LOCAL_NED, PX4 GLOBAL_INT, PX4 LOCAL_NED.\n\nGlobal cases enter latitude/longitude as decimal degrees and ride MAV_FRAME_GLOBAL_INT (5) on msg.mavFrame from the inject: the dialog offers GLOBAL (0) as the only absolute-altitude spelling, and any other frame rides msg.mavFrame. Local cases enter x/y as metres in the same param slots and use MAV_FRAME_LOCAL_NED (1); the command node scales those to metres x 1e4 on COMMAND_INT.\n\nExpected result per DESIGN.md section 14: GLOBAL_INT ACCEPTED on both stacks; LOCAL_NED DENIED on ArduPilot and ACCEPTED on PX4.\n\nArduPilot Connection: bind 0.0.0.0:14550 -> remote 127.0.0.1:14551, sysid 1.\nPX4 Connection: bind 0.0.0.0:14560 -> remote 127.0.0.1:14561, sysid 11.",
     "x": 310,
     "y": 40,
     "wires": []
@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl18-vehicle-ap",
@@ -37,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl18-vehicle-px4",
@@ -49,7 +51,8 @@
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl18-connection-ap",
@@ -69,7 +72,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl18-connection-px4",
@@ -89,7 +96,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl18-inject-ap-global",
@@ -99,6 +110,11 @@
     "props": [
       {
         "p": "payload"
+      },
+      {
+        "p": "mavFrame",
+        "v": "5",
+        "vt": "num"
       }
     ],
     "repeat": "",
@@ -132,7 +148,10 @@
     "completionTimeout": "30000",
     "params": "{\"1\":0,\"5\":-35.363261,\"6\":149.16523,\"7\":584}",
     "sendAs": "int",
-    "frame": "5",
+    "frame": "0",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 420,
     "y": 150,
     "wires": [
@@ -188,6 +207,9 @@
     "params": "{\"1\":0,\"5\":123.4567,\"6\":123.4567,\"7\":0}",
     "sendAs": "int",
     "frame": "1",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 420,
     "y": 250,
     "wires": [
@@ -209,6 +231,11 @@
     "props": [
       {
         "p": "payload"
+      },
+      {
+        "p": "mavFrame",
+        "v": "5",
+        "vt": "num"
       }
     ],
     "repeat": "",
@@ -242,7 +269,10 @@
     "completionTimeout": "30000",
     "params": "{\"1\":0,\"5\":47.397742,\"6\":8.545594,\"7\":488}",
     "sendAs": "int",
-    "frame": "5",
+    "frame": "0",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 420,
     "y": 370,
     "wires": [
@@ -298,6 +328,9 @@
     "params": "{\"1\":0,\"5\":123.4567,\"6\":123.4567,\"7\":0}",
     "sendAs": "int",
     "frame": "1",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 420,
     "y": 470,
     "wires": [

@@ -38,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl42-connection",
@@ -58,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl42-inject",
@@ -104,6 +109,9 @@
     "params": "{\"1\":1,\"2\":4}",
     "targetSystem": "",
     "targetComponent": "",
+    "frame": "3",
+    "identity": "",
+    "vehicle": "",
     "x": 290,
     "y": 180,
     "wires": [
@@ -145,6 +153,9 @@
     "delivery": "confirm",
     "timeoutMs": "10000",
     "maxRetries": "3",
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
     "x": 450,
     "y": 180,
     "wires": [
@@ -175,6 +186,9 @@
     "params": "{}",
     "targetSystem": "",
     "targetComponent": "",
+    "frame": "3",
+    "identity": "",
+    "vehicle": "",
     "x": 580,
     "y": 180,
     "wires": [
@@ -216,6 +230,9 @@
     "delivery": "confirm",
     "timeoutMs": "10000",
     "maxRetries": "3",
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
     "x": 740,
     "y": 180,
     "wires": [
@@ -246,6 +263,9 @@
     "params": "{\"7\":30}",
     "targetSystem": "",
     "targetComponent": "",
+    "frame": "3",
+    "identity": "",
+    "vehicle": "",
     "x": 900,
     "y": 180,
     "wires": [
@@ -287,6 +307,9 @@
     "delivery": "confirm",
     "timeoutMs": "10000",
     "maxRetries": "3",
+    "identity": "",
+    "concurrency": 1,
+    "stopOnError": false,
     "x": 1080,
     "y": 180,
     "wires": [
@@ -340,6 +363,9 @@
     "completionTimeout": "30000",
     "params": "{\"1\":33,\"2\":500000}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 1430,
     "y": 180,
     "wires": [
@@ -397,6 +423,7 @@
     "delivery": "confirm",
     "intervalMs": 200,
     "timeoutMs": 10000,
+    "promoteLeader": false,
     "x": 1810,
     "y": 180,
     "wires": [
@@ -470,6 +497,7 @@
     "delivery": "confirm",
     "intervalMs": 100,
     "timeoutMs": 5000,
+    "promoteLeader": false,
     "x": 780,
     "y": 420,
     "wires": [

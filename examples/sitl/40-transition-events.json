@@ -38,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl40-connection",
@@ -58,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl40-state-feed",
@@ -137,6 +142,9 @@
     "completionTimeout": "30000",
     "params": "{\"1\":1,\"2\":4}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 360,
     "y": 160,
     "wires": [
@@ -192,6 +200,9 @@
     "completionTimeout": "30000",
     "params": "{}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 580,
     "y": 160,
     "wires": [
@@ -222,6 +233,9 @@
     "completionTimeout": "30000",
     "params": "{\"1\":245,\"2\":500000}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 830,
     "y": 160,
     "wires": [
@@ -252,6 +266,9 @@
     "completionTimeout": "120000",
     "params": "{\"7\":10}",
     "sendAs": "long",
+    "frame": "3",
+    "dialect": "",
+    "vehicle": "",
     "x": 580,
     "y": 280,
     "wires": [

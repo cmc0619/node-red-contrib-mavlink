@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl21-vehicle-ap",
@@ -37,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl21-vehicle-px4",
@@ -49,7 +51,8 @@
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl21-connection-ap",
@@ -69,7 +72,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl21-connection-px4",
@@ -89,7 +96,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl21-inject-ap",
@@ -131,6 +142,10 @@
     "paramIndex": -1,
     "value": "10",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "dialect": "",
+    "vehicle": "",
     "x": 430,
     "y": 160,
     "wires": [
@@ -158,6 +173,11 @@
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "timeout": "10000",
+    "dialect": "",
+    "vehicle": "",
     "x": 690,
     "y": 160,
     "wires": [
@@ -209,6 +229,10 @@
     "paramIndex": -1,
     "value": "12",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "dialect": "",
+    "vehicle": "",
     "x": 460,
     "y": 320,
     "wires": [
@@ -236,6 +260,11 @@
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "timeout": "10000",
+    "dialect": "",
+    "vehicle": "",
     "x": 740,
     "y": 320,
     "wires": [

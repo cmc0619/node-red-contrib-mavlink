@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl25-vehicle",
@@ -37,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl25-connection",
@@ -45,7 +47,7 @@
     "name": "TCP SITL template",
     "mode": "tcp",
     "bindHost": "0.0.0.0",
-    "bindPort": 0,
+    "bindPort": 14550,
     "remoteHost": "127.0.0.1",
     "remotePort": 5760,
     "vehicle": "sitl25-vehicle",
@@ -57,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl25-in-hb",
@@ -121,6 +127,7 @@
     "tier": "send",
     "band": "2",
     "repeatMs": 0,
+    "dialect": "",
     "x": 360,
     "y": 300,
     "wires": [

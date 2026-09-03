@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "sitl03-vehicle",
@@ -37,7 +38,8 @@
     "defaultTargetSystem": 11,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "sitl03-connection",
@@ -57,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "sitl03-inject",
@@ -99,6 +105,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "30000",
     "params": "{\"1\":1,\"2\":196608}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 480,
     "y": 160,
     "wires": [
