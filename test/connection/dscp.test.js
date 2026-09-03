@@ -197,7 +197,6 @@ test('Connection pump marks each dequeued band immediately before transport send
       vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
       identities: [GCS],
       defaultIdentityId: 'gcs',
-      boundIdentityIds: ['gcs'],
       signing: {
         linkId: 0,
         signOutbound: false,

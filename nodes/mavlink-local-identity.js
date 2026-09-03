@@ -19,10 +19,7 @@
  * connection and unsigned on another.
  */
 
-const {
-  ROLE_PRESETS,
-  heartbeatFields,
-} = require('../lib/identity');
+const { ROLE_PRESETS } = require('../lib/identity');
 
 module.exports = function registerMavlinkLocalIdentity(RED) {
   /**
@@ -79,13 +76,13 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
       : { sysid: node.sourceSystemId, compid: node.sourceComponentId };
 
     /**
-     * HEARTBEAT field values for this identity (DESIGN.md §7 Heartbeat).
-     * Local Identity owns the heartbeat content and interval.
+     * HEARTBEAT content this identity owns (DESIGN.md §7 Heartbeat): the
+     * MAV_TYPE and MAV_AUTOPILOT names, resolved to wire values by the
+     * Connection that emits them.
      *
-     * @returns {import('../lib/identity/heartbeat').HeartbeatFields}
+     * @returns {{type: string, autopilot: string}}
      */
-    node.getHeartbeatFields = () =>
-      heartbeatFields({ heartbeatType: node.heartbeatType, heartbeatAutopilot: node.heartbeatAutopilot });
+    node.getHeartbeatFields = () => ({ type: node.heartbeatType, autopilot: node.heartbeatAutopilot });
 
   }
 

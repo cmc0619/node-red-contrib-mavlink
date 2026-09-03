@@ -23,7 +23,8 @@ const {
   makeRejectedHandler,
   applyStatus,
 } = require('../../nodes/mavlink-connection');
-const { SigningState, timestampFromMs, STATE } = require('../../lib/connection');
+const { STATE } = require('../../lib/connection');
+const { SigningState, timestampFromMs } = require('../../lib/connection/signing');
 const BADGE_MAX = 24; // §6 badge cap, as the runtime produces it
 
 test('a passphrase alone (both checkboxes off) still derives a key', () => {

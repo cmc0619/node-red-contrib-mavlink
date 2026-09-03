@@ -150,9 +150,8 @@ module.exports = function registerMavlinkCommand(RED) {
       return _coordKinds;
     }
 
-    // Resolved per-input (below, like `resolveCarrier`) rather than here: a
-    // throw at construction crashes the whole node's deploy, and a
-    // hand-edited config is a per-message failure like any other resolver.
+    // Read as saved; the per-input dispatch below selects on it (§5), so a
+    // hand-edited token is a per-message no-op, never a throw at deploy.
     const unconfirmedContinue = config.unconfirmedContinue;
 
     /**
@@ -425,7 +424,7 @@ module.exports = function registerMavlinkCommand(RED) {
             timeoutMs,
             maxRetries: noAutoRetry ? 0 : maxRetries,
             noAutoRetry,
-            // Same badge channel: a takeoff answers IN_PROGRESS for seconds (\u00a79),
+            // Same badge channel: a takeoff answers IN_PROGRESS for seconds (§9),
             // and without this the operator watches an unchanging wait.
             onInProgress: (progress) => {
               applyActionStatus(
@@ -637,35 +636,32 @@ module.exports = function registerMavlinkCommand(RED) {
 
   /**
    * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
-   * Registered once per process. Metadata load is isolated so a missing
-   * `mavlink-mappings` install still registers the palette type (flows can
-   * open); the catalog routes then return 503 until deps are installed.
+   * Registered with the type; Node-RED calls this factory once per process.
+   * Metadata load is isolated so a metadata package that fails to load still
+   * registers the palette type (flows can open); the catalog routes then
+   * answer 503 until it loads.
    */
-  if (!MavlinkCommandNode._routeRegistered) {
-    const { presetGroups } = require('../lib/command');
-    const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
+  const { presetGroups } = require('../lib/command');
+  const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
-    RED.httpAdmin.get(
-      '/mavlink/command/presets',
-      RED.auth.needsPermission('mavlink.read'),
-      (_req, res) => {
-        res.json({ groups: presetGroups() });
-      }
-    );
+  RED.httpAdmin.get(
+    '/mavlink/command/presets',
+    RED.auth.needsPermission('mavlink.read'),
+    (_req, res) => {
+      res.json({ groups: presetGroups() });
+    }
+  );
 
-    /**
-     * Advanced-mode catalog: every MAV_CMD plus param specs and the enum
-     * tables those params reference (§6 / §9).
-     */
-    registerDialectCatalogRoute(RED, {
-      path: '/mavlink/command/commands',
-      logLabel: 'mavlink-command',
-      fromBundle: (api, bundle, dialect) => api.catalogFromBundle(bundle, dialect),
-      fromDialect: (api, dialect) => api.listCommandsCatalog(dialect),
-    });
-
-    MavlinkCommandNode._routeRegistered = true;
-  }
+  /**
+   * Advanced-mode catalog: every MAV_CMD plus param specs and the enum
+   * tables those params reference (§6 / §9).
+   */
+  registerDialectCatalogRoute(RED, {
+    path: '/mavlink/command/commands',
+    logLabel: 'mavlink-command',
+    fromBundle: (api, bundle, dialect) => api.catalogFromBundle(bundle, dialect),
+    fromDialect: (api, dialect) => api.listCommandsCatalog(dialect),
+  });
 
   RED.nodes.registerType('mavlink-command', MavlinkCommandNode);
 };

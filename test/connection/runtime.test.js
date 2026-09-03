@@ -28,12 +28,7 @@ function delay(ms) {
  */
 function resolveIdentity(input) {
   const override = input.overrideId;
-  if (override) {
-    if (!input.boundIdentityIds.includes(override)) {
-      throw new Error(`override '${override}' is not bound`);
-    }
-    return { identityId: override, source: 'override' };
-  }
+  if (override) return { identityId: override, source: 'override' };
   return { identityId: input.defaultIdentityId, source: 'default' };
 }
 
@@ -57,7 +52,6 @@ function build(configOverrides = {}, depOverrides = {}) {
     vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
     identities: [GCS],
     defaultIdentityId: 'gcs',
-    boundIdentityIds: ['gcs'],
     signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
     heartbeat: { intervalMs: 1000, staleMs: 5000, expireMs: 15000 },
     ...configOverrides,
@@ -269,11 +263,11 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
       // TCP open needs a transport factory — inject a no-op transport.
       transportFactory: () => {
         const { EventEmitter } = require('node:events');
-        const t = new EventEmitter();
-        t.open = async () => {};
-        t.close = (cb) => cb && cb();
-        t.send = (_b, _e, cb) => cb && cb();
-        return t;
+        const transport = new EventEmitter();
+        transport.open = async () => {};
+        transport.close = (cb) => cb?.();
+        transport.send = (_b, _e, cb) => cb?.();
+        return transport;
       },
       setInterval: (fn, ms) => {
         tcpIntervals.push({ fn, ms });
@@ -627,10 +621,13 @@ test('an open() rejected by a racing close() resolves start() quietly, not as an
   assert.equal(connection.getState(), STATE.CLOSED, 'the race must settle in CLOSED, not CONNECTING');
 });
 
-test('an identity override outside the bound set is rejected, never falling back', async () => {
+test('an identity override the connection does not carry craters in send(), never falling back', async () => {
+  // The override rides as given (§13); an id with no identity record resolves
+  // nothing and send() throws before anything is enqueued.
   const { connection } = build();
   await connection.start();
-  assert.throws(() => connection.send({ name: 'PING', fields: {} }, { identityId: 'ghost' }), /not bound/);
+  assert.throws(() => connection.send({ name: 'PING', fields: {} }, { identityId: 'ghost' }));
+  assert.equal(connection.queue.size(), 0);
   connection.close();
 });
 
@@ -1099,15 +1096,15 @@ function hangingWriteBuild() {
   const errors = [];
   const timers = fakeTimers();
   const transportFactory = () => {
-    const t = new EventEmitter();
-    t.mode = 'udp';
-    t.open = async () => {};
-    t.close = (cb) => cb && cb();
-    t.send = (buffer, _endpoint, cb) => {
+    const transport = new EventEmitter();
+    transport.mode = 'udp';
+    transport.open = async () => {};
+    transport.close = (cb) => cb?.();
+    transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       writeCallbacks.push(cb);
     };
-    return t;
+    return transport;
   };
   const { connection } = build(
     {},
@@ -1326,7 +1323,6 @@ function reconnectBuild({
       vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
       identities: [GCS],
       defaultIdentityId: 'gcs',
-      boundIdentityIds: ['gcs'],
       signing: signing || { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
       heartbeat: { intervalMs: 1000, staleMs: 5000, expireMs: 15000 },
     },
@@ -1729,15 +1725,15 @@ function healthBuild() {
   const clock = fakeClock(1000);
   const timers = fakeTimers();
   const transportFactory = () => {
-    const t = new EventEmitter();
-    t.mode = 'udp';
-    t.open = async () => {};
-    t.close = (cb) => cb && cb();
-    t.send = (buffer, _endpoint, cb) => {
+    const transport = new EventEmitter();
+    transport.mode = 'udp';
+    transport.open = async () => {};
+    transport.close = (cb) => cb?.();
+    transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       cb();
     };
-    return t;
+    return transport;
   };
   const { connection } = build(
     {},

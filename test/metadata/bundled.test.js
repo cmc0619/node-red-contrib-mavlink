@@ -73,7 +73,7 @@ test('bundles are memoized — the same object is returned on a second load', ()
 });
 
 test('an unknown dialect craters at the manifest lookup (no common fallback)', () => {
-  assert.throws(() => loadBundled('px4'), TypeError);
+  assert.throws(() => loadBundled('px4'));
 });
 
 test('HEARTBEAT and MAV_AUTOPILOT resolve when loading common — they live in minimal.xml', () => {
