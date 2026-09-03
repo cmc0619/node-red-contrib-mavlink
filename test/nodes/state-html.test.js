@@ -202,6 +202,7 @@ test('a full event selection saves the full list; a blank config selects nothing
   // exactly what is saved.
   dialog.selectAll([...STATE_EVENTS]);
   dialog.trigger();
+  dialog.save();
   assert.equal(dialog.hiddenEvents(), STATE_EVENTS.join(','), 'a full selection saves the full list');
 });
 
