@@ -173,7 +173,18 @@ function loadNodeType(nodeName, nodeLookup = {}, opts = {}) {
     RED: {
       settings: { httpAdminRoot: '/' },
       mavlink: {},
-      validators: { number: () => () => true, regex: () => () => true },
+      // Node-RED's built-ins, as the editor evaluates them (editor/js/validators.js):
+      // a blank is accepted only when the validator was built with blankAllowed,
+      // and a non-blank must parse as a number. The contract test runs these
+      // against shipped examples, so they must reject what the editor rejects.
+      validators: {
+        number: (blankAllowed) => (v) => {
+          if (blankAllowed && (v === '' || v === undefined)) return true;
+          if (v !== '' && v !== undefined && !Number.isNaN(Number(v))) return true;
+          return 'must be a number';
+        },
+        regex: (re) => (v) => (re.test(v) ? true : 'does not match the required pattern'),
+      },
       _: (k) => k,
       editor: { getEditStack: () => editStack },
       nodes: {
