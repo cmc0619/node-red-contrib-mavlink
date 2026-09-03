@@ -56,8 +56,8 @@
     "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
-    "staleMs": "",
-    "expireMs": "",
+    "staleMs": "5000",
+    "expireMs": "15000",
     "disabled": false
   },
   {
