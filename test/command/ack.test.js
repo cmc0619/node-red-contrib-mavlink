@@ -33,8 +33,16 @@ function stubConn() {
         if (i >= 0) handlers.splice(i, 1);
       };
     },
+    // The decoder zero-fills the MAVLink 2 target_system/target_component
+    // extensions when a frame omits them (§14), so an injected ack carries 0
+    // there unless the test addresses it explicitly.
     injectAck(fields, sysid, compid) {
-      const decoded = { name: 'COMMAND_ACK', sysid, compid, fields };
+      const decoded = {
+        name: 'COMMAND_ACK',
+        sysid,
+        compid,
+        fields: { target_system: 0, target_component: 0, ...fields },
+      };
       for (const { handler } of handlers.slice()) handler(decoded);
     },
   };
@@ -45,6 +53,7 @@ function makeWaiter(conn, opts) {
     subscribe: (filter, handler) => conn.subscribe(filter, handler),
     sendFn: () => {},
     timeoutMs: 5000,
+    sourceIds: { sysid: 255, compid: 190 },
     ...opts,
   });
 }
@@ -102,7 +111,8 @@ test('an ack explicitly addressed to another GCS is ignored; ours and MAVLink 1 
   const outcome = await p;
   assert.equal(outcome.result, 'accepted');
 
-  // A MAVLink 1 ack carries no target fields — unaddressed passes the gate.
+  // A MAVLink 1 ack carries no target fields, which decode as 0 —
+  // unaddressed passes the gate.
   const conn2 = stubConn();
   const waiter2 = makeWaiter(conn2, {
     commandId: 400,

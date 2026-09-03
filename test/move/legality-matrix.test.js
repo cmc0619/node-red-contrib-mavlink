@@ -188,7 +188,7 @@ function drive(config, { firmware } = {}) {
     if (config.delivery === 'confirm') {
       assert.ok(conn.subs.length, 'the confirm tier subscribes before the handler returns');
       const command = ACK_COMMAND[config.action] || ACK_COMMAND.goto;
-      conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command, result: 0 } });
+      conn.subs[0].handler({ sysid: 1, compid: 1, fields: { command, result: 0, target_system: 0, target_component: 0 } });
     }
   });
 }

@@ -16,13 +16,11 @@ module.exports = function registerMavlinkState(RED) {
     const connectionNode = RED.nodes.getNode(config.connection);
 
     // Mode-name resolution context (lib/vehicle/modes.js): the bound profile's
-    // firmware/family plus its compiled bundle. A disabled Connection carries
-    // no vehicle snapshot — and an empty peer table that will never hold a
-    // mode to name — so no context is built and outputs stay numbers-only.
-    // An unresolvable Connection craters on first use instead — the feed
-    // subscribe below at deploy, or per input in poll mode (§0).
+    // firmware/family plus its compiled bundle. Every Connection carries its
+    // vehicle snapshot, a disabled one included; an unresolvable Connection
+    // craters here at construction (§0).
     const vehicle = connectionNode.vehicle;
-    const modes = vehicle && {
+    const modes = {
       firmware: vehicle.firmware,
       vehicleFamily: vehicle.vehicleFamily,
       bundle: dialectFromConnection(RED, connectionNode),
@@ -31,7 +29,7 @@ module.exports = function registerMavlinkState(RED) {
     let feed = null;
     switch (config.mode) {
       case 'feed': {
-        const events = config.events.split(',').map((s) => s.trim()).filter(Boolean);
+        const events = config.events.split(',').filter(Boolean);
         feed = createStateFeed(connectionNode.peerTable, { events, modes }, (record) => {
           node.send([{ payload: record }]);
         });
@@ -49,7 +47,7 @@ module.exports = function registerMavlinkState(RED) {
         }
         switch (config.mode) {
           case 'snapshot': {
-            const payload = msg.payload ?? {};
+            const payload = msg.payload;
             const peers = snapshotPeers(connectionNode.peerTable, {
               sysid: firstDefined(payload.sysid, config.targetSystem),
               compid: firstDefined(payload.compid, config.targetComponent),

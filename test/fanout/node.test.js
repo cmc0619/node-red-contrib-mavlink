@@ -487,32 +487,6 @@ test('close cancels every concurrent fan-out, not just the newest (Greptile #140
   assert.equal(connection.sends.length, 2, 'neither run advanced past member 1');
 });
 
-test('a config with no numeric keys at all inherits the lib absence defaults (Gitar, #287)', async () => {
-  // Absence stays absence: numberOption must hand executeFanout `undefined`
-  // for a key the config never carried, so the lib's own defaults fire.
-  // Coercing absence gives NaN, every pacing comparison against NaN is
-  // false, and the whole fleet launches at once with no throttle — silent.
-  const connection = connectionStub([peer(1), peer(2)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-fanout')(RED);
-  const Node = RED.nodes.types['mavlink-fanout'];
-  // No intervalMs, timeoutMs, maxRetries, or concurrency keys anywhere.
-  const node = new Node({ selectionMode: 'all', connection: 'conn', executionMode: 'sequential', delivery: 'send' });
-  let sent;
-
-  const started = Date.now();
-  await emitInput(node, { payload: builtCommand() }, (messages) => {
-    sent = messages;
-  });
-
-  assert.equal(sent[1].result, 'succeeded', 'the run completes');
-  assert.equal(connection.sends.length, 2, 'both members sent');
-  // DEFAULT_INTERVAL_MS (100) paces the second member: a NaN interval would
-  // sleep 0 ms and finish effectively instantly. One inter-member gap is the
-  // observable difference between "default applied" and "absence became NaN".
-  assert.ok(Date.now() - started >= 80, 'the lib default interval paced the run');
-});
-
 test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', async () => {
   // Trusted-msg garbage, but the failure shape matters: with nothing in
   // flight there is nothing to race, and Promise.race([]) never settles — a

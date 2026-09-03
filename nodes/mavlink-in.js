@@ -100,8 +100,8 @@ module.exports = function registerMavlinkIn(RED) {
     // owns the shape: oneditsave trims each row and drops blanks and
     // duplicates, and the array red ring guards a hand-edited flow.
     const filterMessages = config.messages;
-    const filterSysid = isBlank(config.sysid) ? null : Number(config.sysid);
-    const filterCompid = isBlank(config.compid) ? null : Number(config.compid);
+    const filterSysid = isBlank(config.sysid) ? undefined : Number(config.sysid);
+    const filterCompid = isBlank(config.compid) ? undefined : Number(config.compid);
 
     // Unknown frames are opt-in. A msgid the dialect does not carry arrives as
     // UNKNOWN_<id> (#344); that is a diagnostic, not traffic a working flow
@@ -167,7 +167,7 @@ module.exports = function registerMavlinkIn(RED) {
         ? rate.perMessageMs.get(decoded.name)
         : rate.defaultMs;
       if (limitMs > 0) {
-        const last = lastDeliveryMs.get(key) || 0;
+        const last = lastDeliveryMs.get(key);
         if (now - last < limitMs) return;
       }
 
@@ -239,10 +239,7 @@ module.exports = function registerMavlinkIn(RED) {
     // sharing one handler — no change to the matcher, and a name can never
     // match twice. An empty list is a single unfiltered subscription, which is
     // what a blank message filter always meant.
-    const target = {
-      sysid: filterSysid !== null ? filterSysid : undefined,
-      compid: filterCompid !== null ? filterCompid : undefined,
-    };
+    const target = { sysid: filterSysid, compid: filterCompid };
     const unsubscribes = filterMessages.length
       ? filterMessages.map((name) => connectionNode.subscribe({ ...target, message: name }, onDecoded))
       : [connectionNode.subscribe(target, onDecoded)];
@@ -285,11 +282,7 @@ function isUnknownName(name) {
  * @returns {string[]|null}
  */
 function parseNameList(value) {
-  const names = value
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return names.length ? names : null;
+  return isBlank(value) ? null : value.split(',');
 }
 
 /**
@@ -298,14 +291,12 @@ function parseNameList(value) {
  * number among the pairs sets the default for unlisted names. `NAME=0` means
  * that message is unlimited. The editor owns the shape.
  *
- * @param {*} value
+ * @param {string} value  editor-owned; the field red ring owns the shape
  * @returns {{defaultMs: number, perMessageMs: Map<string, number>}}
  */
 function parseRateLimit(value) {
   const result = { defaultMs: 0, perMessageMs: new Map() };
-  const raw = String(value).trim();
-  if (!raw) return result;
-  for (const token of raw.split(',')) {
+  for (const token of value.split(',')) {
     const part = token.trim();
     const eq = part.indexOf('=');
     if (eq === -1) {

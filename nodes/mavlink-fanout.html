@@ -141,10 +141,8 @@
       },
       intervalMs: {
         value: 100,
-        // Blank stays absent — numberOption hands it through so lib/fanout's
-        // own default fires (blank ≠ 0 ≠ absent, Gitar #287). A present value
-        // must be milliseconds >= 0: the input's min="0" is not enforced on
-        // save, and a saved negative paces nothing.
+        // Milliseconds >= 0: the input's min="0" is not enforced on save, and
+        // a saved negative paces nothing.
         validate: RED.mavlink.validateAtLeast(0),
       },
       concurrency: {
@@ -172,9 +170,8 @@
       },
       maxRetries: {
         value: 0,
-        // Blank stays absent (lib default 0), like intervalMs above. A present
-        // value must be a whole retry count >= 0: min="0" is not enforced on
-        // save, and a negative or fractional count reaches AckWaiter as-is.
+        // A whole retry count >= 0: min="0" is not enforced on save, and a
+        // negative or fractional count reaches AckWaiter as-is.
         validate: RED.mavlink.validateAtLeast(0, { integer: true }),
       }
     },

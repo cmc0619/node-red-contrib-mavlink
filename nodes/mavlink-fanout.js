@@ -2,7 +2,6 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
-const { numberOr } = require('../lib/addressing');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -101,9 +100,7 @@ module.exports = function registerMavlinkFanout(RED) {
               // single target_system=0 packet (aggregate.message).
               output0 = aggregate.message
                 ? [{ payload: aggregate.message }]
-                : aggregate.members
-                    .filter((member) => member.success && member.message)
-                    .map((member) => ({ payload: member.message }));
+                : aggregate.members.map((member) => ({ payload: member.message }));
             }
             break;
           case 'send':
@@ -227,19 +224,11 @@ function assignIfPresent(target, key, value) {
 }
 
 /**
- * A numeric run option: the payload wrapper overrides, else the saved config
- * value.
- *
- * Absence stays absence (§5: blank ≠ 0 ≠ absent): no value at either level
- * passes `undefined` through so lib/fanout's own absence default fires.
- * Coercing absence would hand the run NaN, and every pacing comparison
- * against NaN is false — an unthrottled fleet send with no symptom (Gitar,
- * #287). A present garbage value is the editor's to red (§14): these keys
- * never reach the wire, and a finite-number check on operator input is a
- * guardrail.
+ * A numeric run option: `msg.payload` overrides by presence, otherwise the
+ * editor's saved value, which the editor defaults and red-rings.
  */
 function numberOption(opts, config, key) {
-  return numberOr(opts[key], numberOr(config[key], undefined));
+  return opts[key] === undefined ? Number(config[key]) : opts[key];
 }
 
 /**

@@ -6,14 +6,18 @@ const assert = require('node:assert/strict');
 
 test('mavlink-state node emits peer table snapshots on demand', () => {
   const connection = {
+    vehicle: { id: 'veh', firmware: 'ardupilot', vehicleFamily: 'copter' },
     peerTable: {
       snapshot() {
         return [{ sysid: 4, components: [{ compid: 1, armed: true }] }];
       },
+      getComponent() {
+        return undefined;
+      },
     },
     crcFailureCount: () => 0,
   };
-  const RED = redStub({ conn: connection });
+  const RED = redStub({ conn: connection, veh: { getDialect: () => ({ enums: {} }) } });
   require('../../nodes/mavlink-state')(RED);
   const Node = RED.nodes.types['mavlink-state'];
   const node = new Node({
@@ -26,14 +30,15 @@ test('mavlink-state node emits peer table snapshots on demand', () => {
 
   node.emit(
     'input',
-    {}, // no payload — the node runs on its saved config (DESIGN.md §"override of last resort")
+    { payload: {} }, // no overrides — the node runs on its saved config (DESIGN.md §"override of last resort")
     (messages) => {
       sent = messages;
     },
     () => {}
   );
 
-  assert.deepEqual(sent[0].payload, [{ sysid: 4, components: [{ compid: 1, armed: true }] }]);
+  // modeName is always assigned; a component with no observed mode carries undefined.
+  assert.deepEqual(sent[0].payload, [{ sysid: 4, components: [{ compid: 1, armed: true, modeName: undefined }] }]);
 });
 
 function redStub(nodesById) {

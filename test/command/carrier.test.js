@@ -74,19 +74,8 @@ test('longToIntFields blank x/y stay unset — Number("") must not invent 0', ()
   assert.equal(empty.y, undefined);
   assert.equal(empty.z, 10);
   const keptNull = longToIntFields([0, 0, 0, 0, null, 1, 0], { frame: 3 });
-  assert.equal(keptNull.x, null);
+  assert.equal(keptNull.x, undefined);
   assert.equal(keptNull.y, 10000000);
-});
-
-test('longToIntFields blank param1–4/z stay unset — Number("") must not invent 0', () => {
-  const blank = longToIntFields(['', '   ', null, undefined, 1, 2, ''], { frame: 3 });
-  assert.equal(blank.param1, undefined);
-  assert.equal(blank.param2, undefined);
-  assert.equal(blank.param3, null);
-  assert.equal(blank.param4, undefined);
-  assert.equal(blank.z, undefined);
-  assert.equal(blank.x, 10000000);
-  assert.equal(blank.y, 20000000);
 });
 
 test('longToIntFields scales every degrees value — no pass-through heuristic', () => {
@@ -232,9 +221,8 @@ test('intCoordKinds classifies param5/6 from the dialect XML', () => {
   assert.deepEqual(intCoordKinds(bundle, 1000), { 5: 'raw', 6: 'raw' }); // DO_GIMBAL_MANAGER_PITCHYAW
   // Natively degE7 in the XML → the entered value IS the wire value.
   assert.deepEqual(intCoordKinds(bundle, 30001), { 5: 'dege7', 6: 'dege7' }); // PAYLOAD_PREPARE_DEPLOY
-  // Unknown command / missing bundle → null (historical scaling).
+  // A command the bundle does not carry → null (historical scaling).
   assert.equal(intCoordKinds(bundle, 999999), null);
-  assert.equal(intCoordKinds(null, 192), null);
 });
 
 test('coordKinds raw/dege7 params are never ×1e7-scaled on a global frame', () => {

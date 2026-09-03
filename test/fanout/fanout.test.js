@@ -859,7 +859,7 @@ test('concurrency overlaps confirm waits so a straggler does not serialize the f
     peerTable: peerTableStub([peer(1), peer(2)]),
     sends: [],
     send(message, options) { this.sends.push({ message, options }); },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -882,21 +882,21 @@ test('concurrency overlaps confirm waits so a straggler does not serialize the f
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [1, 2]);
 
-  deliver({ sysid: 2, compid: 1, fields: { command: 400, result: 0 } });
-  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0 } });
+  deliver({ sysid: 2, compid: 1, fields: { command: 400, result: 0, target_system: 0, target_component: 0 } });
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0, target_system: 0, target_component: 0 } });
   const result = await run;
 
   assert.equal(result.success, true);
   assert.deepEqual(result.members.map((m) => m.sysid), [1, 2], 'records stay in member order');
 });
 
-test('at the default concurrency 1 the second member waits for the first ack', async () => {
+test('at concurrency 1 the second member waits for the first ack', async () => {
   const handlers = [];
   const connection = {
     peerTable: peerTableStub([peer(1), peer(2)]),
     sends: [],
     send(message, options) { this.sends.push({ message, options }); },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -910,15 +910,16 @@ test('at the default concurrency 1 the second member waits for the first ack', a
     mode: 'sequential',
     delivery: 'confirm',
     intervalMs: 0,
+    concurrency: 1,
     timeoutMs: 60000,
   });
 
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(connection.sends.length, 1, 'member 2 not launched while member 1 awaits its ack');
 
-  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0 } });
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0, target_system: 0, target_component: 0 } });
   await new Promise((resolve) => setTimeout(resolve, 20));
-  deliver({ sysid: 2, compid: 1, fields: { command: 400, result: 0 } });
+  deliver({ sysid: 2, compid: 1, fields: { command: 400, result: 0, target_system: 0, target_component: 0 } });
   const result = await run;
   assert.equal(result.success, true);
 });
@@ -1106,7 +1107,7 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
     send(message, options) {
       this.sends.push({ message, options });
     },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -1125,9 +1126,9 @@ test('broadcast confirm matches COMMAND_ACK on sysid AND component (§10)', asyn
 
   // A gimbal (component 154) FAILED ack must be ignored — matching sysid alone
   // would wrongly settle the autopilot's command as failed.
-  deliver({ sysid: 1, compid: 154, fields: { command: 400, result: 4 } });
+  deliver({ sysid: 1, compid: 154, fields: { command: 400, result: 4, target_system: 0, target_component: 0 } });
   // The addressed autopilot (component 1) then ACCEPTS.
-  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0 } });
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0, target_system: 0, target_component: 0 } });
 
   const result = await promise;
   assert.equal(result.success, true, 'the autopilot ack, not the gimbal ack, decided the outcome');
@@ -1146,7 +1147,7 @@ test('a fan-out member record carries the terminal ack\'s result_param2 (§9, Co
     send(message, options) {
       this.sends.push({ message, options });
     },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -1163,7 +1164,7 @@ test('a fan-out member record carries the terminal ack\'s result_param2 (§9, Co
     timeoutMs: 1000,
   });
 
-  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 2, result_param2: 11 } });
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 2, result_param2: 11, target_system: 0, target_component: 0 } });
 
   const result = await promise;
   const member = result.members.find((m) => m.sysid === 1);
@@ -1259,7 +1260,7 @@ test('confirm-mode retry resends the member\'s patched message with the confirma
     peerTable: peerTableStub([peer(7)]),
     sends: [],
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       subs.push(handler);
       return () => {};
@@ -1281,10 +1282,10 @@ test('confirm-mode retry resends the member\'s patched message with the confirma
   assert.equal(connection.sends.length, 1, 'first transmission is out');
   // TEMPORARILY_REJECTED backs off (harness fires the 1 s retry timer) and
   // resends the same member message with the counter bumped.
-  deliver({ sysid: 7, compid: 1, fields: { command: 192, result: 1 } });
+  deliver({ sysid: 7, compid: 1, fields: { command: 192, result: 1, target_system: 0, target_component: 0 } });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(connection.sends.length, 2, 'retry was resent');
-  deliver({ sysid: 7, compid: 1, fields: { command: 192, result: 0 } });
+  deliver({ sysid: 7, compid: 1, fields: { command: 192, result: 0, target_system: 0, target_component: 0 } });
   const result = await run;
 
   assert.equal(result.success, true);
@@ -1446,6 +1447,10 @@ test('a settled param-echo confirm leaves no abort listener on the run signal', 
     delivery: 'confirm',
     timeoutMs: 60000,
     intervalMs: 0,
+    concurrency: 1,
+    // The inter-member pause registers its own abort listener; this test
+    // counts the confirm waits' listeners alone.
+    wait: async () => {},
   });
 
   // Echo each member in turn — every settle rides the normal path, the
@@ -1469,7 +1474,7 @@ test('a settled broadcast confirm leaves no abort listener on the run signal', a
     peerTable: peerTableStub([peer(1), peer(2)]),
     sends: [],
     send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       handlers.push(handler);
       return () => {};
@@ -1488,8 +1493,8 @@ test('a settled broadcast confirm leaves no abort listener on the run signal', a
   });
 
   await new Promise((resolve) => setTimeout(resolve, 5));
-  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0 } });
-  deliver({ sysid: 2, compid: 1, fields: { command: 400, result: 0 } });
+  deliver({ sysid: 1, compid: 1, fields: { command: 400, result: 0, target_system: 0, target_component: 0 } });
+  deliver({ sysid: 2, compid: 1, fields: { command: 400, result: 0, target_system: 0, target_component: 0 } });
   const result = await run;
 
   assert.equal(result.success, true);

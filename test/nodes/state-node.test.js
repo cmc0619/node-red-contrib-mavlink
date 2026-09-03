@@ -39,7 +39,7 @@ function redStub(nodesById) {
 }
 
 function makeNode(config, nodesById = {}) {
-  const RED = redStub(nodesById);
+  const RED = redStub({ veh: { getDialect: () => ({ enums: {} }) }, ...nodesById });
   require('../../nodes/mavlink-state')(RED);
   const Node = RED.nodes.types['mavlink-state'];
   return new Node(config);
@@ -48,7 +48,13 @@ function makeNode(config, nodesById = {}) {
 function conn(crcFailures = 0) {
   const peerTable = new EventEmitter();
   peerTable.snapshot = () => [{ sysid: 1, components: [{ compid: 1 }] }];
-  return { id: 'conn', peerTable, crcFailureCount: () => crcFailures };
+  peerTable.getComponent = () => undefined;
+  return {
+    id: 'conn',
+    vehicle: { id: 'veh', firmware: 'ardupilot', vehicleFamily: 'copter' },
+    peerTable,
+    crcFailureCount: () => crcFailures,
+  };
 }
 
 /** Drive one input; resolve on done() with everything the input emitted. */

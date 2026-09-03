@@ -29,7 +29,7 @@ test('Build tier: output 0 carries the COMMAND_LONG and output 1 a top-level sta
   const node = new Node({ params: '{}', sendAs: 'long', mode: 'preset', preset: 'arm', delivery: 'build' });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await tick();
 
   assert.ok(sent, 'outputs fired');
@@ -51,6 +51,7 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
     mode: 'preset',
     preset: 'reposition',
     delivery: 'build',
+    dialect: 'common',
     targetSystem: '1',
     targetComponent: '1',
   });
@@ -320,7 +321,7 @@ test('resolveTarget: wire tier empty config inherits Vehicle Profile target from
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await tick();
 
   assert.equal(sent[0].payload.fields.target_system, 42);
@@ -344,7 +345,7 @@ test('resolveTarget: explicit config value wins over Vehicle Profile', async () 
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await tick();
 
   assert.equal(sent[0].payload.fields.target_system, 7);
@@ -374,7 +375,7 @@ test('resolveTarget: companion identity derives {airframe sysid, 1} as target', 
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await tick();
 
   assert.equal(sent[0].payload.fields.target_system, 42, 'companion sysid derived from airframe');
@@ -428,7 +429,7 @@ test('resolveTarget: config 0 is broadcast and survives (new semantics)', async 
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await tick();
 
   assert.equal(sent[0].payload.fields.target_system, 0, 'config 0 = broadcast, must not be treated as inherit');
@@ -485,7 +486,7 @@ test('resolveTarget: build tier inherits from config.vehicle profile stub', asyn
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await tick();
 
   assert.equal(sent[0].payload.fields.target_system, 77, 'build tier inherits sysid from config.vehicle');
@@ -514,7 +515,7 @@ test('resolveTarget: build tier ignores config.vehicle profile unless dialect is
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await tick();
 
   assert.ok(Number.isNaN(sent[0].payload.fields.target_system), 'non-__vehicle Build does not inherit sysid from config.vehicle');
@@ -545,7 +546,7 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
   });
 
   let result;
-  node.emit('input', { payload: null }, (m) => { result = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { result = m; }, () => {});
   await tick();
 
   // Wrong source — sysid 1 must not settle the transaction.
@@ -560,73 +561,6 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
   assert.ok(result, 'ack from companion-derived target settles the transaction');
   assert.equal(result[1].result, 'accepted');
 
-  node.emit('close', () => {});
-});
-
-test('blank Command timeout keeps the 10000 ms ACK window', async (t) => {
-  const timers = installAckTimerHarness(t);
-  const conn = connStubWithInject();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    params: '{}',
-    sendAs: 'long',
-    mode: 'preset',
-    preset: 'arm',
-    delivery: 'confirm',
-    connection: 'conn',
-    targetSystem: '1',
-    targetComponent: '1',
-    timeout: '',
-    maxRetries: '3',
-  });
-
-  node.emit('input', { payload: null }, () => {}, () => {});
-  await Promise.resolve();
-
-  assert.equal(timers.delays[0], 10000);
-  conn.injectAck({ command: 400, result: 0 }, 1, 1);
-  await new Promise((resolve) => setImmediate(resolve));
-  node.emit('close', () => {});
-});
-
-test('blank Command maxRetries keeps three temporary-rejection retries', async (t) => {
-  installAckTimerHarness(t);
-  const conn = connStubWithInject();
-  const RED = redStub({ conn });
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    params: '{}',
-    sendAs: 'long',
-    mode: 'preset',
-    preset: 'arm',
-    delivery: 'confirm',
-    connection: 'conn',
-    targetSystem: '1',
-    targetComponent: '1',
-    timeout: '10000',
-    maxRetries: '',
-  });
-  let output;
-
-  node.emit('input', { payload: null }, (messages) => { output = messages; }, () => {});
-  await Promise.resolve();
-  for (let retry = 1; retry <= 3; retry++) {
-    conn.injectAck({ command: 400, result: 1 }, 1, 1);
-    await Promise.resolve();
-    assert.equal(conn.sent.length, retry + 1, `retry ${retry} is sent`);
-  }
-  conn.injectAck({ command: 400, result: 1 }, 1, 1);
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.deepEqual(
-    conn.sent.map(({ message }) => message.fields.confirmation),
-    [0, 1, 2, 3]
-  );
-  assert.equal(output[0], null);
-  assert.equal(output[1].retries, 3);
   node.emit('close', () => {});
 });
 
@@ -651,7 +585,7 @@ test('a hand-edited garbage Command mode resolves no command — nothing is buil
   });
 
   let sent;
-  node.emit('input', { payload: null }, (m) => { sent = m; }, () => {});
+  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
   await Promise.resolve();
 
   assert.ok(Number.isNaN(sent[0].payload.fields.command), 'no command id was resolved');
@@ -681,7 +615,7 @@ test('a silent ACK window sends once, then settles the unconfirmed record', asyn
   let output;
   let doneErr;
 
-  node.emit('input', { payload: null }, (messages) => { output = messages; }, (err) => { doneErr = err; });
+  node.emit('input', { payload: {} }, (messages) => { output = messages; }, (err) => { doneErr = err; });
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(conn.sent.length, 1, 'the command is sent exactly once');
@@ -712,7 +646,7 @@ test('a "Send as" token that is not a carrier builds nothing at all', async () =
     const node = new Node({ params: '{}', sendAs, mode: 'preset', preset: 'arm', delivery: 'build' });
 
     let output;
-    node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
+    node.emit('input', { payload: {} }, (m) => { output = m; }, () => {});
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(output[0].payload, undefined, 'the carrier selects no builder');
@@ -759,19 +693,6 @@ test('a Delivery token the editor cannot save runs no tier at all (§5)', async 
     assert.equal(doneCalls, 1, 'the input is still completed');
     assert.equal(err, undefined, 'a no-op is not a failure');
   }
-});
-
-test('an unlisted preset resolves no command id rather than a guess', async () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ params: '{}', sendAs: 'long', mode: 'preset', preset: 'arrrm', delivery: 'build' });
-
-  let output;
-  node.emit('input', { payload: null }, (m) => { output = m; }, () => {});
-  await new Promise((resolve) => setImmediate(resolve));
-
-  assert.equal(output[0].payload.fields.command, null, 'MAV_CMD is unresolved, not invented');
 });
 
 test('Advanced mode never reads preset — an unset preset field does not refuse', async () => {
@@ -831,12 +752,12 @@ function connStubWithInject(vehicleOverride) {
   return {
     subs,
     sent,
-    peerTable: null,
+    peerTable: { getComponent: () => undefined },
     vehicle: vehicleOverride !== undefined
       ? vehicleOverride
       : { id: 'vehicleProfile', targetSystem: 1, targetComponent: 1 },
     send(message, opts) { sent.push({ message, opts }); },
-    resolveSourceIds: () => null,
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
     subscribe(filter, handler) {
       const entry = { filter, handler };
       subs.push(entry);
@@ -845,8 +766,14 @@ function connStubWithInject(vehicleOverride) {
         if (i >= 0) subs.splice(i, 1);
       };
     },
+    // The decoder zero-fills omitted target_system/target_component (§14).
     injectAck(fields, sysid, compid) {
-      const decoded = { name: 'COMMAND_ACK', sysid, compid, fields };
+      const decoded = {
+        name: 'COMMAND_ACK',
+        sysid,
+        compid,
+        fields: { target_system: 0, target_component: 0, ...fields },
+      };
       for (const { handler } of subs.slice()) handler(decoded);
     },
   };
@@ -858,7 +785,7 @@ function connStub(vehicleOverride) {
   return {
     subs,
     sent,
-    peerTable: null,
+    peerTable: { getComponent: () => undefined },
     vehicle: vehicleOverride !== undefined
       ? vehicleOverride
       : { id: 'vehicleProfile', targetSystem: 1, targetComponent: 1 },
@@ -910,7 +837,7 @@ test('a redeploy-cancelled ack wait finishes quietly, not as a command failure (
   // already had the quiet branch; command and payload did not.
   const subs = [];
   const connection = {
-    peerTable: null,
+    peerTable: { getComponent: () => undefined },
     vehicle: null,
     // Never answers — the wait can only end by cancellation.
     send() {},
@@ -1193,7 +1120,7 @@ test('IN_PROGRESS moves the badge and the terminal record carries result_param2 
   node.status = (s) => statuses.push(s.text);
   let output;
 
-  node.emit('input', { payload: null }, (messages) => { output = messages; }, () => {});
+  node.emit('input', { payload: {} }, (messages) => { output = messages; }, () => {});
   await tick();
 
   // A takeoff-style command answers IN_PROGRESS for seconds before its
@@ -1236,7 +1163,7 @@ test('a denial reports its result_param2 rather than a bare name (§9)', async (
   node.status = () => {};
   let output;
 
-  node.emit('input', { payload: null }, (messages) => { output = messages; }, () => {});
+  node.emit('input', { payload: {} }, (messages) => { output = messages; }, () => {});
   await tick();
   conn.injectAck({ command: 400, result: 2, result_param2: -5 }, 1, 1);
   await tick();

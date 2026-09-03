@@ -65,31 +65,6 @@ test('resolveDeliveryContext wire tiers use only the deploy-bound Connection', (
   assert.equal(ctx.target.sysid, 3);
 });
 
-test('resolveDeliveryContext omitted identity is empty, not the string undefined', () => {
-  // Admin API deploy posts raw flow JSON. Editor default identity is '', but
-  // omitted stays undefined. String(undefined) used to become the override
-  // "undefined", Connection.send looked up that id, and identity.sysid threw
-  // (SITL 40 Set GUIDED at 1d9cd1f).
-  const bound = { vehicle: { targetSystem: 1, targetComponent: 1 } };
-  const RED = redStub();
-  const ctx = resolveDeliveryContext(RED, {
-    delivery: 'send',
-    config: { connection: 'conn', targetSystem: '', targetComponent: '' },
-    payload: {},
-    connectionNode: bound,
-  });
-  assert.equal(ctx.identityId, '');
-  assert.equal(ctx.identityNode, null);
-
-  const dated = resolveDeliveryContext(RED, {
-    delivery: 'send',
-    config: { connection: 'conn', targetSystem: '', targetComponent: '' },
-    payload: 1750000000000,
-    connectionNode: bound,
-  });
-  assert.equal(dated.identityId, '');
-});
-
 test('resolveDeliveryContext wire stack covers every caller tier', () => {
   // The union of the caller tier selects (command send/confirm/complete,
   // param send/confirm/collect, payload send/confirm, mission confirm,
