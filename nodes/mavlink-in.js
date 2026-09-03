@@ -35,9 +35,8 @@ const { isBlank } = require('../lib/addressing');
  * frame: the delivery count differs every time, and with a multi-message filter
  * (#211) so does the arriving name.
  *
- * Writes suppressed inside a window are not lost: one trailing write is latched
- * for the end of it, so the badge settles on the true total within an interval
- * of the last delivery rather than freezing wherever the burst happened to be.
+ * A write suppressed inside a window is dropped: the badge names recent
+ * traffic, nothing more.
  * @type {number}
  */
 const STATUS_MIN_INTERVAL_MS = 250;

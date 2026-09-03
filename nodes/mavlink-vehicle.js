@@ -13,7 +13,7 @@
  * (§7). A mixed fleet is expressed as more connections, not more configuration
  * inside one.
  *
- * The type is always registered even if `mavlink-mappings` failed to load, so
+ * The type is always registered even if the metadata package failed to load, so
  * Connection / Build keep their standard config-node edit/add pickers. Runtime
  * dialect access then fails loud with a status badge.
  */
@@ -269,7 +269,7 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.defaultTargetSystem = Number(config.defaultTargetSystem);
     node.defaultTargetComponent = Number(config.defaultTargetComponent);
 
-    const problems = [];
+    let problem = null;
 
     /** @type {import('../lib/metadata').DialectBundle|null} */
     node._bundle = null;
@@ -290,11 +290,11 @@ module.exports = function registerMavlinkVehicle(RED) {
         catalogBaseDir: xmlCatalogBaseDir(RED),
       });
     } catch (err) {
-      problems.push(err.message.slice(0, 80));
+      problem = err.message.slice(0, 80);
     }
 
-    if (problems.length) {
-      node.status({ fill: 'red', shape: 'ring', text: capBadge(problems[0]) });
+    if (problem !== null) {
+      node.status({ fill: 'red', shape: 'ring', text: capBadge(problem) });
     } else {
       node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
     }

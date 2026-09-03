@@ -149,7 +149,6 @@ module.exports = function registerMavlinkConnection(RED) {
         },
         identities,
         defaultIdentityId: config.localIdentity,
-        boundIdentityIds: identityIds,
         signing,
         // The editor owns both thresholds (5000/15000 defaults, blank reds);
         // Number() is Node-RED serialization plumbing, not validation (§0).
@@ -224,7 +223,6 @@ function identitySnapshot(idNode, defaults, bundle) {
     heartbeat: {
       type: enumValue(bundle, 'MAV_TYPE', hb.type),
       autopilot: enumValue(bundle, 'MAV_AUTOPILOT', hb.autopilot),
-      systemStatus: enumValue(bundle, 'MAV_STATE', hb.system_status),
     },
   };
 }

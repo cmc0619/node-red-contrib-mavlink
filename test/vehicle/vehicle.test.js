@@ -6,7 +6,6 @@
  * Pain points:
  *  - bundled dialect resolution uses the registry; unknown name fails loud.
  *  - custom dialect without a bundle throws at deploy time.
- *  - firmware / family normalisation rejects unknowns to safe fallbacks.
  */
 
 const { test } = require('node:test');

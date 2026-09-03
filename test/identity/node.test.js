@@ -66,10 +66,6 @@ test('a never-opened node deploys on the editor concrete defaults, no runtime pr
   assert.deepEqual(node.getHeartbeatFields(), {
     type: 'MAV_TYPE_GCS',
     autopilot: 'MAV_AUTOPILOT_INVALID',
-    base_mode: 0,
-    custom_mode: 0,
-    system_status: 'MAV_STATE_ACTIVE',
-    mavlink_version: 3,
   });
 });
 

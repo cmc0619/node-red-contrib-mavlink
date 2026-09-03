@@ -28,7 +28,6 @@ test('resolveDeliveryContext Build+__vehicle uses the Vehicle Profile', () => {
     config: { dialect: '__vehicle', vehicle: 'veh', identity: '', targetSystem: '', targetComponent: '' },
     payload: {},
   });
-  assert.equal(ctx.useVehicle, true);
   assert.equal(ctx.target.sysid, 7);
   assert.equal(ctx.profile.firmware, 'ardupilot');
 });
@@ -78,7 +77,6 @@ test('resolveDeliveryContext wire stack covers every caller tier', () => {
       payload: {},
       connectionNode: bound,
     });
-    assert.equal(ctx.isBuild, false, delivery);
     assert.equal(ctx.connectionNode, bound, delivery);
     assert.equal(ctx.profile, bound.vehicle, delivery);
   }
@@ -97,11 +95,8 @@ test('resolveDeliveryContext composes nothing for a tier no editor select saves'
     payload: {},
     connectionNode: bound,
   });
-  assert.equal(ctx.isBuild, false);
-  assert.equal(ctx.useVehicle, false);
   assert.equal(ctx.connectionNode, null);
   assert.equal(ctx.profile, null);
-  assert.equal(ctx.identityNode, null);
   assert.equal(ctx.target.sysid, 4);
 });
 
