@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex21-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex21-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex21-inject-upload-mission",
@@ -98,6 +105,9 @@
     "items": "",
     "timeout": "1500",
     "maxRetries": "5",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 360,
     "y": 160,
     "wires": [
@@ -149,6 +159,9 @@
     "items": "",
     "timeout": "1500",
     "maxRetries": "5",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 360,
     "y": 240,
     "wires": [
@@ -200,6 +213,9 @@
     "items": "",
     "timeout": "1500",
     "maxRetries": "5",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 360,
     "y": 320,
     "wires": [
@@ -251,6 +267,9 @@
     "items": "",
     "timeout": "1500",
     "maxRetries": "5",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 360,
     "y": 400,
     "wires": [
@@ -302,6 +321,9 @@
     "items": "",
     "timeout": "1500",
     "maxRetries": "5",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 360,
     "y": 480,
     "wires": [

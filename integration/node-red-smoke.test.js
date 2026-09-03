@@ -27,7 +27,9 @@ const nodeIds = [
   'node-payload',
   'node-state',
   'node-mission',
-  'node-fanout'
+  'node-fanout',
+  'node-health',
+  'node-formation'
 ];
 
 /**
@@ -67,7 +69,7 @@ function representativeFlow() {
     editorShaped('mavlink-vehicle', {
       id: 'vehicle',
       name: 'CI vehicle',
-      vehicleFamily: 'generic',
+      vehicleFamily: 'unknown',
       firmware: 'ardupilot',
       dialect: 'common',
       dialectRevision: 'seed'
@@ -90,7 +92,6 @@ function representativeFlow() {
       messageName: 'HEARTBEAT',
       fields: '{}',
       vehicle: 'vehicle',
-      identity: 'identity',
       wires: [[]]
     }),
     editorShaped('mavlink-command', {
@@ -173,6 +174,21 @@ function representativeFlow() {
       selectionMode: 'list',
       members: [{ sysid: 1 }, { sysid: 2 }],
       identity: 'identity',
+      wires: [[], []]
+    }),
+    editorShaped('mavlink-health', {
+      id: 'node-health',
+      z: 'flow',
+      connection: 'connection',
+      identity: 'identity',
+      wires: [[], []]
+    }),
+    editorShaped('mavlink-formation', {
+      id: 'node-formation',
+      z: 'flow',
+      connection: 'connection',
+      sysids: '1,2',
+      leader: '1',
       wires: [[], []]
     })
   ];

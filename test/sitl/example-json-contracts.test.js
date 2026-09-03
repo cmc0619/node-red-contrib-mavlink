@@ -3,17 +3,18 @@
 /**
  * Shipped examples are the one hand-built flow JSON this project owns, and
  * the runtime trusts it exactly as it trusts an editor save. SITL examples
- * deploy via the Admin API as raw flow JSON, where Node-RED does not
- * materialize editor `defaults` onto omitted properties; a blank string
- * survives even an editor import, because the property exists. Values the
- * editor red-rings blank must therefore be serialized, concretely, in every
- * shipped file.
+ * deploy via the Admin API as raw flow JSON, where Node-RED neither
+ * materializes editor `defaults` onto omitted properties (DESIGN.md 14.41)
+ * nor runs a validator. So every shipped node must already be what an editor
+ * export is: every declared key present, every validator green.
  */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+
+const { loadNodeType } = require('../nodes/html-assert');
 
 const EXAMPLES_DIR = path.join(__dirname, '../../examples');
 const SITL_DIR = path.join(EXAMPLES_DIR, 'sitl');
@@ -31,35 +32,45 @@ function loadFlows() {
   );
 }
 
-/** A serialized value the runtime can read as a number: present and not blank. */
+/** A value the editor would ring as absent. */
 function blank(value) {
   return value == null || value === '';
 }
 
-test('mavlink-connection nodes serialize staleMs/expireMs (Admin-API deploy)', () => {
-  // Editor defaults are 5000/15000; Admin deploy never materializes them.
-  // Number('') === 0, so the peer-table sweep expires every peer on the first
-  // tick and directed sends fall back to "no known endpoint".
-  const missing = [];
+test('every shipped mavlink node is editor-shaped: all declared keys, every validator green', () => {
+  // The editor definition is the schema (§6): `defaults` names every key a
+  // saved node carries, and its validators are the whole protection. Admin
+  // deploy materializes nothing and validates nothing, so the JSON has to
+  // arrive already in that shape — the one integration/node-red-smoke.test.js
+  // builds with editorShaped(). Validators run against the node as saved,
+  // with the flow's other nodes visible to RED.nodes.node() for config-ref
+  // rings. The one thing flow JSON cannot carry is a credential, so a signing
+  // Connection validates with the passphrase the SITL harness injects on
+  // deploy (sitl/run-example-suite.js signingCredentialsForFlows).
+  const problems = [];
   for (const { file, nodes } of loadFlows()) {
+    const lookup = Object.fromEntries(nodes.map((n) => [n.id, n]));
+    const types = new Map();
     for (const n of nodes) {
-      if (n.type !== 'mavlink-connection') continue;
-      if (blank(n.staleMs) || blank(n.expireMs)) {
-        missing.push(`${file}:${n.name || n.id}`);
-        continue;
-      }
-      const stale = Number(n.staleMs);
-      const expire = Number(n.expireMs);
-      if (!(stale > 0) || !(expire > stale)) {
-        missing.push(`${file}:${n.name || n.id} (${n.staleMs}/${n.expireMs})`);
+      if (!n.type.startsWith('mavlink-')) continue;
+      const where = `${file}:${n.name || n.id}`;
+      if (!types.has(n.type)) types.set(n.type, loadNodeType(n.type, lookup));
+      const { defaults } = types.get(n.type);
+      const signs = n.type === 'mavlink-connection' && (n.signOutbound || n.requireSigned);
+      const self = signs ? { ...n, credentials: { has_signingPassphrase: true } } : n;
+      for (const [key, def] of Object.entries(defaults)) {
+        if (!(key in n)) {
+          problems.push(`${where}: omits ${key} (editor default ${JSON.stringify(def.value)})`);
+          continue;
+        }
+        if (def.required && blank(n[key])) problems.push(`${where}: ${key} is required and blank`);
+        if (typeof def.validate !== 'function') continue;
+        const verdict = def.validate.call(self, n[key], {});
+        if (verdict !== true) problems.push(`${where}: ${key}=${JSON.stringify(n[key])} — ${verdict}`);
       }
     }
   }
-  assert.deepEqual(
-    missing,
-    [],
-    'blank staleMs/expireMs → Number("")=0 → peer table empty at send time'
-  );
+  assert.deepEqual(problems, [], `shipped examples are not editor-shaped:\n${problems.join('\n')}`);
 });
 
 test('mavlink-in rateLimit is a string (Admin-API deploy)', () => {
@@ -74,122 +85,6 @@ test('mavlink-in rateLimit is a string (Admin-API deploy)', () => {
     }
   }
   assert.deepEqual(bad, [], 'numeric rateLimit → TypeError in parseRateLimit');
-});
-
-test('mavlink-param confirm/collect nodes serialize timeout (Admin-API deploy)', () => {
-  const missing = [];
-  for (const { file, nodes } of loadFlows()) {
-    for (const n of nodes) {
-      if (n.type !== 'mavlink-param') continue;
-      const needs =
-        n.delivery === 'confirm' || n.delivery === 'collect' || n.action === 'request-list';
-      if (!needs) continue;
-      if (blank(n.timeout)) missing.push(`${file}:${n.name || n.id}`);
-    }
-  }
-  assert.deepEqual(
-    missing,
-    [],
-    'omitted timeout → Number(undefined)=NaN → setTimeout fires immediately under Admin deploy'
-  );
-});
-
-test('sitl 40 command nodes serialize identity (Admin-API deploy)', () => {
-  // Editor default is identity: ''. String(undefined) becomes the override
-  // id "undefined" and Connection.send throws on identity.sysid (SITL 40).
-  const nodes = JSON.parse(
-    fs.readFileSync(path.join(SITL_DIR, '40-transition-events.json'), 'utf8')
-  );
-  const missing = nodes
-    .filter((n) => n.type === 'mavlink-command')
-    .filter((n) => n.identity == null)
-    .map((n) => n.name || n.id);
-  assert.deepEqual(missing, [], 'omitted identity → String(undefined) override crater');
-});
-
-test('mavlink-mission upload nodes serialize items (Admin-API deploy)', () => {
-  // The constructor parses configured items once (config.items.trim(), #371's
-  // hoist) and only Upload reads them. Editor default is items: '' — blank
-  // means "items come from the payload" — but Admin deploy keeps an omitted
-  // key absent, and undefined.trim() throws at deploy (SITL 22 went PARTIAL
-  // on exactly this).
-  const missing = [];
-  for (const { file, nodes } of loadFlows()) {
-    for (const n of nodes) {
-      if (n.type !== 'mavlink-mission' || n.operation !== 'upload') continue;
-      if (n.items == null) missing.push(`${file}:${n.name || n.id}`);
-    }
-  }
-  assert.deepEqual(
-    missing,
-    [],
-    "omitted items → config.items.trim() throws in the constructor under Admin deploy"
-  );
-});
-
-test('mavlink-out and mavlink-build nodes serialize band (Admin-API deploy)', () => {
-  // The editor always writes band ('2') and rings membership; Admin deploy
-  // keeps an omitted key absent, so config.band would read NaN and the
-  // queue's §5 switch would select nothing — a silent no-send behind a
-  // 'sent' record (#375, declined as runtime work: the flow author owns
-  // msg.band and hand-built JSON; these shipped examples are the one
-  // hand-built JSON WE own, so the contract pins the key here instead).
-  const missing = [];
-  for (const { file, nodes } of loadFlows()) {
-    for (const n of nodes) {
-      if (n.type !== 'mavlink-out' && n.type !== 'mavlink-build') continue;
-      if (n.band == null) missing.push(`${file}:${n.name || n.id}`);
-    }
-  }
-  assert.deepEqual(missing, [], 'omitted band → NaN → the queue enqueues nothing, silently');
-});
-
-test('mavlink-vehicle profiles serialize dialectRevision (Admin-API deploy)', () => {
-  // Editor default is dialectRevision: 'seed' (required). Admin deploy does not
-  // materialize omitted defaults — blank revision fails resolveDialect and
-  // Connection throws "has no loaded dialect" (#317).
-  const missing = [];
-  for (const { file, nodes } of loadFlows()) {
-    for (const n of nodes) {
-      if (n.type !== 'mavlink-vehicle') continue;
-      if (n.dialectRevision == null || n.dialectRevision === '') {
-        missing.push(`${file}:${n.name || n.id}`);
-      }
-    }
-  }
-  assert.deepEqual(
-    missing,
-    [],
-    'omitted dialectRevision → Vehicle Profile has no loaded dialect under Admin deploy'
-  );
-});
-
-test('mavlink-mission nodes serialize timeout and maxRetries', () => {
-  // The editor carries 1500 ms / 5 retries and red-rings blank; the runtime
-  // reads Number(config.x). A blank timeout arms a 0 ms step timer and a
-  // blank ceiling allows no retry, so the transfer stalls before the vehicle
-  // can answer (Codex on #429).
-  const missing = [];
-  for (const { file, nodes } of loadFlows()) {
-    for (const n of nodes) {
-      if (n.type !== 'mavlink-mission') continue;
-      if (blank(n.timeout) || blank(n.maxRetries)) missing.push(`${file}:${n.name || n.id}`);
-    }
-  }
-  assert.deepEqual(missing, [], 'blank mission timing → 0 ms step timer, no retries');
-});
-
-test('confirm-tier mavlink-move nodes serialize ackTimeout', () => {
-  // Only Send & confirm arms the AckWaiter; Number('') is 0, an ack timer
-  // that fires before the vehicle can answer.
-  const missing = [];
-  for (const { file, nodes } of loadFlows()) {
-    for (const n of nodes) {
-      if (n.type !== 'mavlink-move' || n.delivery !== 'confirm') continue;
-      if (blank(n.ackTimeout)) missing.push(`${file}:${n.name || n.id}`);
-    }
-  }
-  assert.deepEqual(missing, [], 'blank ackTimeout → 0 ms ack timer → unconfirmed before the ACK');
 });
 
 test('every shipped mission item carries current and autocontinue', () => {

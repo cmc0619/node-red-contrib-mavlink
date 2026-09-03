@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex23-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex23-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex23-inject-prep",
@@ -98,6 +105,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
     "params": "{}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 320,
     "y": 160,
     "wires": [
@@ -127,6 +138,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
     "params": "{\"1\":1,\"2\":4}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 520,
     "y": 160,
     "wires": [
@@ -165,6 +180,33 @@
     "yawRate": "",
     "rateHz": 10,
     "ttlMs": 500,
+    "identity": "",
+    "altRef": "home",
+    "speed": "",
+    "radius": "",
+    "changeMode": false,
+    "heading": "",
+    "turnRate": "",
+    "direction": "0",
+    "relative": false,
+    "roll": "",
+    "pitch": "",
+    "rollRate": "",
+    "pitchRate": "",
+    "thrust": "",
+    "stickX": "",
+    "stickY": "",
+    "stickZ": "",
+    "stickR": "",
+    "buttons": 0,
+    "throttle": "",
+    "speedType": "groundspeed",
+    "ackTimeout": "10000",
+    "aNorth": "",
+    "aEast": "",
+    "aUp": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 720,
     "y": 360,
     "wires": [

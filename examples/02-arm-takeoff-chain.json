@@ -25,18 +25,21 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex02-vehicle",
     "type": "mavlink-vehicle",
     "name": "Vehicle profile",
-    "vehicleFamily": "generic",
+    "vehicleFamily": "unknown",
     "firmware": "ardupilot",
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex02-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex02-inject",
@@ -98,6 +105,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "60000",
     "params": "{}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 320,
     "y": 160,
     "wires": [
@@ -127,6 +138,10 @@
     "unconfirmedContinue": false,
     "completionTimeout": "120000",
     "params": "{\"7\":10}",
+    "frame": "3",
+    "identity": "",
+    "dialect": "",
+    "vehicle": "",
     "x": 520,
     "y": 160,
     "wires": [

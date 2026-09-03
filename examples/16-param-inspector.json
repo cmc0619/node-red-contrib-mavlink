@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex16-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex16-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex16-param-read",
@@ -73,6 +80,11 @@
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "timeout": "10000",
+    "dialect": "",
+    "vehicle": "",
     "x": 380,
     "y": 120,
     "wires": [
@@ -100,6 +112,10 @@
     "paramIndex": -1,
     "value": "500",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "dialect": "",
+    "vehicle": "",
     "x": 380,
     "y": 200,
     "wires": [
@@ -126,6 +142,10 @@
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "dialect": "",
+    "vehicle": "",
     "x": 380,
     "y": 280,
     "wires": [

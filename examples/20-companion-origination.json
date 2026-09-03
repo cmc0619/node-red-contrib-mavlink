@@ -25,7 +25,8 @@
     "sourceSystemId": 1,
     "sourceComponentId": 191,
     "heartbeatType": "MAV_TYPE_ONBOARD_CONTROLLER",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex20-vehicle",
@@ -36,7 +37,9 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "paramDefsUrl": ""
   },
   {
     "id": "ex20-connection",
@@ -56,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex20-inject-nvf-once",
@@ -95,6 +102,7 @@
     "tier": "send",
     "band": "2",
     "repeatMs": 1000,
+    "dialect": "",
     "x": 340,
     "y": 160,
     "wires": [

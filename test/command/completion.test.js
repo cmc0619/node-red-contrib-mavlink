@@ -225,3 +225,20 @@ test('TAKEOFF completion reports missing AMSL position data for an absolute fram
   assert.equal(res.done, false);
   assert.match(res.detail, /no AMSL position data/);
 });
+
+
+test('LAND completion without position: disarmed in MAV_STATE_STANDBY is landed', () => {
+  const pt = new StubPeerTable();
+  pt.setComponent(3, 1, { armed: false, systemStatus: 3 });
+  const res = checkCompletion(COMPLETION.LAND, [0, 0, 0, 0, 0, 0, 0], pt, 3, 1);
+  assert.equal(res.done, true);
+});
+
+test('LAND completion without position: disarmed in MAV_STATE_POWEROFF (7) is not landed', () => {
+  // Neither stack reports POWEROFF on landing; a vehicle shutting down is not
+  // a completed LAND.
+  const pt = new StubPeerTable();
+  pt.setComponent(3, 1, { armed: false, systemStatus: 7 });
+  const res = checkCompletion(COMPLETION.LAND, [0, 0, 0, 0, 0, 0, 0], pt, 3, 1);
+  assert.equal(res.done, false);
+});
