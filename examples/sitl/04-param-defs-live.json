@@ -25,7 +25,8 @@
     "sourceSystemId": 255,
     "sourceComponentId": 190,
     "heartbeatType": "MAV_TYPE_GCS",
-    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID"
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000
   },
   {
     "id": "ex08-vehicle",
@@ -37,7 +38,8 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "paramDefsUrl": "",
-    "dialectRevision": "seed"
+    "dialectRevision": "seed",
+    "additionalDialects": ""
   },
   {
     "id": "ex08-connection",
@@ -57,7 +59,11 @@
     "linkId": 0,
     "staleMs": "5000",
     "expireMs": "15000",
-    "disabled": false
+    "disabled": false,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600"
   },
   {
     "id": "ex08-inject-read",
@@ -99,6 +105,11 @@
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_INT32",
+    "identity": "",
+    "lookup": "name",
+    "timeout": "10000",
+    "dialect": "",
+    "vehicle": "",
     "x": 420,
     "y": 160,
     "wires": [
@@ -153,6 +164,10 @@
     "value": "1",
     "paramType": "MAV_PARAM_TYPE_INT32",
     "timeout": "30000",
+    "identity": "",
+    "lookup": "name",
+    "dialect": "",
+    "vehicle": "",
     "x": 440,
     "y": 280,
     "wires": [
@@ -204,6 +219,10 @@
     "paramIndex": -1,
     "value": "",
     "paramType": "MAV_PARAM_TYPE_REAL32",
+    "identity": "",
+    "lookup": "name",
+    "dialect": "",
+    "vehicle": "",
     "x": 400,
     "y": 400,
     "wires": [
