@@ -150,7 +150,7 @@ test('PREFLIGHT_REBOOT_SHUTDOWN (reboot_autopilot) has noAutoRetry=true', () => 
 });
 
 test('Arm has noAutoRetry=false (idempotent)', () => {
-  assert.equal(getPreset('arm').noAutoRetry, false);
+  assert.ok(!getPreset('arm').noAutoRetry);
 });
 
 // ── Safety group ───────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ test('Set Mode has completion key COMPLETION.SET_MODE', () => {
 });
 
 test('Orbit has no completion key (null)', () => {
-  assert.equal(getPreset('orbit').completionKey, null);
+  assert.ok(getPreset('orbit').completionKey == null);
 });
 
 test('presetGroups projects completionKey — the editor gates the completion tier on it', () => {
@@ -226,10 +226,10 @@ test('every preset has the required shape fields', () => {
     assert.ok(typeof p.name === 'string', `${p.id}: name`);
     assert.ok(typeof p.command === 'string', `${p.id}: command`);
     assert.ok(typeof p.commandId === 'number', `${p.id}: commandId`);
-    assert.ok(typeof p.pinnedParams === 'object', `${p.id}: pinnedParams`);
+    assert.ok(p.pinnedParams === undefined || typeof p.pinnedParams === 'object', `${p.id}: pinnedParams`);
     assert.ok(Array.isArray(p.exposedParams), `${p.id}: exposedParams`);
-    assert.ok(typeof p.noAutoRetry === 'boolean', `${p.id}: noAutoRetry`);
-    assert.ok(p.completionKey === null || typeof p.completionKey === 'string',
+    assert.ok(p.noAutoRetry === undefined || p.noAutoRetry === true, `${p.id}: noAutoRetry`);
+    assert.ok(p.completionKey === undefined || typeof p.completionKey === 'string',
       `${p.id}: completionKey`);
   }
 });
