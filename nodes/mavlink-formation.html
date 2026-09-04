@@ -96,7 +96,8 @@
             || 'must be a number of milliseconds >= 0 — blank rides as an unthrottled 0';
         },
       },
-      ...RED.mavlink.ackDefaults,
+      // Timeout and Retries rows are always on screen here.
+      ...RED.mavlink.ackDefaults(() => true),
     },
     inputs: 1,
     outputs: 2,

@@ -626,11 +626,15 @@
         validate: RED.mavlink.oneOf(['groundspeed', 'airspeed', 'climb', 'descent']),
       },
 
-      // Blank inherits the AckWaiter default (10 s), like mavlink-command.
-      // Zero or negative is not a shorter wait, it is an ack timer that fires
-      // before the vehicle can answer, so the wait must be positive. Two args
-      // so the reason renders (§14).
-      ...RED.mavlink.ackDefaults,
+      // ACK timeout and Max retries exist only where a COMMAND_ACK is waited
+      // on: the command-path actions (Go to, Turn, Speed) on Send & confirm.
+      // The shared definition gates on that, so a value cleared there never
+      // reds a Build, Send or Stream node that cannot show the row.
+      ...RED.mavlink.ackDefaults((node) => {
+        const action = RED.mavlink.liveOr(node, '#node-input-action', node.action);
+        return ['goto', 'turn', 'speed'].indexOf(action) !== -1
+          && RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) === 'confirm';
+      }),
       // Broadcast (0) is refused only where an ack is actually awaited: the
       // Send & confirm tier, which the delivery rebuild offers on the acked
       // actions (Go to, Turn, Speed). Send/Stream/Build stay broadcast-legal,

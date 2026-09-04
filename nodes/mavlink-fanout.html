@@ -156,7 +156,8 @@
       },
       stopOnError: { value: false },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
-      ...RED.mavlink.ackDefaults,
+      // Timeout and Retries rows are always on screen here.
+      ...RED.mavlink.ackDefaults(() => true),
     },
     inputs: 1,
     outputs: 2,
