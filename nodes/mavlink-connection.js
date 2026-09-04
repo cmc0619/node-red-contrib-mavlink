@@ -21,7 +21,7 @@
 
 const { Connection, STATE, PeerTable } = require('../lib/connection');
 const { listSerialPorts } = require('../lib/connection/transport/serial');
-const { resolveIdentity } = require('../lib/identity');
+const { resolveIdentity } = require('../lib/identity/resolve');
 const { capBadge } = require('../lib/delivery');
 
 /** Admin endpoint path listing host serial ports for the editor (§6). */

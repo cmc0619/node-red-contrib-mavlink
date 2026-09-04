@@ -8,7 +8,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveIdentity } = require('../../lib/identity');
+const { resolveIdentity } = require('../../lib/identity/resolve');
 
 test('an override is returned as given', () => {
   assert.deepEqual(
