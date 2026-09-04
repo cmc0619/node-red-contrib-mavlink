@@ -35,6 +35,7 @@
 const {
   makeStatusRecord,
   getPreset,
+  presetGroups,
   buildParamArray,
   mergeParams,
   ackWaiterFor,
@@ -89,10 +90,10 @@ module.exports = function registerMavlinkCommand(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // Active transaction trackers — at most one in flight per node
-    // (lib/command cancelSlot).
-    const waiterSlot = cancelSlot();
-    const completionSlot = cancelSlot();
+    // The one in-flight transaction per node — the ack wait, then on Complete
+    // the completion wait that follows it (lib/command cancelSlot). The two
+    // never coexist: the completion wait starts only after the ack settled.
+    const slot = cancelSlot();
     // Bumped by close and by each new input: a run that resumes from its ack
     // await into a stale generation was swept before it could record its
     // completion handle, and must not start (or keep) a live wait.
@@ -263,15 +264,10 @@ module.exports = function registerMavlinkCommand(RED) {
       // The editor owns the defaults and the number rings.
       const timeoutMs = Number(config.timeout);
       const maxRetries = Number(config.maxRetries);
-      // Complete's poll timeout resolves here too — before the send, not in
-      // the post-ack continuation where it used to sit: by then the vehicle
-      // has already accepted and begun executing the command, so a garbage
-      // value refused after the fact (#309 review round). Gated on the tier
-      // so a cleared value cannot red a Build/Send/Confirm node that never
-      // reads it (the same liveOr rule the editors follow).
-      const completionTimeoutMs = delivery === 'complete'
-        ? Number(config.completionTimeout)
-        : null;
+      // Complete's poll timeout resolves here too, before the send: by the
+      // post-ack continuation the vehicle has already begun executing the
+      // command. Only the Complete tier reads it.
+      const completionTimeoutMs = Number(config.completionTimeout);
 
       const payload = msg.payload;
       const { target, identityId, profile } = resolveDeliveryContext(RED, {
@@ -378,9 +374,7 @@ module.exports = function registerMavlinkCommand(RED) {
        */
       async function confirmTier() {
         // ── Delivery: Confirm / Complete ────────────────────────────────────
-        // Cancel any in-flight waiter for this node before starting a new one.
-        waiterSlot.cancel();
-        completionSlot.cancel();
+        // slot.run below cancels whatever wait the previous input left.
         const myGen = ++_generation;
 
         applyActionStatus(node, 'sending', `${displayName}\u2026`);
@@ -388,7 +382,7 @@ module.exports = function registerMavlinkCommand(RED) {
         // The operator's configured carrier (§9): a required choice, so the
         // wire format is stated intent — never a guess. The ack it earns,
         // wrong-carrier codes included, is the result.
-        const ackOutcome = await waiterSlot.run(ackWaiterFor(connNode, buildCarrierMessage(configuredCarrier), {
+        const ackOutcome = await slot.run(ackWaiterFor(connNode, buildCarrierMessage(configuredCarrier), {
           band: BAND.CONTROL,
           target,
           identityId,
@@ -477,7 +471,7 @@ module.exports = function registerMavlinkCommand(RED) {
               timeoutMs: completionTimeoutMs,
             });
             if (myGen === _generation) {
-              completionSlot.active = completionWait;
+              slot.active = completionWait;
             } else {
               // The ack settled and a close or new input ran in the same
               // synchronous stack: the sweep fired before this continuation
@@ -490,7 +484,7 @@ module.exports = function registerMavlinkCommand(RED) {
             try {
               compOutcome = await completionWait.promise;
             } finally {
-              completionSlot.release(completionWait);
+              slot.release(completionWait);
             }
 
             // A redeploy cancelled the wait (close() calls the completion
@@ -564,8 +558,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
     node.on('close', (done) => {
       _generation += 1;
-      waiterSlot.cancel();
-      completionSlot.cancel();
+      slot.cancel();
       done();
     });
   }
@@ -574,7 +567,6 @@ module.exports = function registerMavlinkCommand(RED) {
    * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
    * Registered with the type; Node-RED calls this factory once per process.
    */
-  const { presetGroups } = require('../lib/command');
   const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
   RED.httpAdmin.get(
