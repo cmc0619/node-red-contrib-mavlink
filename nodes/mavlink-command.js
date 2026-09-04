@@ -34,7 +34,6 @@
 
 const {
   makeStatusRecord,
-  MAV_RESULT,
   getPreset,
   buildParamArray,
   mergeParams,
@@ -284,11 +283,17 @@ module.exports = function registerMavlinkCommand(RED) {
 
       const startMs = Date.now();
 
+      /**
+       * This input's status record: command, target and the elapsed time
+       * since the input arrived, which an ack outcome's own measure or a
+       * completion wait overrides through `fields`.
+       */
       function makeRecord(fields) {
         return makeStatusRecord(node.type, {
           command: commandName,
           commandId,
           target,
+          elapsed: Date.now() - startMs,
           ...fields,
         });
       }
@@ -337,9 +342,6 @@ module.exports = function registerMavlinkCommand(RED) {
           // consumers, consistent with the other action nodes.
           const rec = makeRecord({
             result: 'built',
-            resultCode: null,
-            confirmedBy: 'none',
-            elapsed: Date.now() - startMs,
             detail: 'build tier: message constructed, not sent',
           });
           emitStatus(rec, send, true, message);
@@ -350,7 +352,7 @@ module.exports = function registerMavlinkCommand(RED) {
           const message = buildCarrierMessage(configuredCarrier);
           applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
           connNode.send(message, { band: BAND.CONTROL, target, identityId });
-          const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
+          const rec = makeRecord({ result: 'sent' });
           applyActionStatus(node, 'ok', `sent ${displayName}`);
           emitStatus(rec, send, true, message);
           done();
@@ -436,10 +438,8 @@ module.exports = function registerMavlinkCommand(RED) {
               // Ack was lost on the return leg; the command ran.
               const rec = makeRecord({
                 result: 'accepted',
-                resultCode: null,
                 confirmedBy: 'state',
                 retries: ackOutcome.retries,
-                elapsed: Date.now() - startMs,
                 detail: `ack timeout but ${stateCheck.detail}`,
               });
               applyActionStatus(node, 'ok', `${displayName} accepted`);
@@ -452,10 +452,7 @@ module.exports = function registerMavlinkCommand(RED) {
           // Genuinely unknown — report unconfirmed.
           const rec = makeRecord({
             result: 'unconfirmed',
-            resultCode: null,
-            confirmedBy: 'none',
             retries: ackOutcome.retries,
-            elapsed: Date.now() - startMs,
             detail: ackOutcome.detail,
           });
           applyActionStatus(node, 'error', `timeout ${displayName}`);
@@ -509,30 +506,26 @@ module.exports = function registerMavlinkCommand(RED) {
 
             if (compOutcome.success) {
               const rec = makeRecord({
-                result: 'accepted',
-                resultCode: MAV_RESULT.ACCEPTED,
-                resultParam2: ackOutcome.resultParam2,
+                ...ackRecordFields(ackOutcome),
                 // 'state' when the peer table confirmed; 'ack' when the
                 // condition was unverifiable and the accepted ack is the
                 // whole evidence (base-only SET_MODE).
                 confirmedBy: compOutcome.confirmedBy,
-                retries: ackOutcome.retries,
                 elapsed: Date.now() - startMs,
                 detail: compOutcome.detail,
               });
               applyActionStatus(node, 'ok', `${displayName} done`);
               emitStatus(rec, send, true, rec);
             } else {
+              // This branch is gated on an ACCEPTED ack: the vehicle answered,
+              // then the state never arrived. The ack's resultParam2 and
+              // retry count ride through; its resultCode does not — null is
+              // the record's "no terminal verdict" (CodeRabbit).
               const rec = makeRecord({
+                ...ackRecordFields(ackOutcome),
                 result: 'timeout',
                 resultCode: null,
-                // This branch is gated on an ACCEPTED ack: the vehicle answered,
-                // then the state never arrived. `null` is reserved for settles
-                // with no ack at all, so the ack's field rides through here the
-                // same way its retry count does (CodeRabbit).
-                resultParam2: ackOutcome.resultParam2,
                 confirmedBy: 'none',
-                retries: ackOutcome.retries,
                 elapsed: Date.now() - startMs,
                 detail: compOutcome.detail,
               });
@@ -545,7 +538,9 @@ module.exports = function registerMavlinkCommand(RED) {
             return;
           }
 
-          // Confirm tier or complete tier with no condition: accepted is complete.
+          // Confirm tier or complete tier with no condition: accepted is
+          // complete, and the waiter's own elapsed (first send to terminal
+          // ack) is the record's.
           const rec = makeRecord(ackRecordFields(ackOutcome));
           applyActionStatus(node, 'ok', `${displayName} accepted`);
           emitStatus(rec, send, true, rec);
