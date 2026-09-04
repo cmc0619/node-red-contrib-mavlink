@@ -40,9 +40,10 @@ test('shared field keys map to colliding enum families, so a stashed id must not
   // This is why `mavlink-payload.html` keys its saved-value lookup on the enum
   // family (`savedForEnum`) rather than the field name. Any replacement dialog
   // has to do the same; the shape of the form is not enough.
-  const metadata = require('../../lib/metadata');
-  const bundle = metadata.loadBundled('ardupilotmega');
-  const catalog = metadata.catalogFromBundle(bundle);
+  const { loadBundled } = require('../../lib/metadata/bundled');
+  const { catalogFromBundle } = require('../../lib/metadata/commands-list');
+  const bundle = loadBundled('ardupilotmega');
+  const catalog = catalogFromBundle(bundle);
 
   const sharedKeys = {
     mode: ['camera|set-mode|', 'gimbal|set-mode|'],

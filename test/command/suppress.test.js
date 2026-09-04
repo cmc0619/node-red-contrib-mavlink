@@ -74,7 +74,7 @@ test('string "false" payload is NOT suppressed (strict comparison)', () => {
 // ── AckWaiter is not started on suppress ──────────────────────────────────
 
 test('AckWaiter.start is never called when payload is false', () => {
-  const { AckWaiter } = require('../../lib/command');
+  const { AckWaiter } = require('../../lib/command/ack');
 
   let started = false;
   const waiter = new AckWaiter({

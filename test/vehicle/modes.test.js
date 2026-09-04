@@ -17,7 +17,7 @@ const {
   px4MainMode,
   px4SubMode,
 } = require('../../lib/vehicle/modes');
-const { loadBundled } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
 
 const AP_BUNDLE = loadBundled('ardupilotmega');
 

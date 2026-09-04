@@ -213,7 +213,7 @@ test('a mid-transfer INVALID_SEQUENCE ack is dropped and the upload completes (A
 });
 
 test('global-frame item x/y are scaled to degE7 in the INT carrier (§9 coordinate frames)', () => {
-  const { buildItemInt } = require('../../lib/mission');
+  const { buildItemInt } = require('../../lib/mission/items');
   const msg = buildItemInt({ frame: 3, command: 16, x: 47.397742, y: 8.545594, z: 25 }, TARGET, 0, 0);
   assert.equal(msg.name, 'MISSION_ITEM_INT');
   assert.equal(msg.fields.x, Math.round(47.397742 * 1e7));

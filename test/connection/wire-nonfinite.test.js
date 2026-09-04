@@ -9,7 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { loadBundled } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
 const { createWire } = require('../../lib/connection/wire');
 const { buildCommandInt, buildCommandLong } = require('../../lib/command/carrier');
 

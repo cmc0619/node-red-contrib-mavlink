@@ -23,7 +23,7 @@ const {
   makeRejectedHandler,
   applyStatus,
 } = require('../../nodes/mavlink-connection');
-const { STATE } = require('../../lib/connection');
+const { STATE } = require('../../lib/connection/runtime');
 const { SigningState, timestampFromMs } = require('../../lib/connection/signing');
 const BADGE_MAX = 24; // §6 badge cap, as the runtime produces it
 

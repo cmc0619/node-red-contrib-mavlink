@@ -2,10 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {
-  resolveDeliveryContext,
-  dialectFromConnection,
-} = require('../../lib/addressing');
+const { dialectFromConnection } = require('../../lib/addressing/dialect');
+const { resolveDeliveryContext } = require('../../lib/addressing/delivery-context');
 
 function redStub(nodes = {}) {
   return {

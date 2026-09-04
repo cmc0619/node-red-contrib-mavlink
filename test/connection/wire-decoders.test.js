@@ -8,7 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { loadBundled } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
 const { createWire } = require('../../lib/connection/wire');
 
 const EP_A = { address: '10.0.0.1', port: 14550 };

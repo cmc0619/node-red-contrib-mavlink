@@ -13,7 +13,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { AckWaiter, MAV_RESULT } = require('../../lib/command');
+const { MAV_RESULT } = require('../../lib/command/status-record');
+const { AckWaiter } = require('../../lib/command/ack');
 
 function stubConn() {
   const handlers = [];

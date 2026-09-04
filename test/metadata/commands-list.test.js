@@ -3,11 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const {
-  listCommandsCatalog,
-  catalogFromBundle,
-  loadBundled,
-} = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
+const { listCommandsCatalog, catalogFromBundle } = require('../../lib/metadata/commands-list');
 const { commandLabel, isHiddenParam, enumOptionLabel } = require('../../lib/metadata/commands-list');
 
 test('commandLabel shows the full command name and value in parentheses (§6)', () => {

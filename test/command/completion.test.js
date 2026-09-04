@@ -12,7 +12,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { checkCompletion, waitForCompletion } = require('../../lib/command');
+const { checkCompletion, waitForCompletion } = require('../../lib/command/completion');
 const { COMPLETION } = require('../../lib/command/presets');
 const { StubPeerTable } = require('../../lib/command/test/stubs/connection');
 

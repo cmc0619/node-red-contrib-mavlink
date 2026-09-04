@@ -10,7 +10,7 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { MAV_RESULT } = require('../../lib/command');
+const { MAV_RESULT } = require('../../lib/command/status-record');
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 25));
 

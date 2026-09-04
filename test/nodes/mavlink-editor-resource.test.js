@@ -1360,7 +1360,7 @@ test('formRow mirrors the control title onto the label; width is the caller\'s',
 
 test('splitCompIdsByTopic suggests components the dialect names after the device', () => {
   const { RED } = loadResource();
-  const { loadBundled } = require('../../lib/metadata');
+  const { loadBundled } = require('../../lib/metadata/bundled');
   const entries = loadBundled('ardupilotmega').enums.MAV_COMPONENT.entries;
 
   // No table: payload topics are device names, so upstream's own naming does

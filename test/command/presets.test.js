@@ -22,7 +22,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getPreset, buildParamArray, mergeParams, presetGroups } = require('../../lib/command');
+const { getPreset, buildParamArray, presetGroups } = require('../../lib/command/presets');
+const { mergeParams } = require('../../lib/command/merge-params');
 const { PRESETS, COMPLETION } = require('../../lib/command/presets');
 
 // ── Helpers ────────────────────────────────────────────────────────────────

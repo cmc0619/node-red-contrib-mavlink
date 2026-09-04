@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { Connection, STATE } = require('../../lib/connection');
+const { Connection, STATE } = require('../../lib/connection/runtime');
 const { BAND } = require('../../lib/connection/bands');
 const { mockDgram, fakeWire, frameBuffer, fakeTimers, fakeClock } = require('./helpers');
 
@@ -162,7 +162,7 @@ test('a sign-outbound link with no key refuses inside send(), through the real s
   // refusal in send() synchronously — nothing is enqueued, nothing reported
   // sent, no frame reaches the socket.
   const { createWire } = require('../../lib/connection/wire');
-  const { loadBundled } = require('../../lib/metadata');
+  const { loadBundled } = require('../../lib/metadata/bundled');
   const { connection, dg } = build(
     { signing: { linkId: 0, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: false, key: null } },
     { wire: createWire({ bundle: loadBundled('minimal') }) }

@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { compileXml } = require('../../lib/metadata');
+const { compileXml } = require('../../lib/metadata/compile');
 
 /**
  * Custom-dialect XML compiler pain points (DESIGN.md §4, §13): include order,
