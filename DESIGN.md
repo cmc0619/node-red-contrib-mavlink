@@ -523,13 +523,13 @@ PX4-first validation never caught it.
 **14.75 Blank preset coordinates are refused per preset, because the dialect cannot tell you.** ✔ 🧪
 `hasLocation`/`isDestination` do not separate "blank means here" (takeoff, land) from
 "blank means the Gulf of Guinea" (26 commands carry both flags). The rule rides the
-preset (`requireLocation` on Go To/Orbit; `unless param1=1` on Set Home) and runs on the
-operator's input *before* zero-fill; an explicit 0 still sends. Blank must survive to
-the check: `mergeParams`' `isBlank` and fan-out's builder treat blank/whitespace as
-absent. Since #286 the preset coordinate rule lives in the editor
+preset (`unless param1=1` on Set Home) and runs on the operator's input *before*
+zero-fill; an explicit 0 still sends. Blank must survive to the check:
+`mergeParams`' `isBlank` and fan-out's builder treat blank/whitespace as absent.
+Since #286 the preset coordinate rule lives in the editor
 (`nodes/mavlink-command.html` `params` validator). **Advanced mode is deliberately
 unguarded — that is the escape hatch; do not re-raise.**
-*Check:* `node --test test/command/presets.test.js`; `rg requireLocation nodes/mavlink-command.html`.
+*Check:* `node --test test/command/presets.test.js`; `rg PRESET_LOCATION nodes/mavlink-command.html`.
 
 **14.76 Local-frame param5/6 are metres, not subject to the ±90/±180 degree gate.** ✔ 🧪
 The editor check reads the selected MAV_FRAME; known local frames skip the degree gate,
