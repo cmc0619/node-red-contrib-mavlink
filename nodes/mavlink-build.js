@@ -39,8 +39,8 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
-const { dialectForTier } = require('../lib/addressing');
-const { catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata');
+const { dialectForTier } = require('../lib/addressing/dialect');
+const { catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata/messages-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 /** Module-scope guard — the constructor is recreated each factory call. */

@@ -32,35 +32,28 @@
  *   msg.payload === false → suppress (§9 "What triggers an action node")
  */
 
+const { makeStatusRecord } = require('../lib/command/status-record');
+const { getPreset, presetGroups, buildParamArray } = require('../lib/command/presets');
+const { mergeParams } = require('../lib/command/merge-params');
+const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { checkCompletion, waitForCompletion } = require('../lib/command/completion');
 const {
-  makeStatusRecord,
-  getPreset,
-  presetGroups,
-  buildParamArray,
-  mergeParams,
-  ackWaiterFor,
-  ackRecordFields,
-  cancelSlot,
-  checkCompletion,
-  waitForCompletion,
   buildCommandLong,
   buildCommandInt,
   CARRIER,
   intCoordKinds,
   resolveFrame,
-} = require('../lib/command');
+} = require('../lib/command/carrier');
 
 const {
   DO_SET_MODE,
   MODE_FLAG_CUSTOM_MODE_ENABLED,
   setModeParams,
 } = require('../lib/vehicle/modes');
-const { catalogFromBundle, listCommandsCatalog } = require('../lib/metadata');
-const {
-  resolveDeliveryContext,
-  dialectForTier,
-  isBlank,
-} = require('../lib/addressing');
+const { catalogFromBundle, listCommandsCatalog } = require('../lib/metadata/commands-list');
+const { isBlank } = require('../lib/addressing/resolve');
+const { dialectForTier } = require('../lib/addressing/dialect');
+const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
   shouldSuppress,
   applyActionStatus,
