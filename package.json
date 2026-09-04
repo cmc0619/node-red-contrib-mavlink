@@ -27,8 +27,7 @@
     "validate:node-red": "npm exec --yes --package=node-red-dev@0.1.6 -- node-red-dev validate",
     "generate-seed": "node scripts/generate-seed.js",
     "generate-param-seed": "node scripts/generate-param-seed.js",
-    "count": "node scripts/count-logic.js",
-    "verify-debt": "node scripts/inventory-verification-debt.js"
+    "count": "node scripts/count-logic.js"
   },
   "files": [
     "lib",

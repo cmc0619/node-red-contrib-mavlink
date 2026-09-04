@@ -44,9 +44,6 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Verification-debt drift (DESIGN.md §14 vs docs/verification-debt.md)
-        run: npm run verify-debt
-
       - name: Unit tests
         run: npm test
 

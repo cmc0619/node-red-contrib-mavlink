@@ -11,7 +11,7 @@ Settled decisions live in DESIGN.md §14. This file is for work, not rulings.
 ## Verification debt — post-1.0 measurement queue
 
 Inventoried in `docs/verification-debt.md`; release posture in `DESIGN.md` §14.132
-(documented, not blocking 1.0.0). Drift check: `node scripts/inventory-verification-debt.js`.
+(documented, not blocking 1.0.0).
 
 The 2026-08-22 rig sweep (#380) closed the measure-first queue and the swarm
 question (§14.133 — keep). Remaining open subclaim: **14.95-terrain** (terrain

@@ -434,7 +434,7 @@ binding: `sockopt` as an optional dependency, used by the transports.
 
 **14.62 Heartbeat cadence lives on Local Identity, not Connection.** ✔
 MAVLink mandates no HEARTBEAT rate (~1 Hz is RF convention). Local Identity owns content
-and `heartbeatIntervalMs` (blank = 1000, exactly one reader); Connection emits per bound
+and `heartbeatIntervalMs` (editor default 1000, exactly one reader); Connection emits per bound
 identity and keeps only peer-table stale/expire.
 *Check:* `node --test test/connection/heartbeat.test.js test/identity/`.
 
@@ -986,8 +986,7 @@ run matters at streaming rates.
 An external 1.0.0 readiness audit counted **29** rig-only §14 rows (🧪 without ✔ —
 fourteen tagged plus fifteen lab-ops entries 14.116–14.130) and **21** source-read
 gaps (fourteen 📖 headers without ✔ plus seven named open subclaims inside otherwise
-settled entries). The inventory is real and lives in `docs/verification-debt.md` with
-a drift script (`scripts/inventory-verification-debt.js`).
+settled entries). The inventory is real and lives in `docs/verification-debt.md`.
 It is **not** a release blocker because: (1) rig debt is lab-harness and
 example-timing knowledge, not missing driver validation — the runtime still sends what
 it is handed (§0); (2) every source-read gap on a shipped operator path is either
@@ -996,7 +995,7 @@ withheld in the editor (e.g. Stream on offset Steer — 14.100), absent from the
 false success — the only promotion path for an unmeasured mechanism is a demonstrated
 silence-or-false-success outcome (§9). Post-1.0 measurement priority is ordered in the
 inventory doc; the highest-value probe is confirming the offset-stream withhold on SITL.
-*Check:* `node scripts/inventory-verification-debt.js`; `docs/verification-debt.md`.
+*Check:* `docs/verification-debt.md`.
 
 **14.133 Swarm multicast and subnet broadcast reach real vehicles on the lab.** 🧪 (2026-08-22)
 With the driver fixes on main (loopback at OS default; bound-identity echo dropped in

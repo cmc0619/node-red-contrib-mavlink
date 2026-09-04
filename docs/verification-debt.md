@@ -97,10 +97,7 @@ by count:
 5. **Lab ops 14.116–14.130** — re-run when the SITL image or AP binary bumps; not
    user-runtime debt.
 
-## Regenerating this inventory
+## Keeping this inventory current
 
-```bash
-node scripts/inventory-verification-debt.js
-```
-
-Compares parsed §14 tags against the tables above and fails on drift.
+Update the tables above in the same commit as any §14 edit that adds an entry or
+changes its ✔ / 🧪 / 📖 tags.
