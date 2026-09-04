@@ -96,18 +96,7 @@
             || 'must be a number of milliseconds >= 0 — blank rides as an unthrottled 0';
         },
       },
-      timeoutMs: {
-        value: 10000,
-        // RED.validators.number() accepts 0 and negatives, and the input's
-        // min="1" is not enforced on save: a saved 0 arms the confirm wait at
-        // 0 ms, so every member reports unconfirmed before an ack could
-        // arrive — silently blaming the vehicles for a config bug.
-        validate(v, _opt) {
-          const n = Number(v);
-          if (Number.isInteger(n) && n >= 1) return true;
-          return 'must be a whole number of milliseconds >= 1';
-        }
-      }
+      ...RED.mavlink.ackDefaults,
     },
     inputs: 1,
     outputs: 2,
@@ -150,6 +139,7 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
   <div class="form-row"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
+  <div class="form-row"><label for="node-input-maxRetries">Retries</label><input type="number" id="node-input-maxRetries" min="0"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-formation">

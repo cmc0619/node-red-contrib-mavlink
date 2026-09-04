@@ -431,7 +431,8 @@
       [
         "sitl42-leader-move-status"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl42-in-leader",
@@ -505,7 +506,8 @@
       [
         "sitl42-reanchor-status"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl42-watchdog",

@@ -375,7 +375,8 @@
       [
         "sitl27-st-spread"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl27-d-spread",
@@ -431,7 +432,8 @@
       [
         "sitl27-st-s0"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl27-d-s0",
@@ -487,7 +489,8 @@
       [
         "sitl27-st-s45"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl27-d-s45",
@@ -543,7 +546,8 @@
       [
         "sitl27-st-s90"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl27-d-s90",
@@ -599,7 +603,8 @@
       [
         "sitl27-st-s135"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl27-d-s135",
@@ -655,7 +660,8 @@
       [
         "sitl27-st-s180"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl27-d-s180",
