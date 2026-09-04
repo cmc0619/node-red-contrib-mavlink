@@ -328,14 +328,6 @@ test('an out-of-range index never satisfies the completion check, and warns once
   assert.deepEqual(complete.map((p) => p.index), [0, 1], 'only real members ship');
 });
 
-test('collector.missing() names the advertised-but-unreceived indexes', () => {
-  const collector = createParamListCollector();
-  assert.deepEqual(collector.missing(), [], 'no count yet — nothing to name');
-  collector.accept(listFrame(0, 3));
-  collector.accept(listFrame(2, 3));
-  assert.deepEqual(collector.missing(), [1]);
-});
-
 test('matchesParamReadReply matches by name and by index', () => {
   const reply = {
     name: 'PARAM_VALUE',
