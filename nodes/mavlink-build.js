@@ -76,7 +76,7 @@ module.exports = function registerMavlinkBuild(RED) {
     const repeatMs = Number(config.repeatMs);
     let repeatTimer = null;
 
-    /** @type {import('../lib/metadata').DialectBundle} */
+    /** @type {import('../lib/metadata/compile').DialectBundle} */
     const bundle = dialectForTier(RED, tier, config, connectionNode);
     const messageMeta = bundle.messages[messageName];
     const bigIntFields = messageMeta.fields

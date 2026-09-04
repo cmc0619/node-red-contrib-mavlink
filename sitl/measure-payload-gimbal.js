@@ -74,8 +74,9 @@ function startVehicle(parmBody) {
 
 async function probe() {
   const script = `
-    const { Connection, BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
-    const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata'))});
+    const { Connection } = require(${JSON.stringify(path.join(ROOT, 'lib/connection/runtime'))});
+    const { BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection/bands'))});
+    const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata/bundled'))});
     const { buildPayloadMessage } = require(${JSON.stringify(path.join(ROOT, 'lib/payload'))});
     const { buildCommandLong } = require(${JSON.stringify(path.join(ROOT, 'lib/command/carrier'))});
     const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });

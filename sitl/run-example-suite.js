@@ -1296,8 +1296,9 @@ function runApControlScript(body, timeoutMs = 20000, opts = {}) {
   const remotePort = Number(opts.remotePort) > 0 ? Number(opts.remotePort) : 14551;
   const targetSystem = Number(opts.targetSystem) > 0 ? Number(opts.targetSystem) : 1;
   const script = `
-    const { Connection, BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
-    const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata'))});
+    const { Connection } = require(${JSON.stringify(path.join(ROOT, 'lib/connection/runtime'))});
+    const { BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection/bands'))});
+    const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata/bundled'))});
     const { buildCommandLong } = require(${JSON.stringify(path.join(ROOT, 'lib/command/carrier'))});
     const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

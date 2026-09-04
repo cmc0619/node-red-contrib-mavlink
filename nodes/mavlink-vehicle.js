@@ -212,7 +212,7 @@ module.exports = function registerMavlinkVehicle(RED) {
 
     let problem = null;
 
-    /** @type {import('../lib/metadata').DialectBundle|null} */
+    /** @type {import('../lib/metadata/compile').DialectBundle|null} */
     node._bundle = null;
 
     try {
@@ -243,7 +243,7 @@ module.exports = function registerMavlinkVehicle(RED) {
     /**
      * The compiled DialectBundle for this profile.
      *
-     * @returns {import('../lib/metadata').DialectBundle}
+     * @returns {import('../lib/metadata/compile').DialectBundle}
      * @throws {Error} when the configured dialect and revision did not compile
      */
     node.getDialect = () => {
