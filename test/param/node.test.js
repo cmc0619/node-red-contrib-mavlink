@@ -372,7 +372,7 @@ test('mavlink-param build tier inherits from config.vehicle (sysid 77, compid 78
 });
 
 test('mavlink-param Build concrete dialect uses config firmware', () => {
-  const { paramValueToWire } = require('../../lib/codec');
+  const { paramValueToWire } = require('../../lib/codec/param-union');
   const RED = redStub({});
   require('../../nodes/mavlink-param')(RED);
   const Node = RED.nodes.types['mavlink-param'];
@@ -429,7 +429,7 @@ test('mavlink-param payload firmware overrides Build concrete dialect firmware',
 });
 
 test('mavlink-param capabilities beat ardupilot firmware for bytewise encoding', () => {
-  const { paramValueToWire } = require('../../lib/codec');
+  const { paramValueToWire } = require('../../lib/codec/param-union');
   const CAP_PARAM_ENCODE_BYTEWISE = 16; // MAV_PROTOCOL_CAPABILITY_PARAM_ENCODE_BYTEWISE
   const peerTable = {
     getComponent(sysid, compid) {

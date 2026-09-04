@@ -54,11 +54,10 @@ test('knownDialects lists every seeded dialect, including the classic ten', () =
   assert.ok(names.includes('csairlink'));
 });
 
-test('seeded dialects load with real include files and provenance', () => {
+test('seeded dialects load with real include files', () => {
   for (const name of CORE) {
     const bundle = loadBundled(name);
     assert.equal(bundle.dialect, name);
-    assert.ok(bundle.fetched && bundle.fetched.commit);
     assert.ok(bundle.files.length >= 1);
     assert.ok(
       bundle.files[bundle.files.length - 1].toLowerCase().startsWith(name),
@@ -86,12 +85,6 @@ test('HEARTBEAT and MAV_AUTOPILOT resolve when loading common — they live in m
     )
   );
   assert.deepEqual(bundle.files, ['minimal.xml', 'standard.xml', 'common.xml']);
-});
-
-test('messagesById maps a string key to a name — messagesById["0"] is HEARTBEAT', () => {
-  const bundle = loadBundled('common');
-  assert.equal(bundle.messagesById['0'], 'HEARTBEAT');
-  assert.equal(bundle.messages.HEARTBEAT.id, 0);
 });
 
 test('XML field enums survive compile — HEARTBEAT.type -> MAV_TYPE', () => {

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { paramValueToWire, paramValueFromWire } = require('../../lib/codec');
+const { paramValueToWire, paramValueFromWire } = require('../../lib/codec/param-union');
 
 const INT32 = 6;
 const UINT32 = 5;

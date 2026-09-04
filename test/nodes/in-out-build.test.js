@@ -267,9 +267,7 @@ function makeVehicleStub() {
         ],
       },
     },
-    messagesById: { '0': 'HEARTBEAT' },
     commands: {},
-    overrides: [],
   };
 
   return {

@@ -7,8 +7,8 @@ const assert = require('node:assert/strict');
 const {
   catalogMessagesFromBundle,
   listMessagesCatalog,
-  commandLabel,
 } = require('../../lib/metadata');
+const { commandLabel } = require('../../lib/metadata/commands-list');
 
 test('commandLabel renders a message id the same `NAME (value)` way (§6)', () => {
   // messageLabel was an alias of commandLabel with no consumers; the shared
@@ -36,7 +36,6 @@ const FIXTURE_BUNDLE = {
           maxValue: null,
           increment: null,
           description: 'Mode selector',
-          invalid: null,
         },
       ],
     },
@@ -57,7 +56,6 @@ const FIXTURE_BUNDLE = {
           maxValue: 8500,
           increment: 1,
           description: 'Temperature',
-          invalid: '-32768',
         },
       ],
     },
@@ -78,7 +76,6 @@ const FIXTURE_BUNDLE = {
           maxValue: null,
           increment: null,
           description: 'Flags',
-          invalid: null,
         },
       ],
     },
@@ -129,7 +126,6 @@ test('catalogMessagesFromBundle fixture: messages, fields, and referenced enums'
     maxValue: 8500,
     increment: 1,
     description: 'Temperature',
-    invalid: '-32768',
   });
 
   assert.deepEqual(Object.keys(catalog.enums).sort(), ['FIXTURE_FLAGS', 'FIXTURE_MODE']);

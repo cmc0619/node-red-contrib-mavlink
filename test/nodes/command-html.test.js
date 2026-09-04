@@ -626,7 +626,7 @@ test('mavlink-command: NAN_CENTRE_PRESETS matches the library\'s NaN param5/6 se
   // on the async catalog, so it carries its own copy and this compares them.
   // A preset that starts encoding a blank centre as NaN — or stops — must land
   // on both sides or fail here.
-  const { PRESETS } = require('../../lib/command');
+  const { PRESETS } = require('../../lib/command/presets');
   const set = /const NAN_CENTRE_PRESETS = new Set\(\[([^\]]*)\]\);/.exec(html);
   assert.ok(set, 'NAN_CENTRE_PRESETS must be extractable');
   const fromEditor = [...set[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
@@ -747,7 +747,7 @@ test('mavlink-command: PRESET_PARAMS covers exactly the presets the dropdown off
   // entirely when Move took the motion intents. Dead rows are cheap to ignore
   // until something reads the table as authoritative — which the `preset`
   // validator below now does, so the equality has to be executed.
-  const { PRESETS } = require('../../lib/command');
+  const { PRESETS } = require('../../lib/command/presets');
   const table = /const PRESET_PARAMS = \{[\s\S]*?\n {2}\};/.exec(html);
   assert.ok(table, 'PRESET_PARAMS must be extractable');
 

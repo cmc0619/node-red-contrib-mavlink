@@ -342,7 +342,7 @@ test('quaternionFromEuler composes mixed angles in aerospace ZYX order, pinned t
   // literals are the textbook aerospace (yaw-pitch-roll, ZYX) quaternion for
   // roll 30°, pitch 40°, yaw 50°, computed independently of the
   // implementation.
-  const { quaternionFromEuler } = require('../../lib/move');
+  const { quaternionFromEuler } = require('../../lib/move/attitude');
   const d = Math.PI / 180;
   const q = quaternionFromEuler(30 * d, 40 * d, 50 * d);
   const expected = [0.860042173698, 0.080804688691, 0.402198493534, 0.303371774471];

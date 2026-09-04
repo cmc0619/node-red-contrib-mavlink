@@ -2,13 +2,12 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive } = require('../lib/fanout');
-const { isBlank, dialectFromConnection } = require('../lib/addressing');
+const { isBlank } = require('../lib/addressing');
 const { formationTargets } = require('../lib/formation');
 const {
   getPreset,
   buildParamArray,
   buildCommandInt,
-  intCoordKinds,
   DEFAULT_FRAME,
   scaleLatLon,
 } = require('../lib/command');
@@ -29,23 +28,6 @@ const {
  * home.
  */
 
-/**
- * Go To / Reposition preset (lib/command/presets.js) — MAV_CMD_DO_REPOSITION
- * (192). Its param map: 1 speed, 2 flags, 3 radius, 4 yaw, 5 lat, 6 lon, 7 alt.
- */
-const REPOSITION_PRESET = 'reposition';
-
-/**
- * Shared reposition params for every member. Only the two whose
- * build-time default of 0 is actively wrong are set:
- *   param 1 (speed) = -1  — "use default speed"; 0 would command zero ground speed.
- *   param 4 (yaw)   = NaN — "hold current heading" (dialect-declared sentinel,
- *     §9); 0 would yaw every vehicle to north, the same trap as Land's yaw
- *     (issue #98b). The formation heading rotates the *pattern*, not the noses.
- * Params 2 (flags) and 3 (radius) keep their 0 defaults.
- */
-const SHARED_PARAMS = { 1: -1, 4: NaN };
-
 module.exports = function registerMavlinkFormation(RED) {
   function MavlinkFormationNode(config) {
     RED.nodes.createNode(this, config);
@@ -57,32 +39,20 @@ module.exports = function registerMavlinkFormation(RED) {
     // delivery.inFlightTracker.
     const inFlight = delivery.inFlightTracker();
 
-    // Input-invariant Reposition scaffold, built once: the shared message has
-    // zeroed coordinates; the per-member lat/lon/alt are patched in as degE7
-    // x/y per input, since Fan-out patches are the raw wire surface (§10) and
-    // executeFanout never mutates its base message. Formation always builds
-    // COMMAND_INT: DO_REPOSITION is a positional command and the references
-    // carry it as COMMAND_INT only — COMMAND_LONG is not a valid carrier for
-    // it, so there is no carrier choice to make.
-    const preset = getPreset(REPOSITION_PRESET);
-    const commandId = Number(preset.commandId);
-    const params = buildParamArray(preset, { ...SHARED_PARAMS, 5: 0, 6: 0, 7: 0 });
-    // Lazy like mavlink-command's coordKinds — not because resolution can
-    // change (the profile rides the connection's deploy-frozen snapshot, so
-    // every input resolves identically) but to keep the bundle compile off
-    // the deploy path.
-    let _message;
-    function repositionMessage() {
-      if (_message !== undefined) return _message;
-      const bundle = dialectFromConnection(RED, connectionNode);
-      _message = buildCommandInt(commandId, 0, 0, params, {
-        // Guided reposition is relative-alt; pass the frame explicitly —
-        // the driver no longer invents it when omitted (§0).
-        frame: DEFAULT_FRAME,
-        coordKinds: intCoordKinds(bundle, commandId),
-      });
-      return _message;
-    }
+    // Input-invariant Reposition scaffold, built once from the Go To /
+    // Reposition preset (MAV_CMD_DO_REPOSITION; params 1 speed, 2 flags,
+    // 3 radius, 4 yaw, 5 lat, 6 lon, 7 alt). The preset's blank sentinels
+    // carry speed -1 (vehicle default) and yaw NaN (hold heading — the
+    // formation heading rotates the pattern, not the noses); the coordinates
+    // are zero here and patched in per member as degE7 x/y, since Fan-out
+    // patches are the raw wire surface (§10) and executeFanout never mutates
+    // its base message. DO_REPOSITION is positional and the references carry
+    // it as COMMAND_INT only, so there is no carrier choice to make; guided
+    // reposition is relative-alt, so the frame is passed explicitly.
+    const preset = getPreset('reposition');
+    const message = buildCommandInt(
+      Number(preset.commandId), 0, 0, buildParamArray(preset, {}), { frame: DEFAULT_FRAME }
+    );
 
     node.on('input', async (msg, send, done) => {
       try {
@@ -107,7 +77,6 @@ module.exports = function registerMavlinkFormation(RED) {
           sysids,
         });
 
-        const message = repositionMessage();
         const memberTargets = targets.map((target) => ({
           sysid: target.sysid,
           x: scaleLatLon(target.lat),

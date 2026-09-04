@@ -10,12 +10,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const {
-  MissionDownload,
-  MissionUpload,
-  MISSION_TYPE,
-  DEFAULT_TRANSFER_DEADLINE_MS,
-} = require('../../lib/mission');
+const { MissionDownload } = require('../../lib/mission/download');
+const { MissionUpload } = require('../../lib/mission/upload');
+const { MISSION_TYPE, DEFAULT_TRANSFER_DEADLINE_MS } = require('../../lib/mission/types');
 const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };

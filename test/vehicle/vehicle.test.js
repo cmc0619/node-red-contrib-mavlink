@@ -90,9 +90,6 @@ test('a profile with component dialects compiles them into one bundle', () => {
   assert.equal(withGimbal.dialect, 'development+storm32');
   const added = Object.keys(withGimbal.messages).filter((m) => !px4.messages[m]);
   assert.ok(added.length > 0, 'the component dialect contributes messages');
-  // The include chain resolves it: shared files appear once, so nothing is
-  // shadowed and there is no merge rule of our own.
-  assert.deepEqual(withGimbal.overrides, []);
   // Everything the airframe had survives.
   for (const name of Object.keys(px4.messages)) {
     assert.ok(withGimbal.messages[name], `${name} survives`);

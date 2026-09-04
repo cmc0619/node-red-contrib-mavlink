@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { XmlCatalog, compileXmlFromFile } = require('../../lib/metadata');
+const { XmlCatalog, compileXmlFromFile } = require('../../lib/metadata/xml-catalog');
 
 /**
  * Downloadable XML catalog + on-disk custom compile (DESIGN.md §4). The network
@@ -83,7 +83,6 @@ test('compileXmlFromFile compiles an entry and its includes from disk', () => {
 
   const bundle = compileXmlFromFile(path.join(dir, 'entry.xml'));
   assert.equal(bundle.dialect, 'entry');
-  assert.equal(bundle.version, 3);
   assert.deepEqual(Object.keys(bundle.messages).sort(), ['ENTRY', 'HEARTBEAT']);
   assert.deepEqual(bundle.files, ['base.xml', 'entry.xml']);
 });

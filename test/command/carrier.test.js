@@ -25,7 +25,7 @@ const {
   MAV_FRAME,
   DEFAULT_FRAME,
   resolveFrame,
-} = require('../../lib/command');
+} = require('../../lib/command/carrier');
 
 test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float', () => {
   const int = longToIntFields([1, 2, 3, 4, 47.1234567, -122.5, 100.5], {
@@ -210,7 +210,7 @@ test('buildCommandLong emits a COMMAND_LONG envelope with the confirmation byte'
 
 // ── Ask-the-XML coordinate kinds (§9) ────────────────────────────────────────
 
-const { intCoordKinds } = require('../../lib/command');
+const { intCoordKinds } = require('../../lib/command/carrier');
 const { loadBundled } = require('../../lib/metadata');
 
 test('intCoordKinds classifies param5/6 from the dialect XML', () => {
@@ -264,7 +264,7 @@ const {
   GLOBAL_FRAMES,
   LOCAL_FRAMES,
   NON_POSITION_FRAMES,
-} = require('../../lib/command');
+} = require('../../lib/command/carrier');
 
 test('every dialect MAV_FRAME entry is classified exactly once (drift pin, §9)', () => {
   const mf = loadBundled('common').enums.MAV_FRAME;

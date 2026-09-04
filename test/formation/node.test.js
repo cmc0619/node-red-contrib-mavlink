@@ -645,7 +645,6 @@ function redStub(nodesById) {
         this.types[name] = ctor;
       },
       getNode(id) {
-        if (id === 'vehicle') return { getDialect: () => ({ commands: {} }) };
         return nodesById[id];
       },
     },

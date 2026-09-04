@@ -1689,6 +1689,8 @@ function countingSignal() {
   };
 }
 
+const AUTOPILOT = { ardupilot: 3, px4: 12 };
+
 function peer(sysid, fields = {}) {
   return {
     sysid,
@@ -1697,9 +1699,10 @@ function peer(sysid, fields = {}) {
         compid: 1,
         state: fields.state || 'active',
         type: fields.type === undefined ? 2 : fields.type,
-        firmware: fields.firmware || 'ardupilot',
         armed: fields.armed === undefined ? false : fields.armed,
-        autopilot: fields.autopilot === undefined ? 3 : fields.autopilot,
+        autopilot: fields.autopilot === undefined
+          ? AUTOPILOT[fields.firmware || 'ardupilot']
+          : fields.autopilot,
         flightMode: fields.flightMode === undefined ? 0 : fields.flightMode,
       },
     ],
