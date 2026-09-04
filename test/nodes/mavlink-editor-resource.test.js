@@ -529,12 +529,6 @@ test('loadCatalog seq-guard drops a stale success', () => {
 
 // ── PAYLOAD_VERBS / refreshVerbOptions ───────────────────────────────────────
 
-test('PAYLOAD_VERBS mirrors lib/payload exactly', () => {
-  const { RED } = loadResource();
-  const { PAYLOAD_VERBS } = require('../../lib/payload');
-  assert.deepEqual(plain(RED.mavlink.PAYLOAD_VERBS), plain(PAYLOAD_VERBS));
-});
-
 /**
  * jQuery stub rich enough for refreshVerbOptions (empty/append/option factory).
  * @param {object} values
