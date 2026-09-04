@@ -180,7 +180,8 @@ module.exports = function registerMavlinkConnection(RED) {
     node.crcFailureCount = () => node.connection.crcFailureCount();
     Object.defineProperty(node, 'peerTable', { get: () => node.connection.peerTable });
 
-    applyStatus(node, STATE.CONNECTING, signing.acceptInvalid);
+    // start() sets CONNECTING synchronously before its first await, and the
+    // 'state' listener above is already on, so the badge follows it from here.
     node.connection.start().catch((err) => {
       applyStatus(node, STATE.ERROR, signing.acceptInvalid);
       node.error(err.message);
