@@ -194,9 +194,9 @@ module.exports = function registerMavlinkMove(RED) {
          * Build / stream / send a setpoint-shaped message. Shared by
          * attitude/manual/steer and by goto+stream.
          * @param {object|undefined} message
-         * @param {string} brakingAction  action name for the stream brake rule
+         * @param {boolean} braking  whether the stream ends with a brake packet
          */
-        function deliverSetpoint(message, brakingAction) {
+        function deliverSetpoint(message, braking) {
           switch (delivery) {
             case 'build':
               completeBuild(node, send, message);
@@ -233,11 +233,7 @@ module.exports = function registerMavlinkMove(RED) {
                 identityId,
                 rateHz,
                 ttlMs,
-                // Attitude and manual end by going quiet (§9 ruling 1): zero
-                // thrust is a descent and a centred stick is a command, so
-                // neither has a brake packet to synthesize. Position setpoints
-                // keep their measured zero-velocity brake.
-                braking: brakingAction !== 'attitude' && brakingAction !== 'manual',
+                braking,
                 // TTL expiry is the only stop the flow did not cause, so it is
                 // the only one it cannot observe: without this the node would
                 // halt the vehicle and keep reporting "streaming" forever.
@@ -356,7 +352,7 @@ module.exports = function registerMavlinkMove(RED) {
                 // altitude reference names.
                 deliverSetpoint(
                   setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
-                  action
+                  true
                 );
                 done();
                 return;
@@ -394,10 +390,20 @@ module.exports = function registerMavlinkMove(RED) {
           }
           case 'attitude':
           case 'manual':
-          case 'steer':
+            // Attitude and manual end by going quiet (§9 ruling 1): zero
+            // thrust is a descent and a centred stick is a command, so
+            // neither has a brake packet to synthesize.
             deliverSetpoint(
               setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
-              action
+              false
+            );
+            done();
+            return;
+          case 'steer':
+            // Position setpoints keep their measured zero-velocity brake.
+            deliverSetpoint(
+              setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+              true
             );
             done();
             return;

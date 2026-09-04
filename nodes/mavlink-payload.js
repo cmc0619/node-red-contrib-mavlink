@@ -131,9 +131,11 @@ module.exports = function registerMavlinkPayload(RED) {
             // Wait for the COMMAND_ACK so a DENIED / TEMPORARILY_REJECTED /
             // timeout can halt the chain (§9). Gimbal-manager setpoints carry
             // no acknowledgement, so they fall through and send unconfirmed.
-            if (builtCmd.confirmation === 'command_ack') {
-              awaitAck(builtCmd).catch((err) => failInput(node, send, err, done));
-              return;
+            switch (builtCmd.confirmation) {
+              case 'command_ack':
+                awaitAck(builtCmd).catch((err) => failInput(node, send, err, done));
+                return;
+              default: break; // This space intentionally left blank (§5)
             }
             // falls through
           case 'send': {
