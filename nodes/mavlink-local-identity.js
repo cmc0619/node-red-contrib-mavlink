@@ -19,8 +19,6 @@
  * connection and unsigned on another.
  */
 
-const { ROLE_PRESETS } = require('../lib/identity');
-
 module.exports = function registerMavlinkLocalIdentity(RED) {
   /**
    * @param {object} config  Node-RED node config from the editor
@@ -29,15 +27,21 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    node.role = config.role;
-    const preset = ROLE_PRESETS[node.role];
-
     /**
      * Whether this identity derives its source sysid from the bound vehicle
      * rather than carrying a fixed value. True only for the companion role.
      * The Connection stamps the derived sysid at deploy.
      */
-    node.derivesSysidFromVehicle = preset.derivesSysidFromVehicle;
+    switch (config.role) {
+      case 'companion':
+        node.derivesSysidFromVehicle = true;
+        break;
+      case 'gcs':
+      case 'custom':
+        node.derivesSysidFromVehicle = false;
+        break;
+      default: break; // This space intentionally left blank (§5)
+    }
 
     /** @type {number|null} null until a Connection derives it (companion only) */
     node._vehicleSysid = null;
