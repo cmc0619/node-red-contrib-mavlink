@@ -262,6 +262,8 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
   const defaults = loadNodeDefaults('mavlink-fanout');
   const interval = defaults.intervalMs.validate;
   const retries = defaults.maxRetries.validate;
+  // The shared ack fields ring on Send & confirm, the tier whose rows show.
+  const confirm = { delivery: 'confirm' };
 
   assert.match(String(interval.call({}, '', {})), />= 0/, 'blank interval reds');
   assert.equal(interval.call({}, 0, {}), true, '0 is a legitimate no-pause interval');
@@ -269,11 +271,12 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
   assert.match(String(interval.call({}, -100, {})), />= 0/, 'negative pacing reds');
   assert.match(String(interval.call({}, 'abc', {})), />= 0/);
 
-  assert.match(String(retries.call({}, '', {})), />= 0/, 'blank retries reds');
-  assert.equal(retries.call({}, 0, {}), true);
-  assert.equal(retries.call({}, 3, {}), true);
-  assert.match(String(retries.call({}, -1, {})), />= 0/);
-  assert.match(String(retries.call({}, 1.5, {})), /whole number/, 'a fractional retry count reds');
+  assert.match(String(retries.call(confirm, '', {})), />= 0/, 'blank retries reds');
+  assert.equal(retries.call(confirm, 0, {}), true);
+  assert.equal(retries.call(confirm, 3, {}), true);
+  assert.match(String(retries.call(confirm, -1, {})), />= 0/);
+  assert.match(String(retries.call(confirm, 1.5, {})), /whole number/, 'a fractional retry count reds');
+  assert.equal(retries.call({ delivery: 'send' }, 1.5, {}), true, 'a hidden row never reds');
 });
 
 test('concurrency is a bounded integer with a strictly-sequential default of 1', () => {
@@ -356,5 +359,5 @@ test('fan-out numeric validators declare two args and render reasons (§14.24)',
   assert.equal(defaults.concurrency.validate.length, 2);
   assert.match(String(defaults.concurrency.validate.call({}, 0, {})), />= 1/);
   assert.equal(defaults.timeoutMs.validate.length, 2);
-  assert.match(String(defaults.timeoutMs.validate.call({}, 0, {})), />= 1/);
+  assert.match(String(defaults.timeoutMs.validate.call({ delivery: 'confirm' }, 0, {})), />= 1/);
 });

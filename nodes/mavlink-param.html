@@ -129,8 +129,11 @@
       // The wait window; a negative one expires before the vehicle can answer
       // and reads as vehicle silence.
       // Timeout and Max retries: the shared ack definition (the echo is the
-      // acknowledgement here), hidden with the rows on Build.
+      // acknowledgement here). Timeout hides with its row on Build; Max
+      // retries belongs to the echo-confirmed set alone — the one mode that
+      // re-sends on silence — so its row and its ring follow that mode.
       ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire),
+      maxRetries: RED.mavlink.ackDefaults(confirmSetShown).maxRetries,
     ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   };
 
@@ -191,6 +194,19 @@
   function editedParamId(node) {
     return RED.mavlink.liveOr(node, '#node-input-paramId', node && node.paramId)
       .toUpperCase().trim();
+  }
+
+  /**
+   * Whether the Max retries row is on screen: the echo-confirmed set, the one
+   * mode that re-sends on silence. Read live from the dialog when it is open,
+   * from the saved node otherwise.
+   *
+   * @param {object} node
+   * @returns {boolean}
+   */
+  function confirmSetShown(node) {
+    return RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) === 'confirm'
+      && RED.mavlink.liveOr(node, '#node-input-action', node.action) === 'set';
   }
 
   RED.nodes.registerType('mavlink-param', {
@@ -274,7 +290,7 @@
           !isBuild && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
         );
         $('#row-timeoutMs').toggle(!isBuild);
-        $('#row-maxRetries').toggle(!isBuild);
+        $('#row-maxRetries').toggle(confirmSetShown(node));
 
         /* role-driven rows: companion hides both target rows */
         RED.mavlink.applyCompanionTargetVisibility({

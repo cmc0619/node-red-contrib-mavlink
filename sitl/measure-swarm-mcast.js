@@ -18,10 +18,10 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const ROOT = path.resolve(__dirname, '..');
-const { Connection, BAND } = require(path.join(ROOT, 'lib/connection'));
-const { loadBundled } = require(path.join(ROOT, 'lib/metadata'));
-const { buildCommandLong } = require(path.join(ROOT, 'lib/command/carrier'));
+const { Connection } = require('../lib/connection/runtime');
+const { BAND } = require('../lib/connection/bands');
+const { loadBundled } = require('../lib/metadata/bundled');
+const { buildCommandLong } = require('../lib/command/carrier');
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-swarm-mcast-'));
 const OUT = path.join(WORK, 'swarm-mcast-results.json');
