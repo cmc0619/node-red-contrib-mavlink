@@ -81,7 +81,7 @@ module.exports = function registerMavlinkHealth(RED) {
         // mavlink-command carry for their own closed-vocabulary msg fields.
         switch (payload.health) {
           case 'ok': {
-            const ttlS = payload.ttl_s ?? defaultTtlS;
+            const ttlS = payload.ttl_s === undefined ? defaultTtlS : payload.ttl_s;
             connectionNode.assertHealth(identityId, true, ttlS * 1000);
             applyActionStatus(node, 'ok', `healthy (${ttlS}s lease)`);
             send([msg, makeStatusRecord(node.type, {
