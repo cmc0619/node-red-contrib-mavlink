@@ -1497,7 +1497,7 @@ async function setupCompanionSigning() {
   const keyHex = MavLinkPacketSignature.key(SITL_SIGNING_PASSPHRASE).toString('hex');
   runApControlScript(
     `
-      const { timestampFromMs } = require(${JSON.stringify(path.join(ROOT, 'lib/connection'))});
+      const { timestampFromMs } = require(${JSON.stringify(path.join(ROOT, 'lib/connection/signing'))});
       const key = Buffer.from(${JSON.stringify(keyHex)}, 'hex');
       const t = { sysid: 20, compid: 1 };
       const deadline = Date.now() + 90000;
