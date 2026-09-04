@@ -126,9 +126,6 @@ module.exports = function registerMavlinkIn(RED) {
 
     /** @type {Map<string, string>} key → last JSON of fields */
     const lastFieldJson = new Map();
-    // One warning per (message, absent-name) pair for the node's lifetime —
-    // at stream rates a per-frame warn would bury the flow it exists to help.
-    const warnedAbsentFields = new Set();
     /** @type {Map<string, number>} key → last delivery timestamp ms */
     const lastDeliveryMs = new Map();
 
@@ -178,19 +175,10 @@ module.exports = function registerMavlinkIn(RED) {
       // silently passed the entire stream (#300). The comment here used to
       // describe that exclusion while the code did not implement it.
       if (changedOnly) {
-        // A named field this message type does not carry is a config typo, and
-        // silently it is a vicious one: every frame's subject stringifies
-        // identically, so the stream delivers once and then never again, with
-        // nothing to say why. Warn once per absent name; the comparison still
-        // runs exactly as configured.
-        if (changedFields) {
-          for (const name of changedFields) {
-            if (!(name in decoded.fields) && !warnedAbsentFields.has(`${key}:${name}`)) {
-              warnedAbsentFields.add(`${key}:${name}`);
-              node.warn(`changed-only: ${decoded.name} carries no field "${name}" — with every named field absent, the message delivers once and is then suppressed`);
-            }
-          }
-        }
+        // A named field the message does not carry reads as undefined on
+        // every frame, so with every name absent the stream delivers once
+        // and is then suppressed — the natural reading of the saved list
+        // (the editor rings its shape; the catalog is not re-checked here).
         const subject = changedFields
           ? Object.fromEntries(changedFields.map((name) => [name, decoded.fields[name]]))
           : withoutTimestamps(decoded.fields);
