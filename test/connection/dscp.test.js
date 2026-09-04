@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 
-const { Connection } = require('../../lib/connection');
+const { Connection } = require('../../lib/connection/runtime');
 const { BAND } = require('../../lib/connection/bands');
 const { UdpTransport } = require('../../lib/connection/transport/udp');
 const { TcpTransport } = require('../../lib/connection/transport/tcp');

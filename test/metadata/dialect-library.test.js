@@ -6,7 +6,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { XmlCatalog, dialectLibrary, knownDialects } = require('../../lib/metadata');
+const { knownDialects } = require('../../lib/metadata/bundled');
+const { XmlCatalog, dialectLibrary } = require('../../lib/metadata/xml-catalog');
 const { entryFileForDialect } = require('../../lib/metadata/xml-catalog');
 
 test('entryFileForDialect matches case-insensitively', () => {

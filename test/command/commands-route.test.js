@@ -9,7 +9,7 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { loadBundled } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
 
 function captureRoutes(nodesById) {
   /** @type {Map<string, Function>} */

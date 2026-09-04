@@ -14,7 +14,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { AckWaiter, MAV_RESULT } = require('../../lib/command');
+const { MAV_RESULT } = require('../../lib/command/status-record');
+const { AckWaiter } = require('../../lib/command/ack');
 
 /**
  * Minimal connection stub: records subscriptions and injects COMMAND_ACKs with
@@ -275,7 +276,7 @@ test('an initial send that throws rejects AND cleans up — no timer or subscrip
 // the decoder zero-fills and always supplies a number — a hand-built fields
 // object with the extension left out asserts a state the wire cannot produce
 // (Codex, #252; the first version of these tests did exactly that).
-const { loadBundled } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
 const { createWire } = require('../../lib/connection/wire');
 const wire = createWire({ bundle: loadBundled('common') });
 

@@ -13,8 +13,8 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { MAV_RESULT } = require('../../lib/command');
-const { loadBundled } = require('../../lib/metadata');
+const { MAV_RESULT } = require('../../lib/command/status-record');
+const { loadBundled } = require('../../lib/metadata/bundled');
 
 const COMMON_BUNDLE = loadBundled('common');
 

@@ -9,7 +9,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { loadBundled, compileXml } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
+const { compileXml } = require('../../lib/metadata/compile');
 const { createWire } = require('../../lib/connection/wire');
 
 test('wire registry follows the bundle include chain — minimal has HEARTBEAT, not STATUSTEXT', () => {

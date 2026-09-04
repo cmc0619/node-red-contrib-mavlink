@@ -7,7 +7,7 @@ const {
   resolveActionTarget,
   profileFromVehicleNode,
   firstDefined,
-} = require('../../lib/addressing');
+} = require('../../lib/addressing/resolve');
 
 const PROFILE = { targetSystem: 42, targetComponent: 191, firmware: 'px4' };
 

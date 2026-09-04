@@ -356,7 +356,7 @@ test('payload frame dropdown: relative alt (3) is the saved default; frame 0 rea
 // the one guard shape §9 sanctions. The ring must name exactly the CARRIER
 // members the driver dispatches.
 test('the send-as select is pinned to the carriers the driver implements', () => {
-  const { CARRIER } = require('../../lib/command');
+  const { CARRIER } = require('../../lib/command/carrier');
   const members = Object.values(CARRIER).sort();
   assert.match(
     payloadHtml,

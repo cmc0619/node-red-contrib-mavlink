@@ -17,7 +17,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const metadata = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
+const { catalogFromBundle } = require('../../lib/metadata/commands-list');
 
 /**
  * The editor's checkbox rule (`RED.mavlink.isFalseTrueEnum` in
@@ -53,7 +54,7 @@ function blankableParams(catalog) {
 }
 
 test('dropping the blank keeps the wire identical wherever the enum defines 0', () => {
-  const catalog = metadata.catalogFromBundle(metadata.loadBundled('ardupilotmega'));
+  const catalog = catalogFromBundle(loadBundled('ardupilotmega'));
   const params = blankableParams(catalog);
   assert.ok(params.length > 40, `sanity: a real number of pulldowns (${params.length})`);
 
@@ -83,7 +84,7 @@ test('dropping the blank keeps the wire identical wherever the enum defines 0', 
 });
 
 test('every 0-valued entry a command param can reach is a real choice, not "unset"', () => {
-  const catalog = metadata.catalogFromBundle(metadata.loadBundled('ardupilotmega'));
+  const catalog = catalogFromBundle(loadBundled('ardupilotmega'));
   const zeroNames = new Set();
   for (const param of blankableParams(catalog)) {
     const zero = param.entries.find((entry) => Number(entry.value) === 0);

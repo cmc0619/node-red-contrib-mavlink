@@ -16,7 +16,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { StubPeerTable } = require('../../lib/command/test/stubs/connection');
-const { loadBundled } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
 
 const COMMON_BUNDLE = loadBundled('common');
 
@@ -71,7 +71,7 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
 });
 
 test('Build tier: payload.mode resolves through the AP profile into param2', async () => {
-  const { loadBundled } = require('../../lib/metadata');
+  const { loadBundled } = require('../../lib/metadata/bundled');
   const vehicle = {
     defaultTargetSystem: 1,
     defaultTargetComponent: 1,
@@ -110,7 +110,7 @@ test('Build tier: an explicit custom-mode param suppresses the whole named pair'
   // PX4's resolution is a pair (param2 main_mode, param3 sub_mode). Filling one
   // side from the name while the flow supplied the other would command a mode
   // nobody asked for — main 5 with Hold's sub 3 maps to nothing (Gitar, #346).
-  const { loadBundled } = require('../../lib/metadata');
+  const { loadBundled } = require('../../lib/metadata/bundled');
   const vehicle = {
     defaultTargetSystem: 1,
     defaultTargetComponent: 1,

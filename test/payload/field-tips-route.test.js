@@ -55,7 +55,7 @@ test('deployed Vehicle Profile serves field tips from its dialect bundle', () =>
   const handlers = captureRoutes({
     veh1: {
       dialect: 'ardupilotmega',
-      getDialect: () => require('../../lib/metadata').loadBundled('ardupilotmega'),
+      getDialect: () => require('../../lib/metadata/bundled').loadBundled('ardupilotmega'),
     },
   });
   const handler = handlers.get('/mavlink/payload/field-tips');
@@ -141,7 +141,7 @@ function tipsFor(query) {
   const handlers = captureRoutes({
     veh1: {
       dialect: 'ardupilotmega',
-      getDialect: () => require('../../lib/metadata').loadBundled('ardupilotmega'),
+      getDialect: () => require('../../lib/metadata/bundled').loadBundled('ardupilotmega'),
     },
   });
   const res = mockRes();

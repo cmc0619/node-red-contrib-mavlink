@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const mav = require('node-mavlink');
-const { loadBundled, compileXml } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
+const { compileXml } = require('../../lib/metadata/compile');
 const { normalizeType } = require('../../lib/codec/types');
 const { synthesizeWireClasses } = require('../../lib/connection/wire-classes');
 const { createWire } = require('../../lib/connection/wire');

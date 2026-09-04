@@ -211,7 +211,7 @@ test('buildCommandLong emits a COMMAND_LONG envelope with the confirmation byte'
 // ── Ask-the-XML coordinate kinds (§9) ────────────────────────────────────────
 
 const { intCoordKinds } = require('../../lib/command/carrier');
-const { loadBundled } = require('../../lib/metadata');
+const { loadBundled } = require('../../lib/metadata/bundled');
 
 test('intCoordKinds classifies param5/6 from the dialect XML', () => {
   const bundle = loadBundled('common');
