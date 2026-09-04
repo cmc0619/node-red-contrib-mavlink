@@ -83,7 +83,7 @@ function deploy(ackResults, config = {}) {
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '1000',
+    timeoutMs: '1000',
     values: { servo: 8, pwm: 1600 },
     frame: '3',
     ...config,
@@ -137,7 +137,7 @@ test('a redeploy-cancelled ack wait finishes quietly, not as a payload failure (
   // failAck emitted and raised on a node being torn down, tripping any Catch
   // node wired for "payload failed → failsafe" on a mere redeploy.
   // An empty script means the connection never acks, so only the cancel ends it.
-  const { node, conn } = deploy([], { timeout: '60000' });
+  const { node, conn } = deploy([], { timeoutMs: '60000' });
 
   let emitted = false;
   let doneErr = 'not-called';

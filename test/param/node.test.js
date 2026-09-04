@@ -172,7 +172,7 @@ test('mavlink-param confirm set emits a timed-out record and releases the subscr
     connection: 'conn',
     targetSystem: 6,
     targetComponent: 1,
-    timeout: 5, // ms — fire quickly for the test
+    timeoutMs: 5, // ms — fire quickly for the test
   });
 
   return new Promise((resolve) => {
@@ -630,7 +630,9 @@ function confirmSetNode(RED, conn, timeout) {
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    timeout,
+    timeoutMs: timeout,
+    // The editor's default budget: three re-sends on silence.
+    maxRetries: 3,
   });
 }
 
@@ -644,15 +646,15 @@ test('confirm set re-sends PARAM_SET when its echo times out', async () => {
     (m) => outs.push(m), (err) => { doneErr = err; });
   await sleep(100);
 
-  assert.equal(conn.sent.length, 3, 'the initial send is followed by two protocol retries');
+  assert.equal(conn.sent.length, 4, 'the initial send is followed by the editor\'s three re-sends');
   assert.ok(conn.sent.every((s) => s.message.name === 'PARAM_SET'));
   const progress = outs.filter((m) => m[1] && m[1].result === 'progress');
-  assert.deepEqual(progress.map((m) => m[1].detail), ['resend 2/3', 'resend 3/3']);
+  assert.deepEqual(progress.map((m) => m[1].detail), ['resend 1/3', 'resend 2/3', 'resend 3/3']);
   const terminal = outs[outs.length - 1];
   assert.equal(terminal[0], null);
   assert.equal(terminal[1].result, 'timed-out');
   assert.equal(terminal[1].detail, 'echo timeout');
-  assert.equal(terminal[1].attempts, 3, 'the terminal result reports every attempt');
+  assert.equal(terminal[1].attempts, 4, 'the terminal result reports every attempt');
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   assert.equal(conn.activeCount(), 0, 'subscription torn down');
 });
@@ -739,7 +741,7 @@ test('read+confirm by index matches the reply on param_index', () => {
 
 test('read+confirm times out honestly when no reply arrives', async () => {
   const conn = connStubFull();
-  const node = confirmReadNode(redStub({ conn }), { paramId: 'RC1_MIN', timeout: 5 });
+  const node = confirmReadNode(redStub({ conn }), { paramId: 'RC1_MIN', timeoutMs: 5 });
 
   let result;
   let doneErr;
@@ -763,7 +765,7 @@ function collectNode(RED, timeout) {
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    timeout,
+    timeoutMs: timeout,
   });
 }
 

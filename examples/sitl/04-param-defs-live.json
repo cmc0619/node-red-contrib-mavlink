@@ -107,7 +107,8 @@
     "paramType": "MAV_PARAM_TYPE_INT32",
     "identity": "",
     "lookup": "name",
-    "timeout": "10000",
+    "timeoutMs": "10000",
+    "maxRetries": 3,
     "dialect": "",
     "vehicle": "",
     "x": 420,
@@ -163,7 +164,8 @@
     "paramIndex": -1,
     "value": "1",
     "paramType": "MAV_PARAM_TYPE_INT32",
-    "timeout": "30000",
+    "timeoutMs": "30000",
+    "maxRetries": 3,
     "identity": "",
     "lookup": "name",
     "dialect": "",
@@ -233,7 +235,8 @@
         "ex08-list-status"
       ]
     ],
-    "timeout": "30000"
+    "timeoutMs": "30000",
+    "maxRetries": 3
   },
   {
     "id": "ex08-read-done",

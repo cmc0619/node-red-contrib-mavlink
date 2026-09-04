@@ -98,7 +98,7 @@
     "connection": "sitl35-connection",
     "delivery": "send",
     "sendAs": "long",
-    "timeout": 10000,
+    "timeoutMs": 10000,
     "maxRetries": 3,
     "topic": "gimbal",
     "verb": "aim",

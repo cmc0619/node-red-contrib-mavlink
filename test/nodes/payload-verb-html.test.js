@@ -219,10 +219,10 @@ test('mavlink-payload build tier shows vehicle, hides connection/identity/timeou
     /#row-payload-identity'\)\.toggle\(\s*isWire && RED\.mavlink\.hasIdentityChoice\(/,
     'identity row shown only for wire tiers, and only when the Connection offers a choice'
   );
-  assert.match(payloadHtml, /#row-payload-timeout'\)\.toggle\(isWire\)/, 'timeout row shown only for wire tiers');
+  assert.match(payloadHtml, /#row-payload-timeoutMs'\)\.toggle\(isWire\)/, 'timeout row shown only for wire tiers');
   assert.match(payloadHtml, /#row-payload-maxRetries'\)\.toggle\(isWire\)/, 'maxRetries row shown only for wire tiers');
   assert.match(payloadHtml, /id="row-payload-dialect"/, 'dialect row has ID for toggling');
-  assert.match(payloadHtml, /id="row-payload-timeout"/, 'timeout row has ID for toggling');
+  assert.match(payloadHtml, /id="row-payload-timeoutMs"/, 'timeout row has ID for toggling');
   assert.match(payloadHtml, /id="row-payload-maxRetries"/, 'maxRetries row has ID for toggling');
   assert.doesNotMatch(
     payloadHtml,

@@ -82,7 +82,8 @@
     "paramType": "MAV_PARAM_TYPE_REAL32",
     "identity": "",
     "lookup": "name",
-    "timeout": "10000",
+    "timeoutMs": "10000",
+    "maxRetries": 3,
     "dialect": "",
     "vehicle": "",
     "x": 380,
@@ -103,7 +104,8 @@
     "name": "Set WPNAV_SPEED=500",
     "connection": "ex16-connection",
     "delivery": "confirm",
-    "timeout": "10000",
+    "timeoutMs": "10000",
+    "maxRetries": 3,
     "action": "set",
     "firmware": "ardupilot",
     "targetSystem": 1,
@@ -156,7 +158,8 @@
         "ex16-dbg-list-st"
       ]
     ],
-    "timeout": "20000"
+    "timeoutMs": "20000",
+    "maxRetries": 3
   },
   {
     "id": "ex16-inject-read",

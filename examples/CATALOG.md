@@ -252,7 +252,7 @@ importable tab per file with shared config nodes inline.
 - **Nodes:** config triplet (Vehicle `vehicleFamily: "copter"`), 3× `param` (`read`;
   `set` `delivery: "confirm"`; `request-list` `delivery: "collect"`), `inject`, `debug`.
 - **Key config:** read `paramId: "WPNAV_SPEED"`; set `paramId: "WPNAV_SPEED"`,
-  `value: 500`, `paramType: "MAV_PARAM_TYPE_REAL32"`; list `timeout: 20000`. Comment notes
+  `value: 500`, `paramType: "MAV_PARAM_TYPE_REAL32"`; list `timeoutMs: 20000`. Comment notes
   set is **echo-confirmed**, not acked, and PX4 params use the int/float union (SITL S5).
 - **Inject buttons:** **`Read WPNAV_SPEED`**, **`Set WPNAV_SPEED=500`**, **`List all`**.
 

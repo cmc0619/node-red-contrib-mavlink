@@ -156,7 +156,8 @@
         "sitl21-ap-set-status"
       ]
     ],
-    "timeout": "15000"
+    "timeoutMs": "15000",
+    "maxRetries": 3
   },
   {
     "id": "sitl21-ap-read",
@@ -175,7 +176,8 @@
     "paramType": "MAV_PARAM_TYPE_REAL32",
     "identity": "",
     "lookup": "name",
-    "timeout": "10000",
+    "timeoutMs": "10000",
+    "maxRetries": 3,
     "dialect": "",
     "vehicle": "",
     "x": 690,
@@ -243,7 +245,8 @@
         "sitl21-px4-set-status"
       ]
     ],
-    "timeout": "15000"
+    "timeoutMs": "15000",
+    "maxRetries": 3
   },
   {
     "id": "sitl21-px4-read",
@@ -262,7 +265,8 @@
     "paramType": "MAV_PARAM_TYPE_REAL32",
     "identity": "",
     "lookup": "name",
-    "timeout": "10000",
+    "timeoutMs": "10000",
+    "maxRetries": 3,
     "dialect": "",
     "vehicle": "",
     "x": 740,

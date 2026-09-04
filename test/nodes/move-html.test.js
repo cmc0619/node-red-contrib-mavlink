@@ -420,11 +420,19 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
   const defaults = loadNodeDefaults('mavlink-move');
   assert.equal(defaults.timeoutMs.value, 10000, 'timeoutMs defaults to the 10 s window');
   assert.equal(defaults.maxRetries.value, 3, 'maxRetries defaults to three re-sends');
-  const ackVerdict = (v) => defaults.timeoutMs.validate.call({ id: 'm1' }, v, {});
+  // The rows exist on the command-path actions' Send & confirm tier, and
+  // the shared validators ring only there: a value cleared on that tier must
+  // not red a node that has since moved to Build, Send or Stream.
+  const onConfirm = { id: 'm1', action: 'goto', delivery: 'confirm' };
+  const ackVerdict = (v) => defaults.timeoutMs.validate.call(onConfirm, v, {});
   assert.equal(ackVerdict('10000'), true);
   assert.equal(ackVerdict(1), true, 'any positive whole wait passes');
   for (const bad of ['', 0, -1, 'abc']) {
     assert.match(String(ackVerdict(bad)), />= 1/, `${JSON.stringify(bad)} is not a valid timeout`);
+  }
+  for (const hidden of [{ id: 'm1', action: 'goto', delivery: 'build' }, { id: 'm1', action: 'steer', delivery: 'confirm' }]) {
+    assert.equal(defaults.timeoutMs.validate.call(hidden, '', {}), true, `a hidden row never reds (${JSON.stringify(hidden)})`);
+    assert.equal(defaults.maxRetries.validate.call(hidden, '', {}), true);
   }
   // Blank speed/radius/yaw encode the spec sentinels at runtime; the
   // placeholders say so instead of implying zero.

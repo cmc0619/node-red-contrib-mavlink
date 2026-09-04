@@ -251,7 +251,7 @@ test('two consecutive INT inputs both fail loud when dialect lookup fails', asyn
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '10000',
+    timeoutMs: '10000',
     maxRetries: '3',
   });
   const outputs = [];
@@ -542,7 +542,7 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
     identity: 'identity',
     targetSystem: '',
     targetComponent: '',
-    timeout: '5000',
+    timeoutMs: '5000',
   });
 
   let result;
@@ -609,7 +609,7 @@ test('a silent ACK window sends once, then settles the unconfirmed record', asyn
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '1000',
+    timeoutMs: '1000',
     maxRetries: '3',
   });
   let output;
@@ -863,7 +863,7 @@ test('a redeploy-cancelled ack wait finishes quietly, not as a command failure (
     delivery: 'confirm',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '60000',
+    timeoutMs: '60000',
     maxRetries: '0',
   });
 
@@ -902,7 +902,7 @@ test('ack settle and close in one synchronous stack cannot spawn a zombie wait (
     delivery: 'complete',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '60000',
+    timeoutMs: '60000',
     maxRetries: '0',
   });
 
@@ -956,7 +956,7 @@ test('a base-mode-only Set Mode completes at the ack — the wire zero-fill is n
     delivery: 'complete',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '60000',
+    timeoutMs: '60000',
     maxRetries: '0',
   });
 
@@ -997,7 +997,7 @@ test('a base-mode-only Set Mode whose ack is lost stays unconfirmed — no succe
     delivery: 'complete',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '1000',
+    timeoutMs: '1000',
     maxRetries: '0',
   });
 
@@ -1035,7 +1035,7 @@ test('a completion already satisfied at the ack cannot emit through a same-stack
     delivery: 'complete',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '60000',
+    timeoutMs: '60000',
     maxRetries: '0',
   });
 
@@ -1077,7 +1077,7 @@ test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)',
     delivery: 'complete',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '60000',
+    timeoutMs: '60000',
     maxRetries: '0',
   });
 
@@ -1113,7 +1113,7 @@ test('IN_PROGRESS moves the badge and the terminal record carries result_param2 
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '10000',
+    timeoutMs: '10000',
     maxRetries: '0',
   });
   const statuses = [];
@@ -1157,7 +1157,7 @@ test('a denial reports its result_param2 rather than a bare name (§9)', async (
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '10000',
+    timeoutMs: '10000',
     maxRetries: '0',
   });
   node.status = () => {};
@@ -1192,7 +1192,7 @@ test('a completion timeout keeps the accepted ack\'s result_param2 (CodeRabbit)'
     delivery: 'complete',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '60000',
+    timeoutMs: '60000',
     maxRetries: '0',
     completionTimeout: '60',
   });

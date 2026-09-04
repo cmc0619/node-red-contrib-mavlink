@@ -120,7 +120,7 @@
     "connection": "",
     "dialect": "common",
     "sendAs": "long",
-    "timeout": "10000",
+    "timeoutMs": "10000",
     "maxRetries": "0",
     "unconfirmedContinue": false,
     "completionTimeout": "120000",

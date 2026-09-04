@@ -100,7 +100,7 @@
     "advancedCommand": "",
     "delivery": "confirm",
     "connection": "sitl23-connection",
-    "timeout": "10000",
+    "timeoutMs": "10000",
     "maxRetries": "3",
     "unconfirmedContinue": false,
     "completionTimeout": "30000",

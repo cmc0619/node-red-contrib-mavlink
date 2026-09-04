@@ -119,7 +119,8 @@
         "sitl05-set-status"
       ]
     ],
-    "timeout": "15000"
+    "timeoutMs": "15000",
+    "maxRetries": 3
   },
   {
     "id": "sitl05-read",
@@ -138,7 +139,8 @@
     "paramType": "MAV_PARAM_TYPE_INT32",
     "identity": "",
     "lookup": "name",
-    "timeout": "10000",
+    "timeoutMs": "10000",
+    "maxRetries": 3,
     "dialect": "",
     "vehicle": "",
     "x": 580,

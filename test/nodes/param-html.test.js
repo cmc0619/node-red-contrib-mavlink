@@ -664,10 +664,16 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_UINT8', {}), true);
   assert.match(String(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_STRING', {})), /must be one of/);
 
-  assert.match(String(defaults.timeout.validate.call({}, '', {})), />= 0/, 'blank reds: the editor default owns absence');
-  assert.equal(defaults.timeout.validate.call({}, '0', {}), true);
-  assert.match(String(defaults.timeout.validate.call({}, '-5', {})), />= 0/,
+  // Timeout and Max retries are the shared ack definition, ringing on the
+  // wire tiers (where the rows show) and never on Build.
+  const wire = { delivery: 'confirm' };
+  assert.match(String(defaults.timeoutMs.validate.call(wire, '', {})), />= 1/, 'blank reds: the editor default owns absence');
+  assert.match(String(defaults.timeoutMs.validate.call(wire, '0', {})), />= 1/, 'a 0 ms window times out before the echo can arrive');
+  assert.match(String(defaults.timeoutMs.validate.call(wire, '-5', {})), />= 1/,
     'a negative window expires before the vehicle can answer and reads as silence');
+  assert.equal(defaults.timeoutMs.validate.call({ delivery: 'build' }, '', {}), true, 'hidden on Build, never reds');
+  assert.equal(defaults.maxRetries.validate.call(wire, '3', {}), true);
+  assert.match(String(defaults.maxRetries.validate.call(wire, '1.5', {})), /whole number/);
 
   assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
   assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);

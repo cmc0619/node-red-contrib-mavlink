@@ -82,7 +82,7 @@ test('mavlink-payload reuses its deploy-resolved Connection during input deliver
     connection: 'conn',
     targetSystem: 7,
     targetComponent: 1,
-    timeout: 10000,
+    timeoutMs: 10000,
     maxRetries: 3,
   });
 
@@ -112,7 +112,7 @@ test('mavlink-payload confirm tier waits for COMMAND_ACK and continues only on A
     connection: 'conn',
     targetSystem: 7,
     targetComponent: 1,
-    timeout: 2000,
+    timeoutMs: 2000,
   });
 
   let sent;
@@ -148,7 +148,7 @@ test('mavlink-payload confirm tier with carrier int sends COMMAND_INT without a 
     connection: 'conn',
     targetSystem: 7,
     targetComponent: 1,
-    timeout: 2000,
+    timeoutMs: 2000,
     frame: '3',
   });
 
@@ -190,7 +190,7 @@ test('a broadcast target on the confirm tier still sends — the editor is what 
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
-    timeout: 2000,
+    timeoutMs: 2000,
   });
 
   node.emit('input', {
@@ -217,7 +217,7 @@ test('mavlink-payload confirm tier halts the chain on a DENIED ack', async () =>
     connection: 'conn',
     targetSystem: 7,
     targetComponent: 1,
-    timeout: 2000,
+    timeoutMs: 2000,
   });
 
   let sent;
@@ -249,7 +249,7 @@ test('a denied Payload verb carries the ack\'s result_param2 (§9, Codex)', asyn
     connection: 'conn',
     targetSystem: 7,
     targetComponent: 1,
-    timeout: 2000,
+    timeoutMs: 2000,
   });
 
   let sent;

@@ -116,7 +116,7 @@ function deploy(ackResults, config = {}, extraNodes = {}) {
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-    timeout: '1000',
+    timeoutMs: '1000',
     frame: '3',
     ...config,
   });

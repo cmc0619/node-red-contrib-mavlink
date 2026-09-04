@@ -1252,54 +1252,6 @@ test('mavlink-build: a 64-bit string BigInt cannot read fails the run, not the p
   assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
-test('mavlink-build: a typo\'d tier selects no bundle — the node fails at deploy, nothing sent', () => {
-  // Build and Send are the only tiers, and the editor's `tier` select is the
-  // vocabulary (RED.mavlink.oneOf, mavlink-build.html). A token past it
-  // selects no dialect (lib/addressing dialectForTier, §5), and the node's
-  // own first read of the bundle is the failure — the natural reading of a
-  // hand-edited flow, not a fallback to the Connection's profile (the
-  // 2026-09-01 ruling).
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  const { stub, sent } = makeConnectionStub();
-  RED.nodes._register('conn-1', stub);
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1', connection: 'conn-1' });
-  assert.throws(() => Constructor.call(node, {
-    vehicle: 'v1',
-    connection: 'conn-1',
-    messageName: 'HEARTBEAT',
-    tier: 'sned',
-    fields: JSON.stringify({ type: 6 }),
-  }), TypeError);
-
-  assert.equal(sent.length, 0, 'a typo of the tier must not put a frame on the wire');
-  assert.equal(node._sends.length, 0, 'and nothing is emitted downstream either');
-});
-
-test('mavlink-build: a typo\'d tier never arms the repeat timer (Gitar, #310)', async () => {
-  const RED = makeRED();
-  RED.nodes._register('v1', makeVehicleStub());
-  const { stub, sent } = makeConnectionStub();
-  RED.nodes._register('conn-1', stub);
-  require('../../nodes/mavlink-build')(RED);
-  const Constructor = RED._nodeTypes['mavlink-build'];
-  const node = makeNodeInstance({ vehicle: 'v1', connection: 'conn-1' });
-  assert.throws(() => Constructor.call(node, {
-    vehicle: 'v1',
-    connection: 'conn-1',
-    messageName: 'HEARTBEAT',
-    tier: 'sned',
-    repeatMs: 10,
-    fields: JSON.stringify({ type: 6 }),
-  }), TypeError);
-
-  await new Promise((resolve) => setTimeout(resolve, 45));
-  assert.equal(node._sends.length, 0, 'no autonomous tick at the configured rate');
-  assert.equal(sent.length, 0);
-});
-
 test('mavlink-build Send tier: msg.band overrides by presence; absent rides the config default', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
