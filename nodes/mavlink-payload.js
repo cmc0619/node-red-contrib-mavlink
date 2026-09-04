@@ -186,11 +186,7 @@ module.exports = function registerMavlinkPayload(RED) {
             case 'error':
               // getDialect / resolve failures can include filesystem paths —
               // keep the client response generic (same posture as the catch below).
-              if (RED.log && typeof RED.log.error === 'function') {
-                RED.log.error(
-                  `[mavlink-payload] field-tips unavailable: ${source.body.error}`
-                );
-              }
+              RED.log.error(`[mavlink-payload] field-tips unavailable: ${source.body.error}`);
               return res.status(400).json({
                 fields: {},
                 error: 'field tips unavailable',
@@ -218,12 +214,8 @@ module.exports = function registerMavlinkPayload(RED) {
           });
         } catch (err) {
           // Bundled load errors can include filesystem paths — log server-side
-          // and keep the client response generic (CodeRabbit #36).
-          if (RED.log && typeof RED.log.error === 'function') {
-            RED.log.error(
-              `[mavlink-payload] field-tips unavailable: ${err.message}`
-            );
-          }
+          // and keep the client response generic.
+          RED.log.error(`[mavlink-payload] field-tips unavailable: ${err.message}`);
           return res.status(400).json({
             fields: {},
             error: 'field tips unavailable',
