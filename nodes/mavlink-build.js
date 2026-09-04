@@ -23,8 +23,8 @@
  *     output 0 carries the input msg as a pass-through trigger.
  *
  * **Repeat interval**: when `repeatMs > 0` the node fires independently of
- * inbound triggers at the configured interval. The actual achieved rate (Hz)
- * is shown in the status badge alongside the configured rate.
+ * inbound triggers at the configured interval; the status badge names the
+ * configured rate.
  *
  * Chain model (§9):
  *   output 0  — continue: built message (Build tier) or pass-through (Send)
@@ -75,8 +75,6 @@ module.exports = function registerMavlinkBuild(RED) {
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);
     let repeatTimer = null;
-    let rateWindowStart = 0;
-    let rateWindowCount = 0;
 
     /** @type {import('../lib/metadata').DialectBundle} */
     const bundle = dialectForTier(RED, tier, config, connectionNode);
@@ -158,13 +156,6 @@ module.exports = function registerMavlinkBuild(RED) {
             return failRun(new Error(`send: ${err.message}`), { tier: 'send', band });
           }
 
-          const now = Date.now();
-          rateWindowCount += 1;
-          if (now - rateWindowStart >= 1000) {
-            rateWindowStart = now;
-            rateWindowCount = 1;
-          }
-
           const outMsg = triggerMsg
             ? { ...triggerMsg }
             : { payload: { result: 'sent', messageName, tier: 'send' } };
@@ -175,7 +166,7 @@ module.exports = function registerMavlinkBuild(RED) {
             band,
           });
           applyActionStatus(node, 'ok', repeatMs > 0
-            ? `${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`
+            ? `${messageName} ${Math.round(1000 / repeatMs)}Hz`
             : messageName);
           emit([outMsg, sr]);
           return true;
@@ -199,7 +190,6 @@ module.exports = function registerMavlinkBuild(RED) {
     });
 
     if (repeatMs > 0) {
-      rateWindowStart = Date.now();
       repeatTimer = setInterval(() => {
         execute(null);
       }, repeatMs);
