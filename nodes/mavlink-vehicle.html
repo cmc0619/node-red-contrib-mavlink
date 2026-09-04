@@ -29,7 +29,10 @@
           }
         },
         paramDefsUrl:          { value: '' },
-        defaultTargetSystem:   { value: 1, validate: RED.mavlink.validateUint8(0) },
+        // Required: blank has no "inherit" meaning at the last rung of the
+        // target resolution — the runtime reads the number as saved, and a
+        // cleared box would deploy every inheriting node as sysid 0 (broadcast).
+        defaultTargetSystem:   { value: 1, required: true, validate: RED.mavlink.validateUint8(0) },
         defaultTargetComponent:{ value: 1, validate: RED.mavlink.validateUint8(0) }
       },
       label() {
