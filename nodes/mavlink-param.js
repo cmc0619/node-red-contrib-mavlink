@@ -48,13 +48,6 @@ const {
   resolveDeliveryContext,
 } = require('../lib/addressing');
 
-/**
- * A confirm-tier PARAM_SET gets its initial send plus two retries. MAVLink
- * common.xml message 23 says a sender that times out waiting for PARAM_VALUE
- * should re-send PARAM_SET: https://github.com/mavlink/mavlink/blob/master/message_definitions/v1.0/common.xml#L5615-L5624
- */
-const PARAM_SET_ATTEMPTS = 3;
-
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
 const PARAM_DEFS_UPDATE_ROUTE = '/mavlink/param/defs/update';
@@ -219,8 +212,12 @@ module.exports = function registerMavlinkParam(RED) {
           return;
         }
 
-        // The editor owns the default and the number ring.
-        const timeoutMs = Number(config.timeout);
+        // The editor owns both defaults and the number rings
+        // (RED.mavlink.ackDefaults). A confirm-tier PARAM_SET re-sends on
+        // silence up to `maxRetries` times: common.xml message 23 says a
+        // sender that times out waiting for PARAM_VALUE should re-send.
+        const timeoutMs = Number(config.timeoutMs);
+        const maxRetries = Number(config.maxRetries);
         const payload = msg.payload;
 
         // Concrete Build dialects carry firmware from the editor (no target rung).
@@ -398,12 +395,12 @@ module.exports = function registerMavlinkParam(RED) {
               let extra;
               switch (mode) {
                 case 'confirm-set':
-                  if (attempt < PARAM_SET_ATTEMPTS) {
+                  if (attempt <= maxRetries) {
                     attempt += 1;
-                    applyActionStatus(node, 'sending', `resend ${attempt}/${PARAM_SET_ATTEMPTS} ${request.paramId}\u2026`);
+                    applyActionStatus(node, 'sending', `resend ${attempt - 1}/${maxRetries} ${request.paramId}\u2026`);
                     send([null, makeStatusRecord(node.type, {
                       result: 'progress',
-                      detail: `resend ${attempt}/${PARAM_SET_ATTEMPTS}`,
+                      detail: `resend ${attempt - 1}/${maxRetries}`,
                     })]);
                     try {
                       connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
