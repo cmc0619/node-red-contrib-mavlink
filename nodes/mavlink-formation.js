@@ -4,6 +4,7 @@ const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive } = require('../lib/fanout');
 const { isBlank } = require('../lib/addressing');
 const { formationTargets } = require('../lib/formation');
+const { REPOSITION_FLAG_CHANGE_MODE } = require('../lib/move/reposition');
 const {
   getPreset,
   buildParamArray,
@@ -48,10 +49,15 @@ module.exports = function registerMavlinkFormation(RED) {
     // patches are the raw wire surface (§10) and executeFanout never mutates
     // its base message. DO_REPOSITION is positional and the references carry
     // it as COMMAND_INT only, so there is no carrier choice to make; guided
-    // reposition is relative-alt, so the frame is passed explicitly.
+    // reposition is relative-alt, so the frame is passed explicitly. Param 2
+    // carries MAV_DO_REPOSITION_FLAGS_CHANGE_MODE when the editor's Change
+    // mode box is ticked — the gate on both stacks (§14.108): without it the
+    // reposition is DENIED unless the vehicle is already in GUIDED / Hold.
     const preset = getPreset('reposition');
     const message = buildCommandInt(
-      Number(preset.commandId), 0, 0, buildParamArray(preset, {}), { frame: DEFAULT_FRAME }
+      Number(preset.commandId), 0, 0,
+      buildParamArray(preset, { 2: config.changeMode ? REPOSITION_FLAG_CHANGE_MODE : 0 }),
+      { frame: DEFAULT_FRAME }
     );
 
     node.on('input', async (msg, send, done) => {
