@@ -66,9 +66,10 @@ module.exports = function registerMavlinkMove(RED) {
     }
 
     // Wait for the DO_REPOSITION COMMAND_ACK on the shared Command machinery
-    // (§9): AckWaiter matches by (command, source), retries
-    // TEMPORARILY_REJECTED, and re-arms on IN_PROGRESS. A goto re-sent is the
-    // same goto, so auto-retry is safe. Every non-accepted terminal —
+    // (§9): AckWaiter matches by (command, source) and re-arms on
+    // IN_PROGRESS. Move's editor carries no retry budget, so
+    // TEMPORARILY_REJECTED is terminal here — stated as maxRetries 0, not
+    // left to an absent option. Every non-accepted terminal —
     // COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included — is a
     // failure with its MAV_RESULT name, never silence.
     async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
@@ -79,6 +80,7 @@ module.exports = function registerMavlinkMove(RED) {
         identityId,
         // The editor owns the default and the number ring.
         timeoutMs: Number(config.ackTimeout),
+        maxRetries: 0,
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
