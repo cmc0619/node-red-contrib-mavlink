@@ -36,7 +36,7 @@ test('knownDialects returns seeded dialect names including the classic ten', () 
 /* ---------- resolveDialect — seed ---------- */
 
 test('resolveDialect seed + known name → returns DialectBundle', () => {
-  const bundle = resolveDialect({ dialect: 'common', dialectRevision: 'seed' });
+  const bundle = resolveDialect({ dialect: 'common', dialectRevision: 'seed', additionalDialects: '' });
   assert.equal(bundle.dialect, 'common');
   assert.ok(typeof bundle.enums === 'object');
   assert.ok(typeof bundle.messages === 'object');
@@ -44,14 +44,14 @@ test('resolveDialect seed + known name → returns DialectBundle', () => {
 
 test('resolveDialect seed + unknown name → craters at the manifest lookup', () => {
   assert.throws(
-    () => resolveDialect({ dialect: 'nonexistent', dialectRevision: 'seed' }),
+    () => resolveDialect({ dialect: 'nonexistent', dialectRevision: 'seed', additionalDialects: '' }),
     TypeError
   );
 });
 
 test('resolveDialect seed bundles are memoized', () => {
-  const a = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
-  const b = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
+  const a = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
+  const b = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
   assert.equal(a, b);
 });
 
@@ -65,6 +65,7 @@ test('resolveDialect unknown snapshot id fails loud naming the snapshot', () => 
         name: 'My Profile',
         dialect: 'common',
         dialectRevision: '2026-01-01',
+        additionalDialects: '',
         catalogBaseDir: dir,
       }),
     /2026-01-01/
@@ -72,7 +73,7 @@ test('resolveDialect unknown snapshot id fails loud naming the snapshot', () => 
 });
 
 test('resolveDialect dialectRevision seed loads the shipped dialect', () => {
-  const bundle = resolveDialect({ dialect: 'icarous', dialectRevision: 'seed' });
+  const bundle = resolveDialect({ dialect: 'icarous', dialectRevision: 'seed', additionalDialects: '' });
   assert.equal(bundle.dialect, 'icarous');
   assert.ok(bundle.messages.ICAROUS_HEARTBEAT);
 });
@@ -80,7 +81,7 @@ test('resolveDialect dialectRevision seed loads the shipped dialect', () => {
 /* ---------- resolveDialect — component dialects ---------- */
 
 test('a profile with component dialects compiles them into one bundle', () => {
-  const px4 = resolveDialect({ dialect: 'development', dialectRevision: 'seed' });
+  const px4 = resolveDialect({ dialect: 'development', dialectRevision: 'seed', additionalDialects: '' });
   const withGimbal = resolveDialect({
     dialect: 'development',
     dialectRevision: 'seed',
@@ -103,7 +104,7 @@ test('component dialects are order-independent for a clean set', () => {
 });
 
 test('a blank additionalDialects field resolves exactly like no field at all', () => {
-  const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
+  const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
   const blank = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
   assert.equal(blank, plain, 'same cached bundle, not a recompile');
 });
