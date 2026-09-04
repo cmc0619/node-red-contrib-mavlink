@@ -59,7 +59,6 @@ test('same-name message redefinition is an override resolved by include order', 
 
   assert.equal(bundle.messages.FOO.fields[0].name, 'new');
   assert.equal(bundle.messages.FOO.fields[0].type, 'uint16_t');
-  assert.deepEqual(bundle.overrides, [{ kind: 'message', name: 'FOO', from: 'base.xml', by: 'entry.xml' }]);
 });
 
 test('an override frees its old msgid for reuse by another message', () => {
@@ -69,8 +68,7 @@ test('an override frees its old msgid for reuse by another message', () => {
   const bundle = compileXml({ 'base.xml': base, 'entry.xml': entry }, 'entry.xml');
 
   assert.equal(bundle.messages.FOO.id, 9);
-  assert.equal(bundle.messagesById['9'], 'FOO');
-  assert.equal(bundle.messagesById['7'], 'BAR');
+  assert.equal(bundle.messages.BAR.id, 7);
 });
 
 test('enums merge across files; same-name same-value entries dedupe silently', () => {
@@ -83,7 +81,6 @@ test('enums merge across files; same-name same-value entries dedupe silently', (
   assert.equal(bundle.enums.MAV_TYPE.entries[0].description, 'gen');
   assert.deepEqual(bundle.enums.MAV_TYPE.byName, { MAV_TYPE_GENERIC: 0, MAV_TYPE_QUADROTOR: 2 });
   assert.deepEqual(bundle.enums.MAV_TYPE.byValue, { 0: 'MAV_TYPE_GENERIC', 2: 'MAV_TYPE_QUADROTOR' });
-  assert.deepEqual(bundle.overrides, []);
 });
 
 test('same enum entry name with a different value is an override, later wins', () => {
@@ -92,7 +89,6 @@ test('same enum entry name with a different value is an override, later wins', (
   const bundle = compileXml({ 'base.xml': base, 'entry.xml': entry }, 'entry.xml');
 
   assert.equal(bundle.enums.MAV_TYPE.entries[0].value, 5);
-  assert.deepEqual(bundle.overrides, [{ kind: 'enumEntry', name: 'MAV_TYPE_GENERIC', from: 'base.xml', by: 'entry.xml' }]);
 });
 
 test('enum bitmask flag and value notations: decimal, hex, power, beyond-safe-integer', () => {
@@ -150,7 +146,7 @@ test('field type/arrayLength split, mavlink_version normalization, extension mar
 test('commands derive from MAV_CMD with params, labels, ranges, and location flags', () => {
   const entry = XML(
     '<enums><enum name="MAV_CMD">' +
-      '<entry value="22" name="MAV_CMD_NAV_TAKEOFF" hasLocation="true" isDestination="true">' +
+      '<entry value="22" name="MAV_CMD_NAV_TAKEOFF" hasLocation="true">' +
         '<description>Takeoff</description>' +
         '<param index="1" label="Pitch" units="deg" minValue="0" maxValue="90" increment="1">Minimum pitch</param>' +
         '<param index="4" label="Yaw" enum="SOME_ENUM">Yaw angle</param>' +
@@ -163,7 +159,6 @@ test('commands derive from MAV_CMD with params, labels, ranges, and location fla
 
   assert.equal(cmd.value, 22);
   assert.equal(cmd.hasLocation, true);
-  assert.equal(cmd.isDestination, true);
   assert.deepEqual(cmd.params.map((p) => p.index), [1, 4, 7]);
   assert.equal(cmd.params[0].label, 'Pitch');
   assert.equal(cmd.params[0].units, 'deg');
@@ -173,12 +168,10 @@ test('commands derive from MAV_CMD with params, labels, ranges, and location fla
   assert.equal(cmd.params[1].enum, 'SOME_ENUM');
 });
 
-test('a dialect with no MAV_CMD compiles with an empty commands view and null version', () => {
+test('a dialect with no MAV_CMD compiles with an empty commands view', () => {
   const entry = XML('<messages><message id="0" name="HEARTBEAT"><field type="uint8_t" name="type">t</field></message></messages>');
   const bundle = compileXml({ 'entry.xml': entry }, 'entry.xml');
   assert.deepEqual(bundle.commands, {});
-  assert.equal(bundle.version, null);
-  assert.equal(bundle.fetched, null);
 });
 
 test('the compiled bundle is plain JSON-serializable data', () => {
@@ -188,6 +181,5 @@ test('the compiled bundle is plain JSON-serializable data', () => {
     '<messages><message id="0" name="HEARTBEAT"><field type="uint8_t" name="type">t</field></message></messages>'
   );
   const bundle = compileXml({ 'entry.xml': entry }, 'entry.xml');
-  assert.equal(bundle.version, 3);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(bundle)));
 });

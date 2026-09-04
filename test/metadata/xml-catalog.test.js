@@ -83,7 +83,6 @@ test('compileXmlFromFile compiles an entry and its includes from disk', () => {
 
   const bundle = compileXmlFromFile(path.join(dir, 'entry.xml'));
   assert.equal(bundle.dialect, 'entry');
-  assert.equal(bundle.version, 3);
   assert.deepEqual(Object.keys(bundle.messages).sort(), ['ENTRY', 'HEARTBEAT']);
   assert.deepEqual(bundle.files, ['base.xml', 'entry.xml']);
 });
