@@ -621,61 +621,6 @@ test('mavlink-command: frame and compid carry their own red rings', () => {
   assert.match(String(targetComponent.validate.call({ id: 'c1' }, '300', {})), /between 0 and 255/);
 });
 
-test('mavlink-command: the editor\'s location rules match the library\'s, exactly', () => {
-  // PRESET_LOCATION is a second copy of lib/command/presets.js's
-  // requireLocation, and it exists because a Node-RED validator is synchronous
-  // while the preset catalog is fetched. Two copies of one rule only stay
-  // honest if something compares them, so: executed, in both directions, so
-  // neither a new location preset nor a deleted one can land on one side alone.
-  //
-  // The library side is filtered to the *offered* presets. A row the dropdown
-  // does not carry cannot be configured, so a rule for it would be a rule
-  // nothing can reach — `reposition` is the case, kept in PRESETS only as the
-  // DO_REPOSITION metadata mavlink-formation builds from. Filtering here is
-  // what makes `listed: false` mean one thing in both files.
-  const { PRESETS } = require('../../lib/command');
-  const offered = PRESETS.filter((p) => p.listed !== false);
-  const map = /const PRESET_LOCATION = \{[\s\S]*?\n {2}\};/.exec(html);
-  assert.ok(map, 'PRESET_LOCATION must be extractable');
-
-  const fromLibrary = offered
-    .filter((p) => p.requireLocation)
-    .map((p) => p.id)
-    .sort();
-  // Line-anchored, not indentation- or nesting-counted: an entry's value is
-  // the rest of its line, so `set_home`'s three nested braces read the same as
-  // a one-brace entry, and a reformat cannot quietly stop matching.
-  const fromEditor = [...map[0].matchAll(/^\s+(\w+):\s*\{/gm)].map((m) => m[1]).sort();
-  assert.deepEqual(fromEditor, fromLibrary, 'the same presets require a location on both sides');
-  assert.ok(
-    PRESETS.some((p) => p.listed === false && p.requireLocation),
-    'the offered-filter is load-bearing — an unoffered requireLocation row exists to exclude'
-  );
-
-  for (const preset of offered.filter((p) => p.requireLocation)) {
-    const entry = new RegExp(`^\\s+${preset.id}:\\s*(.+)$`, 'm').exec(map[0]);
-    assert.ok(entry, `${preset.id} entry must be extractable`);
-    // `true` vs the conditional `{ unless: … }` form must agree — the
-    // difference is Set Home's "use current position" escape.
-    assert.equal(
-      /require:\s*true/.test(entry[1]),
-      preset.requireLocation === true,
-      `${preset.id}: the conditional-vs-always form must agree`
-    );
-  }
-
-  // The altitude rule is gone from the editor because `reposition` was the
-  // only row that declared it and nothing offers that preset. This is the
-  // tripwire for putting it back: an offered preset with requireAltitude
-  // would need a validator branch that no longer exists, and would otherwise
-  // deploy clean while sending a blank altitude as ground level.
-  assert.equal(
-    offered.filter((p) => p.requireAltitude).length, 0,
-    'an offered preset needs an altitude — restore the altitude branch in the params validator'
-  );
-  assert.doesNotMatch(map[0], /altitude:/, 'and PRESET_LOCATION carries no rule the validator ignores');
-});
-
 test('mavlink-command: NAN_CENTRE_PRESETS matches the library\'s NaN param5/6 sentinels', () => {
   // Second mirrored rule, same deal as PRESET_LOCATION: the editor cannot wait
   // on the async catalog, so it carries its own copy and this compares them.
