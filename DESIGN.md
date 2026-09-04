@@ -666,7 +666,7 @@ passthrough is unreachable rather than harmless.
 
 **14.92 Mission upload items live under `msg.payload.items`, not a bare array.** ✔
 A bare JSON array yields `[]` and is refused before any packet leaves.
-*Check:* `nodes/mavlink-mission.js` (`resolveItems`).
+*Check:* `nodes/mavlink-mission.js` (the upload item source: `payload.items` over the configured items).
 
 **14.93 Mission Clear needs no confirmation gate.** ✔ (owner ruling, 2026-08-13)
 Selecting Clear in the editor is the answer; checkbox, `msg.confirmed` escape and
@@ -815,7 +815,7 @@ The runtime never refuses trusted input *that has a defined safe coercion* (an e
 NaN rides; a blank speed sends the sentinel). Where no safe value exists to coerce to —
 a blank formation anchor coordinate would coerce to null island — it refuses loud.
 *Check:* `lib/formation/index.js` `formationTargets` (refusals), `lib/payload/index.js`
-`valueOr` (coercions) — both test-pinned.
+`slotValue` (coercions) — both test-pinned.
 
 **14.107 Telling the vehicle is not telling the flow — a Move stream announces its own expiry.** ✔
 TTL expiry emits a status record (`result: 'expired'`) on **output 1** — never output 0,
