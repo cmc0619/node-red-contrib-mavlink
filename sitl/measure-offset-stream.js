@@ -10,12 +10,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
-const { Connection } = require(path.join(ROOT, 'lib/connection/runtime'));
-const { BAND } = require(path.join(ROOT, 'lib/connection/bands'));
-const { loadBundled } = require(path.join(ROOT, 'lib/metadata/bundled'));
-const { buildCommandLong } = require(path.join(ROOT, 'lib/command/carrier'));
-const { buildMoveMessage, createMoveStream, MAV_FRAME } = require(path.join(ROOT, 'lib/move'));
+const { Connection } = require('../lib/connection/runtime');
+const { BAND } = require('../lib/connection/bands');
+const { loadBundled } = require('../lib/metadata/bundled');
+const { buildCommandLong } = require('../lib/command/carrier');
+const { buildMoveMessage, createMoveStream, MAV_FRAME } = require('../lib/move');
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-offset-stream-'));
 const OUT = path.join(WORK, 'offset-stream-results.json');
