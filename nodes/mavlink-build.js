@@ -40,7 +40,7 @@ const {
   applyActionStatus,
 } = require('../lib/delivery');
 const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
-const { loadMetadata } = require('../lib/metadata/load');
+const { loadBundled, catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
@@ -88,8 +88,7 @@ module.exports = function registerMavlinkBuild(RED) {
       if (config.dialect === '__vehicle') {
         bundle = dialectFromVehicleId(RED, config.vehicle);
       } else {
-        const { api } = loadMetadata('mavlink-build', RED);
-        bundle = api ? api.loadBundled(config.dialect) : null;
+        bundle = loadBundled(config.dialect);
       }
     } else {
       bundle = dialectFromConnection(RED, connectionNode);
@@ -230,15 +229,13 @@ module.exports = function registerMavlinkBuild(RED) {
 
   /**
    * Admin endpoint for the Build editor's message dropdown (§6). Registered
-   * once per process and isolated from metadata-load failures so the palette
-   * node still registers when `mavlink-mappings` is absent.
+   * once per process.
    */
   if (!messagesRouteRegistered) {
     registerDialectCatalogRoute(RED, {
       path: '/mavlink/build/messages',
-      logLabel: 'mavlink-build',
-      fromBundle: (api, bundle, dialect) => api.catalogMessagesFromBundle(bundle, dialect),
-      fromDialect: (api, dialect) => api.listMessagesCatalog(dialect),
+      fromBundle: catalogMessagesFromBundle,
+      fromDialect: listMessagesCatalog,
     });
     messagesRouteRegistered = true;
   }

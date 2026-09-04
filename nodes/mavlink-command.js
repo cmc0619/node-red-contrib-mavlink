@@ -54,7 +54,7 @@ const {
   MODE_FLAG_CUSTOM_MODE_ENABLED,
   setModeParams,
 } = require('../lib/vehicle/modes');
-const { loadMetadata } = require('../lib/metadata/load');
+const { loadBundled, catalogFromBundle, listCommandsCatalog } = require('../lib/metadata');
 const {
   resolveDeliveryContext,
   dialectFromVehicleId,
@@ -67,14 +67,6 @@ const {
   failInput,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
-
-/** Lazy metadata for coordKinds — palette still registers when deps are missing. */
-let _metadataApi;
-function metadataApi(RED) {
-  if (_metadataApi !== undefined) return _metadataApi;
-  _metadataApi = loadMetadata('mavlink-command', RED).api;
-  return _metadataApi;
-}
 
 /**
  * Return the command ID for the current node config (preset or advanced).
@@ -144,7 +136,7 @@ module.exports = function registerMavlinkCommand(RED) {
         ? dialectFromConnection(RED, connNode)
         : config.dialect === '__vehicle'
           ? dialectFromVehicleId(RED, config.vehicle)
-          : metadataApi(RED).loadBundled(config.dialect);
+          : loadBundled(config.dialect);
       _coordKinds = intCoordKinds(bundle, commandId);
       _coordKindsResolved = true;
       return _coordKinds;
@@ -179,7 +171,7 @@ module.exports = function registerMavlinkCommand(RED) {
         case 'build':
           context.bundle = config.dialect === '__vehicle'
             ? dialectFromVehicleId(RED, config.vehicle)
-            : metadataApi(RED).loadBundled(config.dialect);
+            : loadBundled(config.dialect);
           break;
         case 'send':
         case 'confirm':
@@ -637,9 +629,6 @@ module.exports = function registerMavlinkCommand(RED) {
   /**
    * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
    * Registered with the type; Node-RED calls this factory once per process.
-   * Metadata load is isolated so a metadata package that fails to load still
-   * registers the palette type (flows can open); the catalog routes then
-   * answer 503 until it loads.
    */
   const { presetGroups } = require('../lib/command');
   const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
@@ -658,9 +647,8 @@ module.exports = function registerMavlinkCommand(RED) {
    */
   registerDialectCatalogRoute(RED, {
     path: '/mavlink/command/commands',
-    logLabel: 'mavlink-command',
-    fromBundle: (api, bundle, dialect) => api.catalogFromBundle(bundle, dialect),
-    fromDialect: (api, dialect) => api.listCommandsCatalog(dialect),
+    fromBundle: catalogFromBundle,
+    fromDialect: listCommandsCatalog,
   });
 
   RED.nodes.registerType('mavlink-command', MavlinkCommandNode);

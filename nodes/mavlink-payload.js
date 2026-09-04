@@ -21,7 +21,7 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { loadMetadata } = require('../lib/metadata/load');
+const { loadBundled } = require('../lib/metadata');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
@@ -168,8 +168,6 @@ module.exports = function registerMavlinkPayload(RED) {
   }
 
   if (RED.httpAdmin && RED.auth) {
-    const { api: metadataApi } = loadMetadata('mavlink-payload', RED);
-
     /**
      * GET /mavlink/payload/field-tips?topic=&verb=&path=&vehicle=&dialect=
      * Returns `{ fields: { sequence: { description, units }, … } }` joined from
@@ -183,11 +181,8 @@ module.exports = function registerMavlinkPayload(RED) {
         // The dialog sends every field of its selection, path included — it
         // supplies `legacy` itself while the gimbal path is still unpicked.
         const { topic, verb, path } = req.query;
-        if (!metadataApi) {
-          return res.status(503).json({ fields: {}, error: 'metadata unavailable' });
-        }
         try {
-          const source = resolveCatalogSource(RED, metadataApi, req.query, { soft: true });
+          const source = resolveCatalogSource(RED, req.query, { soft: true });
           let bundle;
           let dialect;
           switch (source.kind) {
@@ -214,7 +209,7 @@ module.exports = function registerMavlinkPayload(RED) {
               dialect = source.dialect;
               break;
             case 'dialect':
-              bundle = metadataApi.loadBundled(source.dialect);
+              bundle = loadBundled(source.dialect);
               dialect = source.dialect;
               break;
             default: break; // This space intentionally left blank (§5)
