@@ -221,8 +221,8 @@ function identitySnapshot(idNode, defaults, bundle) {
     compid: wire.compid,
     heartbeatIntervalMs: idNode.heartbeatIntervalMs,
     heartbeat: {
-      type: Number(bundle.enums.MAV_TYPE.byName[hb.type]),
-      autopilot: Number(bundle.enums.MAV_AUTOPILOT.byName[hb.autopilot]),
+      type: bundle.enums.MAV_TYPE.byName[hb.type],
+      autopilot: bundle.enums.MAV_AUTOPILOT.byName[hb.autopilot],
     },
   };
 }
