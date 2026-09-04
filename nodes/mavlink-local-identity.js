@@ -67,14 +67,15 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
 
     node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
 
+    /** The Connection binds the vehicle sysid a companion identity derives. */
+    node.bindVehicleSysid = (sysid) => { node._vehicleSysid = sysid; };
+
     /**
      * The wire identity to stamp into outbound frame headers. A companion no
      * Connection has bound yet carries a null sysid.
      *
      * @returns {{sysid: number|null, compid: number}}
      */
-    node.bindVehicleSysid = (sysid) => { node._vehicleSysid = sysid; };
-
     node.getIdentity = () => node.derivesSysidFromVehicle
       ? { sysid: node._vehicleSysid, compid: node.sourceComponentId }
       : { sysid: node.sourceSystemId, compid: node.sourceComponentId };

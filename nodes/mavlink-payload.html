@@ -221,7 +221,7 @@
 
       // §6 hidden is not honored: a control the operator cannot see must not
       // put a stale choice on the wire. Reset to the editor default (3) when
-      // the row hides — blank is no longer a legal saved frame.
+      // the row hides — blank is not a legal saved frame.
       function applyFrameRow(carrierShown) {
         const shown = carrierShown && $('#node-input-sendAs').val() === 'int';
         if (!shown) $('#node-input-frame').val('3');

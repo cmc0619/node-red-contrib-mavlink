@@ -291,7 +291,7 @@ module.exports = function registerMavlinkParam(RED) {
           // reply from another system on a shared connection cannot confirm this
           // operation or interleave into a list from a different vehicle.
           // trustedOnly: an explicitly untrusted PARAM_VALUE must never confirm
-          // a set or feed a collect (§7 trust ruling #264); plain unsigned
+          // a set or feed a collect (§7 trust ruling); plain unsigned
           // links carry no mark and pass.
           const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
           if (request.target.compid) echoFilter.compid = request.target.compid;
@@ -430,7 +430,7 @@ module.exports = function registerMavlinkParam(RED) {
       // otherwise leaves that message forever unfinished for Node-RED's
       // onComplete hook / any wired Complete node. Matches the supersede path
       // above and the close handlers in mavlink-command / mavlink-mission
-      // (issue #96).
+      //.
       clearPending(true);
       done();
     });
@@ -469,7 +469,7 @@ function requestFrom(config, payload, { target, profile, capabilities }) {
     paramIndex: payload.paramIndex === undefined ? config.paramIndex : payload.paramIndex,
     value: payload.value !== undefined ? payload.value : config.value,
     // No REAL32 fallback: an absent type resolves to nothing, never to a
-    // guess — guessing the type silently mis-encodes the value (#222).
+    // guess — guessing the type silently mis-encodes the value.
     paramType: payload.paramType === undefined ? config.paramType : payload.paramType,
     firmware,
     encoding,

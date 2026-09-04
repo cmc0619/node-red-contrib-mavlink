@@ -3,7 +3,7 @@
   // Validate a field only while its anchor mode is selected — other modes hide
   // the field, and a hidden field's stale value must not block the dialog.
   // The mode read goes through liveOr so it is scoped to the node that owns
-  // the open dialog (#217): a raw selector read would apply one node's live
+  // the open dialog: a raw selector read would apply one node's live
   // mode to every sibling being validated behind it.
   // Two args throughout so a returned reason renders as the ring's message
   // (§14: a one-arg validator's returned string is coerced truthy).

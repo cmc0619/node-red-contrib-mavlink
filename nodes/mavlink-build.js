@@ -61,7 +61,7 @@ module.exports = function registerMavlinkBuild(RED) {
 
     // No `|| 'HEARTBEAT'`: an absent name leaves messageMeta null, and the
     // fields read below throws at deploy. Building a heartbeat nobody asked
-    // for is the phantom §9 forbids (#222).
+    // for is the phantom §9 forbids.
     const messageName = config.messageName;
     // The editor owns the default ('2' = Control) — just convert it.
     const defaultBand = Number(config.band);

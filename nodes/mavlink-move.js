@@ -40,7 +40,7 @@ module.exports = function registerMavlinkMove(RED) {
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
 
-    // Stop the active stream and free its single-owner scope (#176). Every
+    // Stop the active stream and free its single-owner scope. Every
     // stop the node causes — replacement, a non-stream input, an explicit
     // stop, close — routes through here so no path can leave the target
     // locked with nothing streaming to it. `brake` follows GCS practice
@@ -117,7 +117,7 @@ module.exports = function registerMavlinkMove(RED) {
      * Deliver an acked MAV_CMD on the Build / Send / Send & confirm tiers.
      * Shared by every Move action that rides a command rather than a setpoint —
      * reposition, turn, speed — so there is one AckWaiter and one result
-     * vocabulary across all of them (#276), not one per action.
+     * vocabulary across all of them, not one per action.
      *
      * @param {string} label  the action word, used in status and error text
      * @returns {boolean} true when the async confirm flow has taken ownership
@@ -184,7 +184,7 @@ module.exports = function registerMavlinkMove(RED) {
 
         // Action × Delivery derives the wire (§6 redesign): the operator
         // states an intent; carrier, message name, frame number, and mask are
-        // code. One affirmative switch on action (#316); goto nests delivery.
+        // code. One affirmative switch on action; goto nests delivery.
         const action = config.action;
 
         /**
@@ -202,7 +202,7 @@ module.exports = function registerMavlinkMove(RED) {
               // msg overrides by presence; the editor owns the defaults and rings.
               const rateHz = payload.rateHz === undefined ? Number(config.rateHz) : payload.rateHz;
               const ttlMs = payload.ttlMs === undefined ? Number(config.ttlMs) : payload.ttlMs;
-              // One stream per (connection, target) (#176): a second node
+              // One stream per (connection, target): a second node
               // streaming to the same vehicle would alternate contradictory
               // setpoints — the vehicle oscillates while both nodes report
               // success. Fail closed, like the mission-transfer lock. This node
@@ -267,7 +267,7 @@ module.exports = function registerMavlinkMove(RED) {
               // The old stream keeps running until the handover setpoint is
               // accepted: start() sends synchronously, and a throw must leave
               // the vehicle with the retrying stream it already had, not
-              // nothing (Codex, #240). Only a retarget's freshly acquired
+              // nothing. Only a retarget's freshly acquired
               // scope needs freeing on the way out.
               try {
                 next.start();
@@ -436,7 +436,7 @@ module.exports = function registerMavlinkMove(RED) {
  * not an acked MAV_CMD.
  *
  * Extracted from the input handler rather than inlined: with six actions the
- * handler was measured at cyclomatic complexity 36 (DeepSource, #303), and five
+ * handler was measured at cyclomatic complexity 36, and five
  * of those branches were only ever choosing which builder to call. The handler
  * keeps the parts that are genuinely about *this* input — suppression, target
  * resolution, delivery, the stream lock — and this owns the wire shape.
@@ -578,7 +578,7 @@ function completeExpiry(node, message, sent, brakeError) {
   applyActionStatus(node, 'ok', 'stream expired');
   // `result` is the documented discriminator (`result === 'expired'`) and
   // must survive a brake failure — the one moment downstream recovery matters
-  // most is exactly when the switch must still match (Codex, #240). The
+  // most is exactly when the switch must still match. The
   // failure rides its own field instead.
   const extra = { message, sent };
   if (brakeError) extra.brakeError = brakeError.message;

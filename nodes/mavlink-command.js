@@ -21,10 +21,10 @@
  *   build    — construct the selected carrier message and emit on output 0;
  *              no send.
  *   send     — fire-and-forget; no acknowledgement waiting.
- *   confirm  — wait for COMMAND_ACK, handle retry/backoff for
- *              TEMPORARILY_REJECTED and — for presets that tolerate re-issue —
- *              bounded re-send on a silent window (#248/#249); only the final
- *              timeout triggers the peer-table check.
+ *   confirm  — wait for COMMAND_ACK; re-send on TEMPORARILY_REJECTED up to
+ *              the editor's retry budget (a preset marked noAutoRetry
+ *              forces 0); a silent window settles unconfirmed and triggers
+ *              the peer-table check.
  *   complete — after ACCEPTED, poll peer table until completion condition met.
  *              Only offered for commands that have a completion condition (§9).
  *
@@ -190,7 +190,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // the flow supplied the other commands a mode nobody asked for:
       // `{ mode: 'Hold', 2: 5 }` would send main 5 with Hold's sub 3, a
       // combination that maps to no mode at all and fails silently as a
-      // wrong one (Gitar, #346). If any index the resolution would write is
+      // wrong one. If any index the resolution would write is
       // already supplied, the name selects nothing — including param1's bit,
       // because a flow spelling out custom-mode numbers owns base_mode too.
       if (Object.keys(modeParams).some((idx) => !isBlank(payload[idx]))) return;
@@ -205,7 +205,8 @@ module.exports = function registerMavlinkCommand(RED) {
      *
      * @param {*} payload
      * @param {object} resolution  { target, profile } for the mode-name ladder
-     * @returns {number[]}
+     * @returns {{wire: number[], requested: Array<number|undefined>}}  what
+     *   transmits, and the request with its holes kept
      */
     function getParams(payload, resolution) {
       const userParams = mergeParams(config, payload);
@@ -287,12 +288,10 @@ module.exports = function registerMavlinkCommand(RED) {
         });
       }
 
-      // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"): shared
-      // precedence chain — msg.mavFrame beats node config, blank falls to the
-      // carrier module's documented default (GLOBAL_RELATIVE_ALT, §14). The
-      // ±90/±180 degree check that used to read it here is the editor's now —
-      // it is the frame the COMMAND_INT builder scales param5/6 by, nothing
-      // more.
+      // Frame for the COMMAND_INT carrier (§9 "Coordinate frames"):
+      // msg.mavFrame beats node config, and the editor owns the saved frame's
+      // vocabulary. The ±90/±180 degree check is the editor's too; here it is
+      // the frame the COMMAND_INT builder scales param5/6 by, nothing more.
       const frame = resolveFrame(msg.mavFrame, config.frame);
       const { wire: paramArray, requested: requestedParams } = getParams(payload, { target, profile });
 
@@ -469,7 +468,7 @@ module.exports = function registerMavlinkCommand(RED) {
               // The ack settled and a close or new input ran in the same
               // synchronous stack: the sweep fired before this continuation
               // could record its handle, so nothing else can cancel the wait
-              // it just created — cancel it here (Codex, #236). Also keeps a
+              // it just created — cancel it here. Also keeps a
               // stale run from clobbering the newer run's handle.
               completionWait.cancel();
             }
@@ -484,7 +483,7 @@ module.exports = function registerMavlinkCommand(RED) {
             // cancel), or the wait settled before any cancel could land —
             // waitForCompletion polls once at creation, so an already-satisfied
             // completion resolves synchronously and the settle-once cancel()
-            // becomes a no-op (Codex, #236). Either way this run is stale:
+            // becomes a no-op. Either way this run is stale:
             // finish quietly, same rule as the ack cancel above (M1).
             if (compOutcome.cancelled || myGen !== _generation) {
               done();
@@ -507,7 +506,7 @@ module.exports = function registerMavlinkCommand(RED) {
               // This branch is gated on an ACCEPTED ack: the vehicle answered,
               // then the state never arrived. The ack's resultParam2 and
               // retry count ride through; its resultCode does not — null is
-              // the record's "no terminal verdict" (CodeRabbit).
+              // the record's "no terminal verdict".
               const rec = makeRecord({
                 ...ackRecordFields(ackOutcome),
                 result: 'timeout',

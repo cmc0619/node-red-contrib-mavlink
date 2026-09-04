@@ -38,7 +38,7 @@
      * every other role requires a value.
      *
      * The live role read goes through liveOr so it is scoped to this node's
-     * own dialog (#217): a bare $('#node-config-input-role') read would trust
+     * own dialog: a bare $('#node-config-input-role') read would trust
      * whatever dialog happens to be open, and a foreign read here poisons
      * `valid` on a node whose blank sysid is legal — sticky until reopened,
      * and the Connection reds with it through Node-RED's config cascade.
@@ -94,7 +94,7 @@
          */
         sourceSystemId:    { value: 255, validate: mavSourceSysidValidator(1) },
         // `required` rides alongside the validator, as on Vehicle's
-        // vehicleFamily (owner ruling, #372): blank reds through the generic
+        // vehicleFamily (owner ruling): blank reds through the generic
         // missing-required path, and any non-blank stray still gets the range
         // reason. It also means a blank can never reach the runtime as
         // Number('') === 0 — component 0 is MAV_COMP_ID_ALL, a real member.

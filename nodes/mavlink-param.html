@@ -297,7 +297,7 @@
        * truncation, and a negative value behaves as infinite two's complement
        * — so LOG_BITMASK's signed int32 spelling (-1 is every bit, per
        * readInt32LE) selects, masks, and round-trips with no sign juggling
-       * (Gitar, #296).
+       *.
        */
       let _valueBitEntries = [];
       let _valueDocMask = 0n;
@@ -800,12 +800,12 @@
           // folds to canonical signed-int32 spelling (BigInt.asIntN): these
           // params ride the wire as at most int32, so a freshly picked bit 31
           // must leave as the negative writeInt32LE accepts — a positive
-          // 2147483648 would throw at Set (Gitar, #296 round 2).
+          // 2147483648 would throw at Set.
           const pickedMask = RED.mavlink.bitmaskFromSelection($('#mav-param-value-select').val());
           const current = bitmaskBoxValue($box.val());
           // A box value outside signed int32 cannot ride the wire, and the
-          // fold below would silently rewrite it to one that can (CodeRabbit,
-          // #296). Leave it alone: validate() has the field red, which is
+          // fold below would silently rewrite it to one that can. Leave it alone:
+          // validate() has the field red, which is
           // where the operator sees and fixes it — not a truncated substitute.
           if (current !== null && BigInt.asIntN(32, current) !== current) return;
           // Nothing picked and nothing in the box: leave it alone rather than
@@ -832,7 +832,7 @@
       $('#node-input-value').on('input', () => {
         // Bitmask mode: a hand-edited box is the new truth. Switches still
         // showing the old mask would fold a deselected documented bit straight
-        // back in on the next pick (Codex, #296) — re-derive the selection
+        // back in on the next pick — re-derive the selection
         // exactly the way reopening the dialog does.
         const $select = $('#mav-param-value-select');
         if ($select.attr('multiple') === undefined) return;

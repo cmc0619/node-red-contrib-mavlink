@@ -463,7 +463,7 @@
    *
    * A saved enum value the current table lacks — a newer firmware's mode,
    * Blimp's reserved 30, a dialect switch — must survive open-and-save, not
-   * deselect to null and resolve to 0 on the wire (Codex #198). The sentinel
+   * deselect to null and resolve to 0 on the wire. The sentinel
    * is applied here, unconditionally, so no caller can lose it again: Build's
    * former copy of this ladder shipped without it.
    *
@@ -576,8 +576,8 @@
 
   /**
    * Fold a bitmask multi-select's selection back into one number — the inverse
-   * of {@link RED.mavlink.selectedBitmaskValues}, and the direction Build,
-   * Command and Payload each used to spell out for themselves.
+   * of {@link RED.mavlink.selectedBitmaskValues}, shared by Build, Command
+   * and Payload.
    *
    * `raw` is a jQuery `.val()` straight off the control, which is not an array
    * on either edge: `null` when nothing is selected, and a bare string for a
@@ -663,7 +663,7 @@
    * Vehicle / dialect query for admin catalog routes (enums, field-tips, …).
    *
    * A thin remainder over {@link RED.mavlink.resolveCatalogTarget}, which owns
-   * Build-tier detection (delivery vs Build's tier field, Codex #118) and the
+   * Build-tier detection (delivery vs Build's tier field) and the
    * connection → vehicle → dialect walk — the two halves this function used to
    * re-implement and keep in sync by hand. What stays here is what the
    * resolver has no field for: the config-node dialog branch
@@ -741,7 +741,7 @@
   RED.mavlink.resolveCatalogTarget = function (opts) {
     opts = opts || {};
     // Selectors are fixed, not options: every dialog uses the stock
-    // `#node-input-<key>` ids, and no caller has ever overridden one (#221).
+    // `#node-input-<key>` ids, and no caller has ever overridden one.
     const dialectSelector = '#node-input-dialect';
     const vehicleSelector = '#node-input-vehicle';
     const connectionSelector = '#node-input-connection';
@@ -1061,7 +1061,7 @@
    * select, anything else is replaced by what the select holds. The widget
    * completes on Enter and Tab by writing the top row into the box without a
    * change event (red.js autoComplete keydown; a mouse pick does fire one), so
-   * keyup on those keys runs the same resolve path (CodeRabbit, #418).
+   * keyup on those keys runs the same resolve path.
    *
    * Give the box an id outside `node-input-*`: Node-RED's properties pane
    * copies every `#node-input-<prop>` onto the node at save.
@@ -1363,7 +1363,7 @@
 
     // `listKey` is required, not sniffed from the endpoint: all six call sites
     // pass it, and guessing from the URL would silently pick the wrong list for
-    // a new endpoint (#221). Same for `cb` — every caller supplies one.
+    // a new endpoint. Same for `cb` — every caller supplies one.
     const listKey = opts.listKey;
     const resolveOpts = typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : {};
     const target = RED.mavlink.resolveCatalogTarget(resolveOpts);
@@ -1589,7 +1589,7 @@
    * other question that needs the same scoping. The reasoning it enforces is
    * written out there: a closed node validated by the config-save cascade
    * would otherwise read the open dialog's field and cache a poisoned `valid`
-   * flag (#217).
+   * flag.
    *
    * @param {object} owner     the node whose validator or dialog is asking
    * @param {string} selector  jQuery selector for the live field
@@ -1610,7 +1610,7 @@
    * appends — a saved value the current catalog does not contain.
    *
    * The sentinel exists so a value the catalog lacks survives open-and-save
-   * instead of silently deselecting (#198). For a *param* value that is the
+   * instead of silently deselecting. For a *param* value that is the
    * whole point and the state is legal. For a field the runtime must resolve
    * metadata from, it is not: the node deploys and every trigger fails. Those
    * fields validate against this.
@@ -1645,7 +1645,7 @@
    * somebody ELSE'S dialog is open, the live input is a lie about this node:
    * saving a config node validates every user it has before its tray closes,
    * and trays stack, so a closed sibling's validator ran against the open
-   * dialog's field. Measured (#217): a Send-tier command with broadcast
+   * dialog's field. Measured: a Send-tier command with broadcast
    * target 0 — saved-legal — reds "cannot be confirmed" the moment the shared
    * Connection is Updated from inside a confirm-tier node's dialog. The
    * poisoned `valid` flag is cached, deploy trusts the cache, and the red
@@ -1915,7 +1915,7 @@
   RED.mavlink.buildTierDialectDefaults = function (opts) {
     opts = opts || {};
     const modeField = opts.modeField || 'delivery';
-    // Derived, not an option: no caller overrides either selector (#221).
+    // Derived, not an option: no caller overrides either selector.
     const modeSelector = `#node-input-${modeField}`;
     const dialectSelector = '#node-input-dialect';
 
