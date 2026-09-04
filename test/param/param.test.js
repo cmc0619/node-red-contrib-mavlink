@@ -32,7 +32,7 @@ test('PARAM_SET for PX4 integer params writes the int bits into the float slot',
   assert.equal(message.name, 'PARAM_SET');
   assert.equal(message.fields.param_id, 'MIS_TAKEOFF_ALT');
   assert.equal(message.fields.param_type, 6);
-  assert.equal(message.fields.param_value, paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'));
+  assert.equal(message.fields.param_value, paramValueToWire(42, 6));
 });
 
 test('a set coerces the value it is handed — the editor is what requires one', () => {
@@ -85,7 +85,7 @@ test('Param set confirms only by matching PARAM_VALUE echo, decoded through the 
     fields: {
       param_id: 'MIS_TAKEOFF_ALT\u0000\u0000',
       param_type: 6,
-      param_value: paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'),
+      param_value: paramValueToWire(42, 6),
     },
   };
 
@@ -241,7 +241,7 @@ test('PARAM_SET uses capability bitwise encoding even when firmware says ardupil
     firmware: 'ardupilot',
     capabilities: CAP_PARAM_ENCODE_BYTEWISE,
   });
-  assert.equal(message.fields.param_value, paramValueToWire(42, 'MAV_PARAM_TYPE_INT32'));
+  assert.equal(message.fields.param_value, paramValueToWire(42, 6));
 });
 
 test('PARAM_SET explicit c-cast overrides PX4 firmware', () => {
@@ -371,7 +371,7 @@ test('echo decodes by the vehicle-declared param_type, not the request type', ()
     fields: {
       param_id: 'ARMING_CHECK',
       param_type: 4, // MAV_PARAM_TYPE_INT16 — what the vehicle actually reports
-      param_value: paramValueToWire(1, 'MAV_PARAM_TYPE_INT16'),
+      param_value: paramValueToWire(1, 4),
     },
   };
 
@@ -381,7 +381,7 @@ test('echo decodes by the vehicle-declared param_type, not the request type', ()
   assert.equal(
     matchesParamEcho(request, {
       ...echo,
-      fields: { ...echo.fields, param_value: paramValueToWire(2, 'MAV_PARAM_TYPE_INT16') },
+      fields: { ...echo.fields, param_value: paramValueToWire(2, 4) },
     }),
     false
   );
@@ -444,7 +444,7 @@ test('bytewise integer echo compares exactly — float32 tolerance must not conf
     fields: {
       param_id: 'BIG_MASK',
       param_type: 5, // MAV_PARAM_TYPE_UINT32
-      param_value: paramValueToWire(stored, 'MAV_PARAM_TYPE_UINT32'),
+      param_value: paramValueToWire(stored, 5),
     },
   });
 
@@ -475,7 +475,7 @@ test('REAL32 echo keeps float32 tolerance even on a bytewise vehicle', () => {
       fields: {
         param_id: 'MPC_XY_P',
         param_type: 9,
-        param_value: paramValueToWire(Math.fround(47.9), 'MAV_PARAM_TYPE_REAL32'),
+        param_value: paramValueToWire(Math.fround(47.9), 9),
       },
     }),
     true
@@ -503,7 +503,7 @@ test('exact-wire comparison is strict — a near-integer request does not confir
         fields: {
           param_id: 'X',
           param_type: 5,
-          param_value: paramValueToWire(1, 'MAV_PARAM_TYPE_UINT32'),
+          param_value: paramValueToWire(1, 5),
         },
       }
     ),
@@ -523,7 +523,7 @@ test('the echo decodes by the vehicle-declared type alone; one the codec cannot 
     fields: {
       param_id: 'X',
       param_type: 999, // not a MAV_PARAM_TYPE
-      param_value: paramValueToWire(1, 'MAV_PARAM_TYPE_REAL32'),
+      param_value: paramValueToWire(1, 9),
     },
   };
   const request = {

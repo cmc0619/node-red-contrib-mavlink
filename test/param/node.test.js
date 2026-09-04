@@ -394,7 +394,7 @@ test('mavlink-param Build concrete dialect uses config firmware', () => {
   );
 
   assert.equal(sent[0].payload.name, 'PARAM_SET');
-  assert.equal(sent[0].payload.fields.param_value, paramValueToWire(3, 'MAV_PARAM_TYPE_INT32'));
+  assert.equal(sent[0].payload.fields.param_value, paramValueToWire(3, 6));
 });
 
 test('mavlink-param payload firmware overrides Build concrete dialect firmware', () => {
@@ -463,7 +463,7 @@ test('mavlink-param capabilities beat ardupilot firmware for bytewise encoding',
 
   assert.equal(
     conn.sent[0].message.fields.param_value,
-    paramValueToWire(3, 'MAV_PARAM_TYPE_INT32'),
+    paramValueToWire(3, 6),
     'BYTEWISE capability encodes via float bit-cast despite ardupilot firmware'
   );
 });

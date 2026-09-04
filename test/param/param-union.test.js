@@ -40,7 +40,7 @@ test('int params round-trip across widths and signs', () => {
 test('REAL32 passes through as a genuine float (no reinterpret)', () => {
   assert.equal(paramValueToWire(3.5, REAL32), 3.5);
   assert.equal(paramValueFromWire(3.5, REAL32), 3.5);
-  assert.equal(paramValueToWire(3.5, 'MAV_PARAM_TYPE_REAL32'), 3.5);
+  assert.equal(paramValueToWire(3.5, 9), 3.5);
 });
 
 test('a corrupt int-vs-cast mistake is observable end to end', () => {
