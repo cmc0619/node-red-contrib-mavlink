@@ -229,7 +229,7 @@ module.exports = function registerMavlinkVehicle(RED) {
         catalogBaseDir: xmlCatalogBaseDir(RED),
       });
     } catch (err) {
-      problem = err.message.slice(0, 80);
+      problem = err.message;
     }
 
     if (problem !== null) {

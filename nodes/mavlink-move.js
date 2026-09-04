@@ -17,7 +17,7 @@ const {
   frameForReference,
   deriveSteerMode,
 } = require('../lib/move');
-const { AckWaiter, sendFnFor, cancelSlot } = require('../lib/command');
+const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command');
 const { BAND } = require('../lib/connection/bands');
 const { resolveDeliveryContext } = require('../lib/addressing');
 const {
@@ -66,57 +66,36 @@ module.exports = function registerMavlinkMove(RED) {
     }
 
     // Wait for the DO_REPOSITION COMMAND_ACK on the shared Command machinery
-    // (§9): AckWaiter matches by (command, source), retries
-    // TEMPORARILY_REJECTED, and re-arms on IN_PROGRESS. A goto re-sent is the
-    // same goto, so auto-retry is safe. Every non-accepted terminal —
+    // (§9): AckWaiter matches by (command, source) and re-arms on
+    // IN_PROGRESS. Move's editor carries no retry budget, so
+    // TEMPORARILY_REJECTED is terminal here — stated as maxRetries 0, not
+    // left to an absent option. Every non-accepted terminal —
     // COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included — is a
     // failure with its MAV_RESULT name, never silence.
     async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
-      waiterSlot.cancel();
       applyActionStatus(node, 'sending', `${label}…`);
-      const waiter = new AckWaiter({
-        subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
-        // The LONG carrier (Turn, Speed) stamps AckWaiter's retry counter into
-        // the confirmation byte on every re-send, per the encoder's own
-        // contract (lib/command sendFnFor); COMMAND_INT has no such byte, so
-        // the INT carrier still sends the message as built.
-        sendFn: sendFnFor(connectionNode, message, { band: BAND.CONTROL, target, identityId }),
-        commandId: message.fields.command,
-        targetSystem: target.sysid,
-        targetComponent: target.compid,
-        // Ack attribution (§9): ignore an ack explicitly addressed to a
-        // different GCS on a shared link.
-        sourceIds: connectionNode.resolveSourceIds(identityId),
+      const outcome = await waiterSlot.run(ackWaiterFor(connectionNode, message, {
+        band: BAND.CONTROL,
+        target,
+        identityId,
         // The editor owns the default and the number ring.
         timeoutMs: Number(config.ackTimeout),
+        maxRetries: 0,
         // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
         // follows the vehicle's own progress instead of standing still.
         onInProgress: (progress) => {
           applyActionStatus(node, 'sending', progress === null ? `${label}…` : `${label} ${progress}%…`);
         },
-      });
-      waiterSlot.active = waiter;
-      let outcome;
-      try {
-        outcome = await waiter.start();
-      } finally {
-        waiterSlot.release(waiter);
-      }
+      }));
       if (outcome.result === 'cancelled') {
         // A redeploy cancelled the wait (close() below): the node is being
         // torn down, so finish quietly — same rule as mavlink-command.
         done();
         return;
       }
-      const shared = {
-        message,
-        resultCode: outcome.resultCode,
-        resultParam2: outcome.resultParam2,
-        retries: outcome.retries,
-        elapsed: outcome.elapsed,
-      };
+      const fields = { ...ackRecordFields(outcome), message };
       if (outcome.result === 'accepted') {
-        completeResult(node, send, 'accepted', null, { ...shared, confirmedBy: 'ack' });
+        completeResult(node, send, 'accepted', null, fields);
         done();
         return;
       }
@@ -126,20 +105,16 @@ module.exports = function registerMavlinkMove(RED) {
         // reports exactly what the Command node reports: unconfirmed, with
         // nothing having confirmed it. Same word, same meaning, same machinery.
         applyActionStatus(node, 'error', `${label} unconfirmed`);
-        send([null, makeStatusRecord(node.type, {
-          result: 'unconfirmed', detail: outcome.detail, ...shared, confirmedBy: 'none',
-        })]);
+        send([null, makeStatusRecord(node.type, { ...fields, result: 'unconfirmed' })]);
         done();
         return;
       }
-      // Terminal ack — the MAV_RESULT name IS the result ('denied',
-      // 'command_int_only', 'command_unsupported_mav_frame', …), passed
-      // through verbatim like mavlink-command's, because it is the same
-      // AckWaiter outcome. One vocabulary, no translation layer to drift.
+      // Every other terminal — a MAV_RESULT name ('denied',
+      // 'command_int_only', 'command_unsupported_mav_frame', …) or a failed
+      // re-send — is the AckWaiter outcome verbatim, `confirmedBy` included.
+      // One vocabulary, no translation layer to drift.
       applyActionStatus(node, 'error', `${label} ${outcome.result}`);
-      send([null, makeStatusRecord(node.type, {
-        result: outcome.result, detail: outcome.detail, ...shared, confirmedBy: 'ack',
-      })]);
+      send([null, makeStatusRecord(node.type, fields)]);
       done();
     }
 
@@ -221,9 +196,9 @@ module.exports = function registerMavlinkMove(RED) {
          * Build / stream / send a setpoint-shaped message. Shared by
          * attitude/manual/steer and by goto+stream.
          * @param {object|undefined} message
-         * @param {string} brakingAction  action name for the stream brake rule
+         * @param {boolean} braking  whether the stream ends with a brake packet
          */
-        function deliverSetpoint(message, brakingAction) {
+        function deliverSetpoint(message, braking) {
           switch (delivery) {
             case 'build':
               completeBuild(node, send, message);
@@ -260,11 +235,7 @@ module.exports = function registerMavlinkMove(RED) {
                 identityId,
                 rateHz,
                 ttlMs,
-                // Attitude and manual end by going quiet (§9 ruling 1): zero
-                // thrust is a descent and a centred stick is a command, so
-                // neither has a brake packet to synthesize. Position setpoints
-                // keep their measured zero-velocity brake.
-                braking: brakingAction !== 'attitude' && brakingAction !== 'manual',
+                braking,
                 // TTL expiry is the only stop the flow did not cause, so it is
                 // the only one it cannot observe: without this the node would
                 // halt the vehicle and keep reporting "streaming" forever.
@@ -383,7 +354,7 @@ module.exports = function registerMavlinkMove(RED) {
                 // altitude reference names.
                 deliverSetpoint(
                   setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
-                  action
+                  true
                 );
                 done();
                 return;
@@ -421,10 +392,20 @@ module.exports = function registerMavlinkMove(RED) {
           }
           case 'attitude':
           case 'manual':
-          case 'steer':
+            // Attitude and manual end by going quiet (§9 ruling 1): zero
+            // thrust is a descent and a centred stick is a command, so
+            // neither has a brake packet to synthesize.
             deliverSetpoint(
               setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
-              action
+              false
+            );
+            done();
+            return;
+          case 'steer':
+            // Position setpoints keep their measured zero-velocity brake.
+            deliverSetpoint(
+              setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+              true
             );
             done();
             return;

@@ -23,8 +23,8 @@
  *     output 0 carries the input msg as a pass-through trigger.
  *
  * **Repeat interval**: when `repeatMs > 0` the node fires independently of
- * inbound triggers at the configured interval. The actual achieved rate (Hz)
- * is shown in the status badge alongside the configured rate.
+ * inbound triggers at the configured interval; the status badge names the
+ * configured rate.
  *
  * Chain model (§9):
  *   output 0  — continue: built message (Build tier) or pass-through (Send)
@@ -39,8 +39,8 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
-const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
-const { loadBundled, catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata');
+const { dialectForTier } = require('../lib/addressing');
+const { catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
@@ -75,24 +75,9 @@ module.exports = function registerMavlinkBuild(RED) {
     // Repeat interval.
     const repeatMs = Number(config.repeatMs);
     let repeatTimer = null;
-    let rateWindowStart = 0;
-    let rateWindowCount = 0;
 
-    // Resolve the dialect bundle per the role × tier matrix (§6).
-    //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
-    //   Build + '__vehicle' → vehicle node's bundle.
-    //   Wire tier → the connection's bound profile node's bundle (custom-safe).
     /** @type {import('../lib/metadata').DialectBundle} */
-    let bundle;
-    if (tier === 'build') {
-      if (config.dialect === '__vehicle') {
-        bundle = dialectFromVehicleId(RED, config.vehicle);
-      } else {
-        bundle = loadBundled(config.dialect);
-      }
-    } else {
-      bundle = dialectFromConnection(RED, connectionNode);
-    }
+    const bundle = dialectForTier(RED, tier, config, connectionNode);
     const messageMeta = bundle.messages[messageName];
     const bigIntFields = messageMeta.fields
       .filter((f) => f.type === 'uint64_t' || f.type === 'int64_t')
@@ -171,13 +156,6 @@ module.exports = function registerMavlinkBuild(RED) {
             return failRun(new Error(`send: ${err.message}`), { tier: 'send', band });
           }
 
-          const now = Date.now();
-          rateWindowCount += 1;
-          if (now - rateWindowStart >= 1000) {
-            rateWindowStart = now;
-            rateWindowCount = 1;
-          }
-
           const outMsg = triggerMsg
             ? { ...triggerMsg }
             : { payload: { result: 'sent', messageName, tier: 'send' } };
@@ -188,7 +166,7 @@ module.exports = function registerMavlinkBuild(RED) {
             band,
           });
           applyActionStatus(node, 'ok', repeatMs > 0
-            ? `${messageName} ${rateWindowCount}/${Math.round(1000 / repeatMs)}Hz`
+            ? `${messageName} ${Math.round(1000 / repeatMs)}Hz`
             : messageName);
           emit([outMsg, sr]);
           return true;
@@ -212,7 +190,6 @@ module.exports = function registerMavlinkBuild(RED) {
     });
 
     if (repeatMs > 0) {
-      rateWindowStart = Date.now();
       repeatTimer = setInterval(() => {
         execute(null);
       }, repeatMs);

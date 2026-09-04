@@ -330,7 +330,11 @@ function buildPlan(operation, missionType, target, items) {
  * @returns {string}
  */
 function successBadge(operation, missionTypeKey, outcome) {
-  if (operation === OPERATION.DOWNLOAD) return `${missionTypeKey} \u2193 ${outcome.count} items`;
-  if (operation === OPERATION.UPLOAD) return `${missionTypeKey} \u2191 ${outcome.count} items`;
-  return `${missionTypeKey} cleared`;
+  switch (operation) {
+    case OPERATION.DOWNLOAD: return `${missionTypeKey} \u2193 ${outcome.count} items`;
+    case OPERATION.UPLOAD: return `${missionTypeKey} \u2191 ${outcome.count} items`;
+    case OPERATION.CLEAR: return `${missionTypeKey} cleared`;
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined; // nothing matched: no behavior selected (§5)
 }

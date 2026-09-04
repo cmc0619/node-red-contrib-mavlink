@@ -180,7 +180,8 @@ module.exports = function registerMavlinkConnection(RED) {
     node.crcFailureCount = () => node.connection.crcFailureCount();
     Object.defineProperty(node, 'peerTable', { get: () => node.connection.peerTable });
 
-    applyStatus(node, STATE.CONNECTING, signing.acceptInvalid);
+    // start() sets CONNECTING synchronously before its first await, and the
+    // 'state' listener above is already on, so the badge follows it from here.
     node.connection.start().catch((err) => {
       applyStatus(node, STATE.ERROR, signing.acceptInvalid);
       node.error(err.message);
@@ -278,12 +279,12 @@ function buildTransportConfig(config) {
  * fails the connection closed in the runtime.
  *
  * @param {object} config
- * @param {object} [credentials]
+ * @param {object} credentials  the node's credentials object (Node-RED always assigns one)
  * @returns {object}
  */
 function buildSigning(config, credentials) {
-  const passphrase = credentials && credentials.signingPassphrase;
-  const keyHex = credentials && credentials.signingKeyHex;
+  const passphrase = credentials.signingPassphrase;
+  const keyHex = credentials.signingKeyHex;
 
   const signing = {
     linkId: Number(config.linkId),

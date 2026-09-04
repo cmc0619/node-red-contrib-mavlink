@@ -93,6 +93,12 @@ module.exports = function registerMavlinkFormation(RED) {
           message,
           targets: memberTargets,
           mode: 'sequential',
+          // One vehicle at a time, as the help promises, and one send per
+          // vehicle: a goto re-sent is the same goto, but a formation run
+          // that stalls on one member's TEMPORARILY_REJECTED holds the whole
+          // pattern, so the retry budget is spent by the operator's next input.
+          concurrency: 1,
+          maxRetries: 0,
           delivery: config.delivery,
           // The editor owns both defaults and rejects blank at deploy, so the
           // saved value is numeric — trust it (Number only, no second default).

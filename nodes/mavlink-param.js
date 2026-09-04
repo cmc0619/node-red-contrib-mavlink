@@ -460,9 +460,7 @@ module.exports = function registerMavlinkParam(RED) {
  * @returns {object} normalized param request
  */
 function requestFrom(config, payload, { target, profile, capabilities }) {
-  const firmware = payload.firmware === undefined
-    ? profile && profile.firmware
-    : payload.firmware;
+  const firmware = payload.firmware === undefined ? profile.firmware : payload.firmware;
   // `paramEncoding` only. The old `payload.encoding` rung was undocumented,
   // unexampled and untested — nothing in the repo ever wrote it (1a79c88 removed
   // the matching config-side alias).

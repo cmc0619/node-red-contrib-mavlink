@@ -382,9 +382,12 @@ test('the delivery select is pinned to the tiers the driver dispatches', () => {
     path.join(__dirname, '..', '..', 'nodes', 'mavlink-payload.js'),
     'utf8'
   );
+  // The dispatcher's own arms end at its `default:` at the switch's
+  // indentation; the confirm arm nests a switch on the built command's
+  // confirmation kind, whose arms and default sit deeper and are not tiers.
   const dispatch = nodeSource.slice(nodeSource.indexOf('switch (delivery)'));
-  const implemented = [...dispatch.slice(0, dispatch.indexOf('default:'))
-    .matchAll(/case '([a-z]+)':/g)].map((m) => m[1]);
+  const implemented = [...dispatch.slice(0, dispatch.search(/\n {10}default:/))
+    .matchAll(/\n {10}case '([a-z]+)':/g)].map((m) => m[1]);
   assert.ok(implemented.length >= 3, 'the delivery dispatcher was found');
   for (const tier of implemented) {
     assert.match(

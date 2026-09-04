@@ -54,6 +54,7 @@ const node = new types['mavlink-vehicle']({
   firmware: 'ardupilot',
   dialect: 'ardupilotmega',
   dialectRevision: 'seed',
+  additionalDialects: '',
 });
 let bundle;
 try {

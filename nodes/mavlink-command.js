@@ -34,11 +34,12 @@
 
 const {
   makeStatusRecord,
-  MAV_RESULT,
   getPreset,
+  presetGroups,
   buildParamArray,
   mergeParams,
-  AckWaiter,
+  ackWaiterFor,
+  ackRecordFields,
   cancelSlot,
   checkCompletion,
   waitForCompletion,
@@ -54,11 +55,10 @@ const {
   MODE_FLAG_CUSTOM_MODE_ENABLED,
   setModeParams,
 } = require('../lib/vehicle/modes');
-const { loadBundled, catalogFromBundle, listCommandsCatalog } = require('../lib/metadata');
+const { catalogFromBundle, listCommandsCatalog } = require('../lib/metadata');
 const {
   resolveDeliveryContext,
-  dialectFromVehicleId,
-  dialectFromConnection,
+  dialectForTier,
   isBlank,
 } = require('../lib/addressing');
 const {
@@ -90,10 +90,10 @@ module.exports = function registerMavlinkCommand(RED) {
     RED.nodes.createNode(this, config);
     const node = this;
 
-    // Active transaction trackers — at most one in flight per node
-    // (lib/command cancelSlot).
-    const waiterSlot = cancelSlot();
-    const completionSlot = cancelSlot();
+    // The one in-flight transaction per node — the ack wait, then on Complete
+    // the completion wait that follows it (lib/command cancelSlot). The two
+    // never coexist: the completion wait starts only after the ack settled.
+    const slot = cancelSlot();
     // Bumped by close and by each new input: a run that resumes from its ack
     // await into a stale generation was swept before it could record its
     // completion handle, and must not start (or keep) a live wait.
@@ -129,15 +129,7 @@ module.exports = function registerMavlinkCommand(RED) {
     let _coordKindsResolved = false;
     function coordKinds() {
       if (_coordKindsResolved) return _coordKinds;
-      // Build names its dialect in the editor; the wire tiers (send, confirm,
-      // complete) ride the Connection, whose snapshot has no bundle — resolve
-      // the profile node (§7).
-      const bundle = delivery !== 'build'
-        ? dialectFromConnection(RED, connNode)
-        : config.dialect === '__vehicle'
-          ? dialectFromVehicleId(RED, config.vehicle)
-          : loadBundled(config.dialect);
-      _coordKinds = intCoordKinds(bundle, commandId);
+      _coordKinds = intCoordKinds(dialectForTier(RED, delivery, config, connNode), commandId);
       _coordKindsResolved = true;
       return _coordKinds;
     }
@@ -152,11 +144,10 @@ module.exports = function registerMavlinkCommand(RED) {
      * (the vehicle-published cache) plus the bound profile's firmware/family
      * and bundle; Build resolves through the Vehicle Profile escape only — a
      * concrete Build dialect has no firmware axis on this node, so shipped
-     * tables cannot pick and an unmatched name rides to the NaN tail. Same
-     * tier dispatch as coordKinds above (§5); a tier the editor's delivery
-     * select cannot save composes only the firmware axis, so name resolution
-     * falls to that same NaN tail — and the tier dispatch in handleInput
-     * sends nothing anyway.
+     * tables cannot pick and an unmatched name rides to the NaN tail. A tier
+     * the editor's delivery select cannot save composes only the firmware
+     * axis (§5), so name resolution falls to that same NaN tail — and the
+     * tier dispatch in handleInput sends nothing anyway.
      *
      * @param {{target: {sysid: number, compid: number}, profile: object|null}} resolution
      * @returns {import('../lib/vehicle/modes').ModeContext}
@@ -166,13 +157,10 @@ module.exports = function registerMavlinkCommand(RED) {
       const context = {
         firmware: profile.firmware,
         vehicleFamily: profile.vehicleFamily,
+        bundle: dialectForTier(RED, delivery, config, connNode),
       };
+      // The wire tiers also resolve against the addressed peer component.
       switch (delivery) {
-        case 'build':
-          context.bundle = config.dialect === '__vehicle'
-            ? dialectFromVehicleId(RED, config.vehicle)
-            : loadBundled(config.dialect);
-          break;
         case 'send':
         case 'confirm':
         case 'complete':
@@ -180,7 +168,6 @@ module.exports = function registerMavlinkCommand(RED) {
             resolution.target.sysid,
             resolution.target.compid
           );
-          context.bundle = dialectFromConnection(RED, connNode);
           break;
         default: break; // This space intentionally left blank (§5)
       }
@@ -277,15 +264,10 @@ module.exports = function registerMavlinkCommand(RED) {
       // The editor owns the defaults and the number rings.
       const timeoutMs = Number(config.timeout);
       const maxRetries = Number(config.maxRetries);
-      // Complete's poll timeout resolves here too — before the send, not in
-      // the post-ack continuation where it used to sit: by then the vehicle
-      // has already accepted and begun executing the command, so a garbage
-      // value refused after the fact (#309 review round). Gated on the tier
-      // so a cleared value cannot red a Build/Send/Confirm node that never
-      // reads it (the same liveOr rule the editors follow).
-      const completionTimeoutMs = delivery === 'complete'
-        ? Number(config.completionTimeout)
-        : null;
+      // Complete's poll timeout resolves here too, before the send: by the
+      // post-ack continuation the vehicle has already begun executing the
+      // command. Only the Complete tier reads it.
+      const completionTimeoutMs = Number(config.completionTimeout);
 
       const payload = msg.payload;
       const { target, identityId, profile } = resolveDeliveryContext(RED, {
@@ -297,11 +279,17 @@ module.exports = function registerMavlinkCommand(RED) {
 
       const startMs = Date.now();
 
+      /**
+       * This input's status record: command, target and the elapsed time
+       * since the input arrived, which an ack outcome's own measure or a
+       * completion wait overrides through `fields`.
+       */
       function makeRecord(fields) {
         return makeStatusRecord(node.type, {
           command: commandName,
           commandId,
           target,
+          elapsed: Date.now() - startMs,
           ...fields,
         });
       }
@@ -316,16 +304,15 @@ module.exports = function registerMavlinkCommand(RED) {
       const { wire: paramArray, requested: requestedParams } = getParams(payload, { target, profile });
 
       /**
-       * Build the wire message for a carrier at a given confirmation counter.
-       * COMMAND_INT has no confirmation byte, so it is ignored there; the
-       * canonical params are always degrees, scaled per carrier by the
-       * carrier module (§9).
+       * Build the wire message for a carrier. The LONG carrier's confirmation
+       * byte is stamped per (re-)send by the ack waiter's sendFn (lib/command
+       * sendFnFor); the canonical params are always degrees, scaled per
+       * carrier by the carrier module (§9).
        *
        * @param {'long'|'int'} carrier
-       * @param {number} confirmation
        * @returns {{name: string, fields: object}}
        */
-      function buildCarrierMessage(carrier, confirmation) {
+      function buildCarrierMessage(carrier) {
         switch (carrier) {
           case CARRIER.INT:
             return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
@@ -333,7 +320,7 @@ module.exports = function registerMavlinkCommand(RED) {
               coordKinds: coordKinds() || undefined,
             });
           case CARRIER.LONG:
-            return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
+            return buildCommandLong(commandId, target.sysid, target.compid, paramArray, 0);
           default: break; // This space intentionally left blank (§5)
         }
         return undefined; // nothing matched: no behavior selected (§5)
@@ -344,16 +331,13 @@ module.exports = function registerMavlinkCommand(RED) {
       // below, where `delivery === 'complete'` adds the completion poll.
       switch (delivery) {
         case 'build': {
-          const message = buildCarrierMessage(configuredCarrier, 0);
+          const message = buildCarrierMessage(configuredCarrier);
           applyActionStatus(node, 'preview', `build ${displayName}`);
           // Output 1 reports every terminal outcome, success included (§9); a
           // successful build emits a 'built' status record for status/debug
           // consumers, consistent with the other action nodes.
           const rec = makeRecord({
             result: 'built',
-            resultCode: null,
-            confirmedBy: 'none',
-            elapsed: Date.now() - startMs,
             detail: 'build tier: message constructed, not sent',
           });
           emitStatus(rec, send, true, message);
@@ -361,10 +345,10 @@ module.exports = function registerMavlinkCommand(RED) {
           return;
         }
         case 'send': {
-          const message = buildCarrierMessage(configuredCarrier, 0);
+          const message = buildCarrierMessage(configuredCarrier);
           applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
           connNode.send(message, { band: BAND.CONTROL, target, identityId });
-          const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
+          const rec = makeRecord({ result: 'sent' });
           applyActionStatus(node, 'ok', `sent ${displayName}`);
           emitStatus(rec, send, true, message);
           done();
@@ -390,56 +374,33 @@ module.exports = function registerMavlinkCommand(RED) {
        */
       async function confirmTier() {
         // ── Delivery: Confirm / Complete ────────────────────────────────────
-        // Cancel any in-flight waiter for this node before starting a new one.
-        waiterSlot.cancel();
-        completionSlot.cancel();
+        // slot.run below cancels whatever wait the previous input left.
         const myGen = ++_generation;
 
         applyActionStatus(node, 'sending', `${displayName}\u2026`);
 
-        /**
-         * Run one AckWaiter transaction in the configured carrier and resolve
-         * with its outcome.
-         */
-        async function runWaiter() {
-          const waiter = new AckWaiter({
-            subscribe: (filter, handler) => connNode.subscribe(filter, handler),
-            sendFn: (confirmation) => {
-              connNode.send(buildCarrierMessage(configuredCarrier, confirmation), { band: BAND.CONTROL, target, identityId });
-            },
-            commandId,
-            targetSystem: target.sysid,
-            targetComponent: target.compid,
-            // Ack attribution (§9): ignore an ack explicitly addressed to a
-            // different GCS on a shared link.
-            sourceIds: connNode.resolveSourceIds(identityId),
-            timeoutMs,
-            maxRetries: noAutoRetry ? 0 : maxRetries,
-            noAutoRetry,
-            // Same badge channel: a takeoff answers IN_PROGRESS for seconds (§9),
-            // and without this the operator watches an unchanging wait.
-            onInProgress: (progress) => {
-              applyActionStatus(
-                node,
-                'sending',
-                progress === null
-                  ? `in progress ${displayName}\u2026`
-                  : `in progress ${progress}% ${displayName}\u2026`
-              );
-            },
-          });
-          waiterSlot.active = waiter;
-          try {
-            return await waiter.start();
-          } finally {
-            waiterSlot.release(waiter);
-          }
-        }
-
         // The operator's configured carrier (§9): a required choice, so the
         // wire format is stated intent — never a guess. The ack it earns,
         // wrong-carrier codes included, is the result.
-        const ackOutcome = await runWaiter();
+        const ackOutcome = await slot.run(ackWaiterFor(connNode, buildCarrierMessage(configuredCarrier), {
+          band: BAND.CONTROL,
+          target,
+          identityId,
+          timeoutMs,
+          maxRetries: noAutoRetry ? 0 : maxRetries,
+          noAutoRetry,
+          // Same badge channel: a takeoff answers IN_PROGRESS for seconds (§9),
+          // and without this the operator watches an unchanging wait.
+          onInProgress: (progress) => {
+            applyActionStatus(
+              node,
+              'sending',
+              progress === null
+                ? `in progress ${displayName}\u2026`
+                : `in progress ${progress}% ${displayName}\u2026`
+            );
+          },
+        }));
 
         // A redeploy cancelled the wait (close() cancels the waiter slot).
         // The node is being torn down, so finish quietly: emitting or raising
@@ -471,10 +432,8 @@ module.exports = function registerMavlinkCommand(RED) {
               // Ack was lost on the return leg; the command ran.
               const rec = makeRecord({
                 result: 'accepted',
-                resultCode: null,
                 confirmedBy: 'state',
                 retries: ackOutcome.retries,
-                elapsed: Date.now() - startMs,
                 detail: `ack timeout but ${stateCheck.detail}`,
               });
               applyActionStatus(node, 'ok', `${displayName} accepted`);
@@ -487,10 +446,7 @@ module.exports = function registerMavlinkCommand(RED) {
           // Genuinely unknown — report unconfirmed.
           const rec = makeRecord({
             result: 'unconfirmed',
-            resultCode: null,
-            confirmedBy: 'none',
             retries: ackOutcome.retries,
-            elapsed: Date.now() - startMs,
             detail: ackOutcome.detail,
           });
           applyActionStatus(node, 'error', `timeout ${displayName}`);
@@ -515,7 +471,7 @@ module.exports = function registerMavlinkCommand(RED) {
               timeoutMs: completionTimeoutMs,
             });
             if (myGen === _generation) {
-              completionSlot.active = completionWait;
+              slot.active = completionWait;
             } else {
               // The ack settled and a close or new input ran in the same
               // synchronous stack: the sweep fired before this continuation
@@ -528,7 +484,7 @@ module.exports = function registerMavlinkCommand(RED) {
             try {
               compOutcome = await completionWait.promise;
             } finally {
-              completionSlot.release(completionWait);
+              slot.release(completionWait);
             }
 
             // A redeploy cancelled the wait (close() calls the completion
@@ -544,30 +500,26 @@ module.exports = function registerMavlinkCommand(RED) {
 
             if (compOutcome.success) {
               const rec = makeRecord({
-                result: 'accepted',
-                resultCode: MAV_RESULT.ACCEPTED,
-                resultParam2: ackOutcome.resultParam2,
+                ...ackRecordFields(ackOutcome),
                 // 'state' when the peer table confirmed; 'ack' when the
                 // condition was unverifiable and the accepted ack is the
                 // whole evidence (base-only SET_MODE).
                 confirmedBy: compOutcome.confirmedBy,
-                retries: ackOutcome.retries,
                 elapsed: Date.now() - startMs,
                 detail: compOutcome.detail,
               });
               applyActionStatus(node, 'ok', `${displayName} done`);
               emitStatus(rec, send, true, rec);
             } else {
+              // This branch is gated on an ACCEPTED ack: the vehicle answered,
+              // then the state never arrived. The ack's resultParam2 and
+              // retry count ride through; its resultCode does not — null is
+              // the record's "no terminal verdict" (CodeRabbit).
               const rec = makeRecord({
+                ...ackRecordFields(ackOutcome),
                 result: 'timeout',
                 resultCode: null,
-                // This branch is gated on an ACCEPTED ack: the vehicle answered,
-                // then the state never arrived. `null` is reserved for settles
-                // with no ack at all, so the ack's field rides through here the
-                // same way its retry count does (CodeRabbit).
-                resultParam2: ackOutcome.resultParam2,
                 confirmedBy: 'none',
-                retries: ackOutcome.retries,
                 elapsed: Date.now() - startMs,
                 detail: compOutcome.detail,
               });
@@ -580,16 +532,10 @@ module.exports = function registerMavlinkCommand(RED) {
             return;
           }
 
-          // Confirm tier or complete tier with no condition: accepted is complete.
-          const rec = makeRecord({
-            result: 'accepted',
-            resultCode: MAV_RESULT.ACCEPTED,
-            resultParam2: ackOutcome.resultParam2,
-            confirmedBy: 'ack',
-            retries: ackOutcome.retries,
-            elapsed: Date.now() - startMs,
-            detail: null,
-          });
+          // Confirm tier or complete tier with no condition: accepted is
+          // complete, and the waiter's own elapsed (first send to terminal
+          // ack) is the record's.
+          const rec = makeRecord(ackRecordFields(ackOutcome));
           applyActionStatus(node, 'ok', `${displayName} accepted`);
           emitStatus(rec, send, true, rec);
           done();
@@ -597,15 +543,7 @@ module.exports = function registerMavlinkCommand(RED) {
         }
 
         // Any other terminal failure.
-        const rec = makeRecord({
-          result: ackOutcome.result,
-          resultCode: ackOutcome.resultCode,
-          resultParam2: ackOutcome.resultParam2,
-          confirmedBy: ackOutcome.confirmedBy,
-          retries: ackOutcome.retries,
-          elapsed: Date.now() - startMs,
-          detail: ackOutcome.detail,
-        });
+        const rec = makeRecord(ackRecordFields(ackOutcome));
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);
         done();
@@ -620,8 +558,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
     node.on('close', (done) => {
       _generation += 1;
-      waiterSlot.cancel();
-      completionSlot.cancel();
+      slot.cancel();
       done();
     });
   }
@@ -630,7 +567,6 @@ module.exports = function registerMavlinkCommand(RED) {
    * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
    * Registered with the type; Node-RED calls this factory once per process.
    */
-  const { presetGroups } = require('../lib/command');
   const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
   RED.httpAdmin.get(
