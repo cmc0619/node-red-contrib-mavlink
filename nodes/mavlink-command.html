@@ -945,8 +945,7 @@
           // source for labels, units, enums, bitmask-ness, descriptions, and
           // ranges; PRESET_PARAMS only curates exposure and guidance (§6).
           // Paint from the catalog the loader hands back (Style C). oneditsave's
-          // rendered-guard keeps a premature Done from scraping the empty form
-          //.
+          // rendered-guard keeps a premature Done from scraping the empty form.
           const commandId = presetCommandId(presetId);
           container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
           loadCommandsCatalog(_cmdCatalogSites.presetParams, (catalog) => {

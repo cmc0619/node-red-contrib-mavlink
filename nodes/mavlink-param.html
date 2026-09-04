@@ -296,8 +296,7 @@
        * same as Command's Advanced params): BigInt bitwise has no int32
        * truncation, and a negative value behaves as infinite two's complement
        * — so LOG_BITMASK's signed int32 spelling (-1 is every bit, per
-       * readInt32LE) selects, masks, and round-trips with no sign juggling
-       *.
+       * readInt32LE) selects, masks, and round-trips with no sign juggling.
        */
       let _valueBitEntries = [];
       let _valueDocMask = 0n;
