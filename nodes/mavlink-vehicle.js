@@ -12,24 +12,12 @@
  * decoded against its profile — one dialect, one firmware, no per-packet lookup
  * (§7). A mixed fleet is expressed as more connections, not more configuration
  * inside one.
- *
- * The type is always registered even if the metadata package failed to load, so
- * Connection / Build keep their standard config-node edit/add pickers. Runtime
- * dialect access then fails loud with a status badge.
  */
 
 const { capBadge } = require('../lib/delivery');
-const { loadMetadata } = require('../lib/metadata/load');
+const metadata = require('../lib/metadata');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
-
-let vehicleApi = null;
-/** @type {Error|null} */
-let vehicleLoadError = null;
-try {
-  vehicleApi = require('../lib/vehicle');
-} catch (err) {
-  vehicleLoadError = err;
-}
+const { resolveDialect, knownDialects } = require('../lib/vehicle');
 
 /** Admin endpoint path for dialect list. */
 const DIALECTS_ROUTE = '/mavlink/dialects';
@@ -78,32 +66,6 @@ function compiledCacheDir(RED) {
 }
 
 module.exports = function registerMavlinkVehicle(RED) {
-  if (!vehicleApi) {
-    const msg = vehicleLoadError.message;
-    if (RED.log && typeof RED.log.error === 'function') {
-      RED.log.error(`[mavlink-vehicle] ${msg}`);
-    }
-    function BrokenVehicleNode(config) {
-      RED.nodes.createNode(this, config);
-      this.status({ fill: 'red', shape: 'ring', text: 'missing deps' });
-      this.getDialect = () => {
-        throw vehicleLoadError;
-      };
-      // Do not invent profile defaults (especially target 1/1) on a broken
-      // load — Connection must fail loud, not bind companions to system 1.
-      this.getDefaults = () => {
-        throw vehicleLoadError;
-      };
-    }
-    RED.nodes.registerType('mavlink-vehicle', BrokenVehicleNode);
-    return;
-  }
-
-  const {
-    resolveDialect,
-    knownDialects,
-  } = vehicleApi;
-
   /**
    * Register the admin HTTP endpoint that serves the bundled dialect list to
    * editor dropdowns (§6 "Register with RED.auth.needsPermission"). Done once
@@ -129,10 +91,9 @@ module.exports = function registerMavlinkVehicle(RED) {
   if (!_enumsRouteRegistered) {
     registerDialectCatalogRoute(RED, {
       path: ENUMS_ROUTE,
-      logLabel: 'mavlink-vehicle',
-      fromBundle: (api, bundle, dialect, req) =>
-        api.catalogEnumsFromBundle(bundle, dialect, req.query.names),
-      fromDialect: (api, dialect, req) => api.listEnumsCatalog(dialect, req.query.names),
+      fromBundle: (bundle, dialect, req) =>
+        metadata.catalogEnumsFromBundle(bundle, dialect, req.query.names),
+      fromDialect: (dialect, req) => metadata.listEnumsCatalog(dialect, req.query.names),
     });
     _enumsRouteRegistered = true;
   }
@@ -147,15 +108,9 @@ module.exports = function registerMavlinkVehicle(RED) {
    * GET  /mavlink/xml-catalog/compare  informational diff vs the seed dialect
    */
   if (!_xmlCatalogRouteRegistered) {
-    const { api: catalogApi, error: catalogLoadError } = loadMetadata('mavlink-vehicle', RED);
-    if (catalogApi) catalogApi.setCompiledCacheDir(compiledCacheDir(RED));
+    metadata.setCompiledCacheDir(compiledCacheDir(RED));
 
-    const newCatalog = () => new catalogApi.XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
-    const catalogUnavailable = (res) =>
-      res.status(503).json({
-        ok: false,
-        error: catalogLoadError ? catalogLoadError.message : 'XML catalog unavailable',
-      });
+    const newCatalog = () => new metadata.XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
 
     // GET list: needs read permission (§6). Never discloses the absolute base
     // dir — only the dialect names and snapshot dates the Version pulldown offers.
@@ -163,13 +118,9 @@ module.exports = function registerMavlinkVehicle(RED) {
       XML_CATALOG_ROUTE,
       RED.auth.needsPermission('mavlink.read'),
       (_req, res) => {
-        if (!catalogApi) {
-          catalogUnavailable(res);
-          return;
-        }
         try {
           const catalog = newCatalog();
-          const library = catalogApi.dialectLibrary(catalog);
+          const library = metadata.dialectLibrary(catalog);
           res.json({ ok: true, dialects: library.dialects });
         } catch (err) {
           res.status(500).json({ ok: false, error: err.message, code: err.code });
@@ -183,10 +134,6 @@ module.exports = function registerMavlinkVehicle(RED) {
       `${XML_CATALOG_ROUTE}/update`,
       RED.auth.needsPermission('mavlink.write'),
       (req, res) => {
-        if (!catalogApi) {
-          catalogUnavailable(res);
-          return;
-        }
         const body = req.body;
         // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
         // so a crafted value cannot inject extra path segments server-side.
@@ -214,10 +161,6 @@ module.exports = function registerMavlinkVehicle(RED) {
       `${XML_CATALOG_ROUTE}/compare`,
       RED.auth.needsPermission('mavlink.read'),
       (req, res) => {
-        if (!catalogApi) {
-          catalogUnavailable(res);
-          return;
-        }
         try {
           const result = newCatalog().compare({
             file: req.query.file,
@@ -239,11 +182,7 @@ module.exports = function registerMavlinkVehicle(RED) {
       `${DIALECT_CACHE_ROUTE}/rebuild`,
       RED.auth.needsPermission('mavlink.write'),
       (_req, res) => {
-        if (!catalogApi) {
-          catalogUnavailable(res);
-          return;
-        }
-        res.json({ ok: true, cleared: catalogApi.clearCompiledCache() });
+        res.json({ ok: true, cleared: metadata.clearCompiledCache() });
       }
     );
 

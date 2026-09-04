@@ -7,12 +7,6 @@ const {
   registerDialectCatalogRoute,
 } = require('../../lib/metadata/admin-catalog');
 
-function apiStub(dialects = ['common', 'ardupilotmega']) {
-  return {
-    knownDialects: () => dialects,
-  };
-}
-
 test('resolveCatalogSource prefers a deployed vehicle bundle', () => {
   const bundle = { dialect: 'custom', messages: {} };
   const RED = {
@@ -20,7 +14,7 @@ test('resolveCatalogSource prefers a deployed vehicle bundle', () => {
       getNode: (id) => (id === 'v1' ? { dialect: 'custom', getDialect: () => bundle } : null),
     },
   };
-  const source = resolveCatalogSource(RED, apiStub(), { vehicle: 'v1' });
+  const source = resolveCatalogSource(RED, { vehicle: 'v1' });
   assert.equal(source.kind, 'bundle');
   assert.equal(source.dialect, 'custom');
   assert.equal(source.bundle, bundle);
@@ -28,7 +22,7 @@ test('resolveCatalogSource prefers a deployed vehicle bundle', () => {
 
 test('resolveCatalogSource refuses missing vehicle without inventing a dialect', () => {
   const RED = { nodes: { getNode: () => null } };
-  const source = resolveCatalogSource(RED, apiStub(), { vehicle: 'gone' });
+  const source = resolveCatalogSource(RED, { vehicle: 'gone' });
   assert.equal(source.kind, 'error');
   assert.equal(source.status, 404);
   assert.equal(source.body.commands, undefined);
@@ -36,7 +30,7 @@ test('resolveCatalogSource refuses missing vehicle without inventing a dialect',
 
 test('resolveCatalogSource soft mode returns a notice for undeployed vehicle', () => {
   const RED = { nodes: { getNode: () => null } };
-  const source = resolveCatalogSource(RED, apiStub(), { vehicle: 'gone' }, { soft: true });
+  const source = resolveCatalogSource(RED, { vehicle: 'gone' }, { soft: true });
   assert.equal(source.kind, 'empty');
   assert.match(source.notice, /not deployed/i);
 });
@@ -57,9 +51,8 @@ test('registerDialectCatalogRoute wires fromBundle / fromDialect', () => {
   };
   registerDialectCatalogRoute(RED, {
     path: '/mavlink/test/catalog',
-    logLabel: 'test',
-    fromBundle: (_api, bundle, dialect) => ({ via: 'bundle', dialect, ok: Boolean(bundle) }),
-    fromDialect: (_api, dialect) => ({ via: 'dialect', dialect }),
+    fromBundle: (bundle, dialect) => ({ via: 'bundle', dialect, ok: Boolean(bundle) }),
+    fromDialect: (dialect) => ({ via: 'dialect', dialect }),
   });
   const handler = handlers.get('/mavlink/test/catalog');
   assert.ok(handler);
