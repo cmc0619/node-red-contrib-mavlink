@@ -375,7 +375,8 @@
       [
         "sitl26-line-status"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl26-after-line",
@@ -431,7 +432,8 @@
       [
         "sitl26-circle-status"
       ]
-    ]
+    ],
+    "maxRetries": 3
   },
   {
     "id": "sitl26-done",

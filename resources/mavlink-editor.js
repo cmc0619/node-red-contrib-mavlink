@@ -1760,6 +1760,19 @@
   };
 
   /**
+   * The two fields every node that waits on a COMMAND_ACK carries — Command,
+   * Payload, Fan-out, Formation, Move — spread into each dialog's `defaults`
+   * so the five cannot drift. `timeoutMs`: whole milliseconds >= 1, because a
+   * 0 ms wait reports every ack unconfirmed before it could arrive.
+   * `maxRetries`: whole re-sends >= 0 on TEMPORARILY_REJECTED; the runtime's
+   * one AckWaiter (lib/command) reads both as saved.
+   */
+  RED.mavlink.ackDefaults = {
+    timeoutMs: { value: 10000, validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
+    maxRetries: { value: 3, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
+  };
+
+  /**
    * Target-sysid validator for a node with acknowledged delivery tiers.
    *
    * Broadcast (0) is a designed §7 capability and stays legal on Build and
