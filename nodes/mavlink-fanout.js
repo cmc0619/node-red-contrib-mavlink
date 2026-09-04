@@ -244,17 +244,15 @@ function numberOption(opts, config, key) {
  */
 function buildListStub(sysids) {
   const ids = parseSysidList(sysids);
+  const component = { compid: 1, state: 'active', type: 0, armed: false, autopilot: 0 };
   return {
     peerTable: {
       snapshot() {
-        return ids.map((sysid) => ({
-          sysid,
-          components: [{ compid: 1, state: 'active', type: 0, firmware: null, armed: false, autopilot: 0 }],
-        }));
+        return ids.map((sysid) => ({ sysid, components: [component] }));
       },
       getComponent(sysid, compid) {
         if (!ids.includes(sysid) || compid !== 1) return undefined;
-        return { compid: 1, state: 'active', type: 0, firmware: null, armed: false, autopilot: 0 };
+        return component;
       },
     },
   };
