@@ -44,7 +44,7 @@ a JSON string keyed by param index (`"{\"7\":20}"` = param7 = 20).
 
 **Move** `action`: `goto` (one-shot guided goto — `DO_REPOSITION` as COMMAND_INT on
 Build/Send/Send & confirm, `SET_POSITION_TARGET_GLOBAL_INT` on Stream; `altRef`: `home` \|
-`msl` is the only frame choice, plus `speed`/`radius`/`changeMode`/`ackTimeout` on the
+`msl` is the only frame choice, plus `speed`/`radius`/`changeMode`/`timeoutMs`/`maxRetries` on the
 command path) or `steer` (setpoints; `reference`: `world` = Local NED everywhere, `body`
 derives the frame from the bound firmware and fails closed without one). There is no
 mode pulldown: the type_mask derives from which field groups are non-blank — filling
