@@ -39,10 +39,6 @@ module.exports = function registerMavlinkMove(RED) {
     const waiterSlot = cancelSlot();
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
-    // Resolve the Vehicle Profile once, like the Connection (guideline:
-    // config-node references resolve at deploy, not per input). Build-tier
-    // body derivation reads firmware through it.
-    const vehicleAtDeploy = RED.nodes.getNode(config.vehicle);
 
     // Stop the active stream and free its single-owner scope (#176). Every
     // stop the node causes — replacement, a non-stream input, an explicit
@@ -179,7 +175,7 @@ module.exports = function registerMavlinkMove(RED) {
           default: break; // This space intentionally left blank (§5)
         }
         // Move: companion hides both sysid and compid — no compidFromConfig.
-        const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
+        const { connectionNode, profile, target, identityId } = resolveDeliveryContext(RED, {
           delivery,
           config,
           payload,
@@ -352,7 +348,7 @@ module.exports = function registerMavlinkMove(RED) {
                 // goto + Stream: position setpoints on the global frame the
                 // altitude reference names.
                 deliverSetpoint(
-                  setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+                  setpointFor(action, payload, config, target, profile),
                   true
                 );
                 done();
@@ -395,7 +391,7 @@ module.exports = function registerMavlinkMove(RED) {
             // thrust is a descent and a centred stick is a command, so
             // neither has a brake packet to synthesize.
             deliverSetpoint(
-              setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+              setpointFor(action, payload, config, target, profile),
               false
             );
             done();
@@ -403,7 +399,7 @@ module.exports = function registerMavlinkMove(RED) {
           case 'steer':
             // Position setpoints keep their measured zero-velocity brake.
             deliverSetpoint(
-              setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode),
+              setpointFor(action, payload, config, target, profile),
               true
             );
             done();
@@ -455,11 +451,12 @@ module.exports = function registerMavlinkMove(RED) {
  * @param {object} payload  msg.payload (trusted — AGENTS.md input trust)
  * @param {object} config  the node's saved configuration
  * @param {{sysid: number, compid: number}} target
- * @param {object|null} vehicleAtDeploy  the node's own Vehicle Profile, if any
- * @param {object|null} connectionNode
+ * @param {object|null} profile  the delivery context's Vehicle Profile rung:
+ *   the Connection's on the wire tiers, the node's own on Build; read only
+ *   by the body reference, which the editor lets through only when one exists
  * @returns {{name: string, fields: object}}
  */
-function setpointFor(action, payload, config, target, vehicleAtDeploy, connectionNode) {
+function setpointFor(action, payload, config, target, profile) {
   switch (action) {
     case 'attitude':
       return buildAttitudeMessage({
@@ -510,7 +507,7 @@ function setpointFor(action, payload, config, target, vehicleAtDeploy, connectio
         mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
         frame: frameForReference(
           payload.reference === undefined ? config.reference : payload.reference,
-          firmwareFor(vehicleAtDeploy, connectionNode)
+          profile
         ),
         target,
         position,
@@ -586,18 +583,4 @@ function completeExpiry(node, message, sent, brakeError) {
   const extra = { message, sent };
   if (brakeError) extra.brakeError = brakeError.message;
   node.send([null, makeStatusRecord(node.type, { result: 'expired', detail: null, ...extra })]);
-}
-
-/**
- * Firmware for the body-reference derivation: the connection's bound Vehicle
- * Profile on the wire tiers, the node's own Vehicle Profile (resolved once at
- * deploy) on Build. Returns undefined when neither names one — the body
- * derivation fails closed on that, and world never asks.
- *
- * @param {object|null} vehicleNode  the node's own Vehicle Profile, from deploy
- * @param {object|null} connectionNode
- * @returns {string|undefined}
- */
-function firmwareFor(vehicleNode, connectionNode) {
-  return connectionNode?.vehicle?.firmware ?? vehicleNode?.firmware;
 }
