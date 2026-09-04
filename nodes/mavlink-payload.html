@@ -32,8 +32,9 @@
         // which §0 rule 3 forbids. This red ring stops the flow reaching it.
         sendAs: { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
         frame: { value: '3', validate: RED.mavlink.oneOf(['0', '3', '10', '1']) },
-        timeout: { value: 10000, validate: RED.mavlink.validateAtLeast(0) },
-        maxRetries: { value: 3, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
+        // ACK timeout and Max retries: the shared definition, hidden with
+        // the rows on Build.
+        ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire),
         // Topic and verb are the recipe key: a stray token selects no recipe,
         // and Build would report that as a succeeded build of nothing (§0
         // rule 3) — so membership reds here, against the shared table the
@@ -292,7 +293,7 @@
         $('#row-payload-identity').toggle(
           isWire && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
         );
-        $('#row-payload-timeout').toggle(isWire);
+        $('#row-payload-timeoutMs').toggle(isWire);
         $('#row-payload-maxRetries').toggle(isWire);
 
         const sel = selection();
@@ -404,7 +405,7 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
   <div class="form-row" id="row-payload-sendAs"><label for="node-input-sendAs">Send as</label><select id="node-input-sendAs" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
   <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="3">Global, relative alt (default)</option><option value="0">Global, absolute alt (AMSL)</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
-  <div class="form-row" id="row-payload-timeout"><label for="node-input-timeout">ACK timeout</label><input type="number" id="node-input-timeout" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-timeoutMs"><label for="node-input-timeoutMs">ACK timeout</label><input type="number" id="node-input-timeoutMs" style="width:80px"> ms</div>
   <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"></select></div>
   <div class="form-row" id="row-payload-verb"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>
