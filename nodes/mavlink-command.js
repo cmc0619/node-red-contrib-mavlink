@@ -55,11 +55,10 @@ const {
   MODE_FLAG_CUSTOM_MODE_ENABLED,
   setModeParams,
 } = require('../lib/vehicle/modes');
-const { loadBundled, catalogFromBundle, listCommandsCatalog } = require('../lib/metadata');
+const { catalogFromBundle, listCommandsCatalog } = require('../lib/metadata');
 const {
   resolveDeliveryContext,
-  dialectFromVehicleId,
-  dialectFromConnection,
+  dialectForTier,
   isBlank,
 } = require('../lib/addressing');
 const {
@@ -130,15 +129,7 @@ module.exports = function registerMavlinkCommand(RED) {
     let _coordKindsResolved = false;
     function coordKinds() {
       if (_coordKindsResolved) return _coordKinds;
-      // Build names its dialect in the editor; the wire tiers (send, confirm,
-      // complete) ride the Connection, whose snapshot has no bundle — resolve
-      // the profile node (§7).
-      const bundle = delivery !== 'build'
-        ? dialectFromConnection(RED, connNode)
-        : config.dialect === '__vehicle'
-          ? dialectFromVehicleId(RED, config.vehicle)
-          : loadBundled(config.dialect);
-      _coordKinds = intCoordKinds(bundle, commandId);
+      _coordKinds = intCoordKinds(dialectForTier(RED, delivery, config, connNode), commandId);
       _coordKindsResolved = true;
       return _coordKinds;
     }
@@ -153,11 +144,10 @@ module.exports = function registerMavlinkCommand(RED) {
      * (the vehicle-published cache) plus the bound profile's firmware/family
      * and bundle; Build resolves through the Vehicle Profile escape only — a
      * concrete Build dialect has no firmware axis on this node, so shipped
-     * tables cannot pick and an unmatched name rides to the NaN tail. Same
-     * tier dispatch as coordKinds above (§5); a tier the editor's delivery
-     * select cannot save composes only the firmware axis, so name resolution
-     * falls to that same NaN tail — and the tier dispatch in handleInput
-     * sends nothing anyway.
+     * tables cannot pick and an unmatched name rides to the NaN tail. A tier
+     * the editor's delivery select cannot save composes only the firmware
+     * axis (§5), so name resolution falls to that same NaN tail — and the
+     * tier dispatch in handleInput sends nothing anyway.
      *
      * @param {{target: {sysid: number, compid: number}, profile: object|null}} resolution
      * @returns {import('../lib/vehicle/modes').ModeContext}
@@ -167,13 +157,10 @@ module.exports = function registerMavlinkCommand(RED) {
       const context = {
         firmware: profile.firmware,
         vehicleFamily: profile.vehicleFamily,
+        bundle: dialectForTier(RED, delivery, config, connNode),
       };
+      // The wire tiers also resolve against the addressed peer component.
       switch (delivery) {
-        case 'build':
-          context.bundle = config.dialect === '__vehicle'
-            ? dialectFromVehicleId(RED, config.vehicle)
-            : loadBundled(config.dialect);
-          break;
         case 'send':
         case 'confirm':
         case 'complete':
@@ -181,7 +168,6 @@ module.exports = function registerMavlinkCommand(RED) {
             resolution.target.sysid,
             resolution.target.compid
           );
-          context.bundle = dialectFromConnection(RED, connNode);
           break;
         default: break; // This space intentionally left blank (§5)
       }

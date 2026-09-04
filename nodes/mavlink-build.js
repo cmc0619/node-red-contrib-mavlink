@@ -39,8 +39,8 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
-const { dialectFromVehicleId, dialectFromConnection } = require('../lib/addressing');
-const { loadBundled, catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata');
+const { dialectForTier } = require('../lib/addressing');
+const { catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
@@ -78,21 +78,8 @@ module.exports = function registerMavlinkBuild(RED) {
     let rateWindowStart = 0;
     let rateWindowCount = 0;
 
-    // Resolve the dialect bundle per the role × tier matrix (§6).
-    //   Build + plain dialect name → load from the bundled registry (no vehicle needed).
-    //   Build + '__vehicle' → vehicle node's bundle.
-    //   Wire tier → the connection's bound profile node's bundle (custom-safe).
     /** @type {import('../lib/metadata').DialectBundle} */
-    let bundle;
-    if (tier === 'build') {
-      if (config.dialect === '__vehicle') {
-        bundle = dialectFromVehicleId(RED, config.vehicle);
-      } else {
-        bundle = loadBundled(config.dialect);
-      }
-    } else {
-      bundle = dialectFromConnection(RED, connectionNode);
-    }
+    const bundle = dialectForTier(RED, tier, config, connectionNode);
     const messageMeta = bundle.messages[messageName];
     const bigIntFields = messageMeta.fields
       .filter((f) => f.type === 'uint64_t' || f.type === 'int64_t')
