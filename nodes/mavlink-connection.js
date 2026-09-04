@@ -221,8 +221,8 @@ function identitySnapshot(idNode, defaults, bundle) {
     compid: wire.compid,
     heartbeatIntervalMs: idNode.heartbeatIntervalMs,
     heartbeat: {
-      type: enumValue(bundle, 'MAV_TYPE', hb.type),
-      autopilot: enumValue(bundle, 'MAV_AUTOPILOT', hb.autopilot),
+      type: Number(bundle.enums.MAV_TYPE.byName[hb.type]),
+      autopilot: Number(bundle.enums.MAV_AUTOPILOT.byName[hb.autopilot]),
     },
   };
 }
@@ -365,18 +365,6 @@ function rejectedSurface(reason, hasKey) {
   // message. The floor is first-contact only — an established stream is
   // governed by monotonicity alone (§7 signing, #264).
   return { log: `dropping signed traffic — ${reason}`, badge: `drop: ${reason}` };
-}
-
-/**
- * Resolve an enum entry's screaming name to its numeric value from the bundle.
- *
- * @param {object} bundle
- * @param {string} enumName
- * @param {string} entryName
- * @returns {number}
- */
-function enumValue(bundle, enumName, entryName) {
-  return Number(bundle.enums[enumName].entries.find((entry) => entry.name === entryName).value);
 }
 
 /**
