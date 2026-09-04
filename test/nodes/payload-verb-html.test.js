@@ -9,8 +9,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
-const { PAYLOAD_VERBS } = require('../../lib/payload');
+const { PAYLOAD_RECIPES } = require('../../lib/payload');
 const { assertChangeHandlerContains } = require('./html-assert');
 
 const payloadHtml = fs.readFileSync(
@@ -61,17 +62,23 @@ test('mavlink-fanout has no payload verb editor — it replicates built messages
   assert.doesNotMatch(fanoutHtml, /PAYLOAD_VERBS/, 'no payload verb table reference');
 });
 
-test('editor catalog includes every lib/payload verb value', () => {
+test('editor catalog names every lib/payload recipe verb under its own topic', () => {
   // Catalog lives once in resources/mavlink-editor.js — pin it there, not in
-  // each node's HTML (the HTML only calls refreshVerbOptions).
-  const resource = fs.readFileSync(
-    path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'),
-    'utf8'
+  // each node's HTML (the HTML only calls refreshVerbOptions). Evaluate the
+  // table rather than grep for it: `set` and `operate` repeat across topics,
+  // so a text match on the verb alone cannot tell servo's from relay's.
+  const context = { RED: { mavlink: {}, settings: { httpAdminRoot: '/' } }, $: () => ({}) };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'), 'utf8'),
+    context
   );
-  for (const [topic, verbs] of Object.entries(PAYLOAD_VERBS)) {
-    for (const { value } of verbs) {
-      assert.match(resource, new RegExp(`value:\\s*'${value}'`), `editor resource missing ${topic}/${value}`);
-    }
+  const catalog = context.RED.mavlink.PAYLOAD_VERBS;
+  for (const key of Object.keys(PAYLOAD_RECIPES)) {
+    const [topic, value] = key.split('|');
+    assert.ok(
+      (catalog[topic] || []).some((verb) => verb.value === value),
+      `editor catalog missing ${topic}/${value}`
+    );
   }
 });
 
