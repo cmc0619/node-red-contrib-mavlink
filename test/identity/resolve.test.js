@@ -13,7 +13,7 @@ const { resolveIdentity } = require('../../lib/identity/resolve');
 test('an override is returned as given', () => {
   assert.deepEqual(
     resolveIdentity({ defaultIdentityId: 'default-id', overrideId: 'override-id' }),
-    { identityId: 'override-id', source: 'override' }
+    { identityId: 'override-id' }
   );
 });
 
@@ -24,7 +24,7 @@ test('an override the connection does not carry is still the override, never the
   // send craters there (lib/connection/runtime.js `_resolveOutboundIdentity`).
   assert.deepEqual(
     resolveIdentity({ defaultIdentityId: 'default-id', overrideId: 'unknown-id' }),
-    { identityId: 'unknown-id', source: 'override' }
+    { identityId: 'unknown-id' }
   );
 });
 
@@ -32,7 +32,7 @@ for (const [name, overrideId] of [['null', null], ['undefined', undefined], ['em
   test(`${name} overrideId → the default`, () => {
     assert.deepEqual(
       resolveIdentity({ defaultIdentityId: 'default-id', overrideId }),
-      { identityId: 'default-id', source: 'default' }
+      { identityId: 'default-id' }
     );
   });
 }
@@ -43,6 +43,6 @@ test('no override, no default → the blank default, resolved by the connection'
   // which craters at the send site rather than being repaired here.
   assert.deepEqual(
     resolveIdentity({ defaultIdentityId: '' }),
-    { identityId: '', source: 'default' }
+    { identityId: '' }
   );
 });

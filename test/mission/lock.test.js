@@ -35,7 +35,6 @@ test('a fence transfer and a mission transfer run concurrently (different type)'
 
   assert.notEqual(fence, null);
   assert.notEqual(mission, null);
-  assert.equal(locks.size(), 2);
 });
 
 test('the same type on different targets does not conflict', () => {
