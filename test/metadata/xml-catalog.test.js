@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { XmlCatalog, compileXmlFromFile } = require('../../lib/metadata');
+const { XmlCatalog, compileXmlFromFile } = require('../../lib/metadata/xml-catalog');
 
 /**
  * Downloadable XML catalog + on-disk custom compile (DESIGN.md §4). The network

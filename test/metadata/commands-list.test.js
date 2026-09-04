@@ -7,10 +7,8 @@ const {
   listCommandsCatalog,
   catalogFromBundle,
   loadBundled,
-  commandLabel,
-  isHiddenParam,
 } = require('../../lib/metadata');
-const { enumOptionLabel } = require('../../lib/metadata/commands-list');
+const { commandLabel, isHiddenParam, enumOptionLabel } = require('../../lib/metadata/commands-list');
 
 test('commandLabel shows the full command name and value in parentheses (§6)', () => {
   assert.equal(commandLabel('MAV_CMD_NAV_TAKEOFF', 22), 'MAV_CMD_NAV_TAKEOFF (22)');

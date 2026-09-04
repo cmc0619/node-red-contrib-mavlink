@@ -11,7 +11,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { MissionDownload, MISSION_TYPE, MAV_MISSION_RESULT, buildItemInt } = require('../../lib/mission');
+const { MissionDownload } = require('../../lib/mission/download');
+const { MISSION_TYPE, MAV_MISSION_RESULT } = require('../../lib/mission/types');
+const { buildItemInt } = require('../../lib/mission');
 const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };

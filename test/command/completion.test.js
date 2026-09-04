@@ -12,7 +12,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { checkCompletion, waitForCompletion, COMPLETION } = require('../../lib/command');
+const { checkCompletion, waitForCompletion } = require('../../lib/command');
+const { COMPLETION } = require('../../lib/command/presets');
 const { StubPeerTable } = require('../../lib/command/test/stubs/connection');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

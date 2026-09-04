@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildItemInt, buildItem } = require('../../lib/mission');
+const { buildItemInt, buildItem } = require('../../lib/mission/items');
 
 const TARGET = { sysid: 1, compid: 1 };
 

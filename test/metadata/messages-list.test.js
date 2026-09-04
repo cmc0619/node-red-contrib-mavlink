@@ -7,8 +7,8 @@ const assert = require('node:assert/strict');
 const {
   catalogMessagesFromBundle,
   listMessagesCatalog,
-  commandLabel,
 } = require('../../lib/metadata');
+const { commandLabel } = require('../../lib/metadata/commands-list');
 
 test('commandLabel renders a message id the same `NAME (value)` way (§6)', () => {
   // messageLabel was an alias of commandLabel with no consumers; the shared

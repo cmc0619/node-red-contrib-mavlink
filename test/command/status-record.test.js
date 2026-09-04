@@ -16,7 +16,7 @@ const {
   makeStatusRecord,
   MAV_RESULT,
   RESULT_NAME,
-} = require('../../lib/command');
+} = require('../../lib/command/status-record');
 
 // -- makeStatusRecord shape --------------------------------------------------
 

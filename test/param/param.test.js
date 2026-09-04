@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { paramValueToWire } = require('../../lib/codec');
+const { paramValueToWire } = require('../../lib/codec/param-union');
 const {
   buildParamMessage,
   matchesParamEcho,

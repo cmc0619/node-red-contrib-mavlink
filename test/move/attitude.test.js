@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { quaternionFromEuler } = require('../../lib/move');
+const { quaternionFromEuler } = require('../../lib/move/attitude');
 
 
 test('quaternionFromEuler is MAVLink order [w,x,y,z] and unit length', () => {

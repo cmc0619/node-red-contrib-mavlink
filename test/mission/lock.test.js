@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { LockRegistry } = require('../../lib/delivery/lock');
-const { MISSION_TYPE } = require('../../lib/mission');
+const { MISSION_TYPE } = require('../../lib/mission/types');
 
 const CONN = 'conn-1';
 const TARGET = { sysid: 1, compid: 1 };

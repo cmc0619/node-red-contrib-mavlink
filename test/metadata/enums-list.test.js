@@ -4,11 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  DEFAULT_ENUM_NAMES,
   catalogEnumsFromBundle,
   listEnumsCatalog,
   loadBundled,
 } = require('../../lib/metadata');
+const { DEFAULT_ENUM_NAMES } = require('../../lib/metadata/enums-list');
 
 const FIXTURE_BUNDLE = {
   dialect: 'fixture',

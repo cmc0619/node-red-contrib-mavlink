@@ -6,12 +6,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const {
-  XmlCatalog,
-  dialectLibrary,
-  entryFileForDialect,
-  knownDialects,
-} = require('../../lib/metadata');
+const { XmlCatalog, dialectLibrary, knownDialects } = require('../../lib/metadata');
+const { entryFileForDialect } = require('../../lib/metadata/xml-catalog');
 
 test('entryFileForDialect matches case-insensitively', () => {
   assert.equal(entryFileForDialect(['ASLUAV.xml', 'common.xml'], 'asluav'), 'ASLUAV.xml');

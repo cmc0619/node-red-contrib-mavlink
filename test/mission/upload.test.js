@@ -10,7 +10,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { MissionUpload, MISSION_TYPE, MAV_MISSION_RESULT } = require('../../lib/mission');
+const { MissionUpload } = require('../../lib/mission/upload');
+const { MISSION_TYPE, MAV_MISSION_RESULT } = require('../../lib/mission/types');
 const { StubConnection } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
