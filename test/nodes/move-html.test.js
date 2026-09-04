@@ -25,7 +25,8 @@ const ROW_IDS = [
   'row-move-speed',
   'row-move-radius',
   'row-move-changeMode',
-  'row-move-ackTimeout',
+  'row-move-timeoutMs',
+  'row-move-maxRetries',
   'row-move-north',
   'row-move-east',
   'row-move-up',
@@ -102,7 +103,7 @@ test('mavlink-move editor reshapes fields by action and delivery (§6)', () => {
   // Every acked action can wait for its ack, not just goto.
   assert.match(
     html,
-    /ackTimeout:\s*\(state\.isGoto \|\| state\.isTurn \|\| state\.isSpeed\) && state\.delivery === 'confirm'/,
+    /timeoutMs:\s*\(state\.isGoto \|\| state\.isTurn \|\| state\.isSpeed\) && state\.delivery === 'confirm'/,
     'ACK timeout on the confirm tier of every acked action'
   );
   assert.match(html, /delivery === 'stream'/, 'stream rate and TTL gated on delivery');
@@ -383,7 +384,8 @@ test('mavlink-move Advanced section: toggle link, hidden div, the right rows ins
   const templateEnd = html.indexOf('</script>', advancedAt);
   for (const id of [
     'row-move-changeMode',
-    'row-move-ackTimeout',
+    'row-move-timeoutMs',
+  'row-move-maxRetries',
     'row-move-radius',
     'row-move-targetComponent',
   ]) {
@@ -411,16 +413,18 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
       `${field} defaults blank with the blank-allowed numeric validator`
     );
   }
-  // ackTimeout carries the 10 s default in the editor; 0 and negatives are not
-  // a shorter wait — they fire the ack timer before the vehicle can answer —
-  // so its validator requires a positive number, and blank reds with them.
+  // The ack fields come from the shared definition (RED.mavlink.ackDefaults):
+  // a 10 s window that must be a whole number of milliseconds >= 1, and a
+  // whole retry count >= 0 — the same rule Command, Payload, Fan-out and
+  // Formation carry.
   const defaults = loadNodeDefaults('mavlink-move');
-  assert.equal(defaults.ackTimeout.value, '10000', 'ackTimeout defaults to the 10 s window');
-  const ackVerdict = (v) => defaults.ackTimeout.validate.call({ id: 'm1' }, v, {});
+  assert.equal(defaults.timeoutMs.value, 10000, 'timeoutMs defaults to the 10 s window');
+  assert.equal(defaults.maxRetries.value, 3, 'maxRetries defaults to three re-sends');
+  const ackVerdict = (v) => defaults.timeoutMs.validate.call({ id: 'm1' }, v, {});
   assert.equal(ackVerdict('10000'), true);
-  assert.equal(ackVerdict(1), true, 'any positive wait passes');
+  assert.equal(ackVerdict(1), true, 'any positive whole wait passes');
   for (const bad of ['', 0, -1, 'abc']) {
-    assert.match(String(ackVerdict(bad)), /greater than 0/, `${JSON.stringify(bad)} is not a valid timeout`);
+    assert.match(String(ackVerdict(bad)), />= 1/, `${JSON.stringify(bad)} is not a valid timeout`);
   }
   // Blank speed/radius/yaw encode the spec sentinels at runtime; the
   // placeholders say so instead of implying zero.
