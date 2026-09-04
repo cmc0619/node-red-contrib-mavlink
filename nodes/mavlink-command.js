@@ -38,7 +38,8 @@ const {
   getPreset,
   buildParamArray,
   mergeParams,
-  AckWaiter,
+  ackWaiterFor,
+  ackRecordFields,
   cancelSlot,
   checkCompletion,
   waitForCompletion,
@@ -316,16 +317,15 @@ module.exports = function registerMavlinkCommand(RED) {
       const { wire: paramArray, requested: requestedParams } = getParams(payload, { target, profile });
 
       /**
-       * Build the wire message for a carrier at a given confirmation counter.
-       * COMMAND_INT has no confirmation byte, so it is ignored there; the
-       * canonical params are always degrees, scaled per carrier by the
-       * carrier module (§9).
+       * Build the wire message for a carrier. The LONG carrier's confirmation
+       * byte is stamped per (re-)send by the ack waiter's sendFn (lib/command
+       * sendFnFor); the canonical params are always degrees, scaled per
+       * carrier by the carrier module (§9).
        *
        * @param {'long'|'int'} carrier
-       * @param {number} confirmation
        * @returns {{name: string, fields: object}}
        */
-      function buildCarrierMessage(carrier, confirmation) {
+      function buildCarrierMessage(carrier) {
         switch (carrier) {
           case CARRIER.INT:
             return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
@@ -333,7 +333,7 @@ module.exports = function registerMavlinkCommand(RED) {
               coordKinds: coordKinds() || undefined,
             });
           case CARRIER.LONG:
-            return buildCommandLong(commandId, target.sysid, target.compid, paramArray, confirmation);
+            return buildCommandLong(commandId, target.sysid, target.compid, paramArray, 0);
           default: break; // This space intentionally left blank (§5)
         }
         return undefined; // nothing matched: no behavior selected (§5)
@@ -344,7 +344,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // below, where `delivery === 'complete'` adds the completion poll.
       switch (delivery) {
         case 'build': {
-          const message = buildCarrierMessage(configuredCarrier, 0);
+          const message = buildCarrierMessage(configuredCarrier);
           applyActionStatus(node, 'preview', `build ${displayName}`);
           // Output 1 reports every terminal outcome, success included (§9); a
           // successful build emits a 'built' status record for status/debug
@@ -361,7 +361,7 @@ module.exports = function registerMavlinkCommand(RED) {
           return;
         }
         case 'send': {
-          const message = buildCarrierMessage(configuredCarrier, 0);
+          const message = buildCarrierMessage(configuredCarrier);
           applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
           connNode.send(message, { band: BAND.CONTROL, target, identityId });
           const rec = makeRecord({ result: 'sent', confirmedBy: 'none', elapsed: 0 });
@@ -397,49 +397,28 @@ module.exports = function registerMavlinkCommand(RED) {
 
         applyActionStatus(node, 'sending', `${displayName}\u2026`);
 
-        /**
-         * Run one AckWaiter transaction in the configured carrier and resolve
-         * with its outcome.
-         */
-        async function runWaiter() {
-          const waiter = new AckWaiter({
-            subscribe: (filter, handler) => connNode.subscribe(filter, handler),
-            sendFn: (confirmation) => {
-              connNode.send(buildCarrierMessage(configuredCarrier, confirmation), { band: BAND.CONTROL, target, identityId });
-            },
-            commandId,
-            targetSystem: target.sysid,
-            targetComponent: target.compid,
-            // Ack attribution (§9): ignore an ack explicitly addressed to a
-            // different GCS on a shared link.
-            sourceIds: connNode.resolveSourceIds(identityId),
-            timeoutMs,
-            maxRetries: noAutoRetry ? 0 : maxRetries,
-            noAutoRetry,
-            // Same badge channel: a takeoff answers IN_PROGRESS for seconds (§9),
-            // and without this the operator watches an unchanging wait.
-            onInProgress: (progress) => {
-              applyActionStatus(
-                node,
-                'sending',
-                progress === null
-                  ? `in progress ${displayName}\u2026`
-                  : `in progress ${progress}% ${displayName}\u2026`
-              );
-            },
-          });
-          waiterSlot.active = waiter;
-          try {
-            return await waiter.start();
-          } finally {
-            waiterSlot.release(waiter);
-          }
-        }
-
         // The operator's configured carrier (§9): a required choice, so the
         // wire format is stated intent — never a guess. The ack it earns,
         // wrong-carrier codes included, is the result.
-        const ackOutcome = await runWaiter();
+        const ackOutcome = await waiterSlot.run(ackWaiterFor(connNode, buildCarrierMessage(configuredCarrier), {
+          band: BAND.CONTROL,
+          target,
+          identityId,
+          timeoutMs,
+          maxRetries: noAutoRetry ? 0 : maxRetries,
+          noAutoRetry,
+          // Same badge channel: a takeoff answers IN_PROGRESS for seconds (§9),
+          // and without this the operator watches an unchanging wait.
+          onInProgress: (progress) => {
+            applyActionStatus(
+              node,
+              'sending',
+              progress === null
+                ? `in progress ${displayName}\u2026`
+                : `in progress ${progress}% ${displayName}\u2026`
+            );
+          },
+        }));
 
         // A redeploy cancelled the wait (close() cancels the waiter slot).
         // The node is being torn down, so finish quietly: emitting or raising
@@ -581,15 +560,7 @@ module.exports = function registerMavlinkCommand(RED) {
           }
 
           // Confirm tier or complete tier with no condition: accepted is complete.
-          const rec = makeRecord({
-            result: 'accepted',
-            resultCode: MAV_RESULT.ACCEPTED,
-            resultParam2: ackOutcome.resultParam2,
-            confirmedBy: 'ack',
-            retries: ackOutcome.retries,
-            elapsed: Date.now() - startMs,
-            detail: null,
-          });
+          const rec = makeRecord(ackRecordFields(ackOutcome));
           applyActionStatus(node, 'ok', `${displayName} accepted`);
           emitStatus(rec, send, true, rec);
           done();
@@ -597,15 +568,7 @@ module.exports = function registerMavlinkCommand(RED) {
         }
 
         // Any other terminal failure.
-        const rec = makeRecord({
-          result: ackOutcome.result,
-          resultCode: ackOutcome.resultCode,
-          resultParam2: ackOutcome.resultParam2,
-          confirmedBy: ackOutcome.confirmedBy,
-          retries: ackOutcome.retries,
-          elapsed: Date.now() - startMs,
-          detail: ackOutcome.detail,
-        });
+        const rec = makeRecord(ackRecordFields(ackOutcome));
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);
         done();

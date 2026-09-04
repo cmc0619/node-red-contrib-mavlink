@@ -7,8 +7,8 @@ const {
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const {
-  AckWaiter,
-  sendFnFor,
+  ackWaiterFor,
+  ackRecordFields,
   cancelSlot,
   resolveFrame,
 } = require('../lib/command');
@@ -96,25 +96,14 @@ module.exports = function registerMavlinkPayload(RED) {
          * like any other rejection and the flow decides what to send next.
          */
         async function awaitAck(built) {
-          // A new input supersedes the previous input's wait.
-          waiterSlot.cancel();
           applyActionStatus(node, 'sending', `${built.message.name}…`);
-          const waiter = new AckWaiter({
-            subscribe: (filter, handler) => connectionNode.subscribe(filter, handler),
-            // Only the LONG carrier has a confirmation byte; COMMAND_INT must
-            // not grow one on retries (§9, lib/command sendFnFor).
-            sendFn: sendFnFor(connectionNode, built.message, { band: BAND.CONTROL, target, identityId }),
-            commandId: built.message.fields.command,
-            targetSystem: target.sysid,
-            targetComponent: target.compid,
-            // Ack attribution (§9): ignore an ack explicitly addressed to a
-            // different GCS on a shared link.
-            sourceIds: connectionNode.resolveSourceIds(identityId),
+          const outcome = await waiterSlot.run(ackWaiterFor(connectionNode, built.message, {
+            band: BAND.CONTROL,
+            target,
+            identityId,
             timeoutMs,
             maxRetries,
-          });
-          waiterSlot.active = waiter;
-          const outcome = await waiter.start().finally(() => waiterSlot.release(waiter));
+          }));
           if (outcome.result === 'cancelled') {
             // A redeploy cancelled the wait (see the close handler). Finish
             // quietly on a node that is going away — raising here would
@@ -246,27 +235,15 @@ module.exports = function registerMavlinkPayload(RED) {
   RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);
 };
 
-// The outcome fields both ack records carry — one spelling so the success and
-// failure halves of the record contract cannot diverge.
-function ackFields(built, outcome) {
-  return {
-    confirmation: built.confirmation,
-    resultCode: outcome.resultCode,
-    resultParam2: outcome.resultParam2,
-    confirmedBy: outcome.confirmedBy,
-    retries: outcome.retries,
-    elapsed: outcome.elapsed,
-  };
-}
-
 function completeAck(node, send, built, outcome) {
   applyActionStatus(node, 'ok', `ack ${built.message.name}`);
   send([
     { payload: { result: 'succeeded', message: built.message } },
     makeStatusRecord(node.type, {
+      ...ackRecordFields(outcome),
+      confirmation: built.confirmation,
       result: 'succeeded',
       detail: 'command-ack accepted',
-      ...ackFields(built, outcome),
     }),
   ]);
 }
@@ -276,9 +253,8 @@ function failAck(node, send, built, outcome, msg, done) {
   send([
     null,
     makeStatusRecord(node.type, {
-      result: outcome.result,
-      detail: outcome.detail,
-      ...ackFields(built, outcome),
+      ...ackRecordFields(outcome),
+      confirmation: built.confirmation,
     }),
   ]);
   done();
