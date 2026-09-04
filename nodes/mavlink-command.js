@@ -629,9 +629,6 @@ module.exports = function registerMavlinkCommand(RED) {
   /**
    * Admin endpoints for editor dropdowns (§6 "Register with needsPermission").
    * Registered with the type; Node-RED calls this factory once per process.
-   * Metadata load is isolated so a metadata package that fails to load still
-   * registers the palette type (flows can open); the catalog routes then
-   * answer 503 until it loads.
    */
   const { presetGroups } = require('../lib/command');
   const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
