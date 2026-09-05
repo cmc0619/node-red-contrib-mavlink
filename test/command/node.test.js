@@ -15,7 +15,7 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { StubPeerTable } = require('../../lib/command/test/stubs/connection');
+const { StubPeerTable } = require('./stubs/connection');
 const { loadBundled } = require('../../lib/metadata/bundled');
 
 const COMMON_BUNDLE = loadBundled('common');

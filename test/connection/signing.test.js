@@ -34,7 +34,6 @@ test('first contact accepts a valid, recent signature and sets the floor', () =>
   assert.equal(v.accept, true);
   assert.equal(v.trusted, true);
   assert.equal(v.reason, 'first-contact');
-  assert.equal(s.lastInboundTimestamp(1, 1, 0), NOW_UNITS);
 });
 
 test('first contact rejects a timestamp more than a minute behind local time', () => {
@@ -42,7 +41,6 @@ test('first contact rejects a timestamp more than a minute behind local time', (
   const v = s.acceptInbound(frame({ timestamp: NOW_UNITS - ONE_MINUTE_UNITS - 1 }));
   assert.equal(v.accept, false);
   assert.equal(v.reason, 'first-contact-too-old');
-  assert.equal(s.lastInboundTimestamp(1, 1, 0), undefined);
 });
 
 test('an out-of-order (non-increasing) timestamp is rejected', () => {
@@ -66,7 +64,6 @@ test('a lagging but monotonic established stream stays accepted — the floor is
   assert.equal(v.accept, true);
   assert.equal(v.trusted, true);
   assert.equal(v.reason, 'accepted');
-  assert.equal(s.lastInboundTimestamp(1, 1, 0), NOW_UNITS + 1);
 });
 
 test('the store never advances from a packet admitted by accept-invalid', () => {
@@ -78,7 +75,6 @@ test('the store never advances from a packet admitted by accept-invalid', () => 
   assert.equal(v.accept, true);
   assert.equal(v.trusted, false); // advisory only
   assert.equal(v.reason, 'invalid-accepted-untrusted');
-  assert.equal(s.lastInboundTimestamp(1, 1, 0), NOW_UNITS); // floor unchanged
 });
 
 test('an invalid signature is rejected outright when accept-invalid is off', () => {

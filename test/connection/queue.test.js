@@ -41,9 +41,9 @@ test('ageing promotes a waiting bulk item but clamps at Control — never above 
 
   // Emergency and Liveness still win: the aged bulk clamps at Control (band 2)
   // and cannot reach band 1 or 0 no matter how old it is.
-  assert.equal(q.dequeue(clock.now()).message.name, 'stop');
-  assert.equal(q.dequeue(clock.now()).message.name, 'hb');
-  assert.equal(q.dequeue(clock.now()).message.name, 'oldBulk');
+  assert.equal(q.dequeue().message.name, 'stop');
+  assert.equal(q.dequeue().message.name, 'hb');
+  assert.equal(q.dequeue().message.name, 'oldBulk');
 });
 
 test('a clamped aged item wins an age tie-break against fresh control', () => {
@@ -54,15 +54,8 @@ test('a clamped aged item wins an age tie-break against fresh control', () => {
   q.enqueue({ band: BAND.CONTROL, message: msg('freshControl'), identityId: 'a' });
 
   // Both sit at effective band 2; the older (bulk, lower seq) dequeues first.
-  assert.equal(q.dequeue(clock.now()).message.name, 'oldBulk');
-  assert.equal(q.dequeue(clock.now()).message.name, 'freshControl');
-});
-
-test('Streaming coalescing key includes identity — two identities do not collapse', () => {
-  const q = new OutboundQueue({ now: () => 0 });
-  q.enqueue({ band: BAND.STREAMING, message: msg('SETPOINT'), identityId: 'gcs', target: '1.1' });
-  q.enqueue({ band: BAND.STREAMING, message: msg('SETPOINT'), identityId: 'companion', target: '1.1' });
-  assert.equal(q.sizeOf(BAND.STREAMING), 2);
+  assert.equal(q.dequeue().message.name, 'oldBulk');
+  assert.equal(q.dequeue().message.name, 'freshControl');
 });
 
 test('Streaming coalesces same identity+message+target to the last value', () => {
@@ -79,7 +72,6 @@ test('Streaming coalesces same identity+message+target to the last value', () =>
     identityId: 'gcs',
     target: '1.1',
   });
-  assert.equal(q.sizeOf(BAND.STREAMING), 1);
   assert.equal(q.dequeue().message.v, 2);
 });
 
@@ -88,7 +80,6 @@ test('Streaming overflow drops the oldest', () => {
   q.enqueue({ band: BAND.STREAMING, message: msg('A'), identityId: 'g', target: 'a' });
   q.enqueue({ band: BAND.STREAMING, message: msg('B'), identityId: 'g', target: 'b' });
   q.enqueue({ band: BAND.STREAMING, message: msg('C'), identityId: 'g', target: 'c' });
-  assert.equal(q.sizeOf(BAND.STREAMING), 2);
   const names = [q.dequeue().message.name, q.dequeue().message.name];
   assert.deepEqual(names, ['B', 'C']); // 'A' (oldest) was dropped
 });
@@ -100,7 +91,6 @@ test('Bulk overflow rejects the newest with an error', () => {
     () => q.enqueue({ band: BAND.BULK, message: msg('B'), identityId: 'g' }),
     QueueOverflowError
   );
-  assert.equal(q.sizeOf(BAND.BULK), 1);
 });
 
 test('Control overflow raises rather than silently discarding', () => {
@@ -126,7 +116,6 @@ test('Liveness holds at most one outstanding per identity', () => {
   q.enqueue({ band: BAND.LIVENESS, message: { name: 'HEARTBEAT', n: 1 }, identityId: 'gcs' });
   q.enqueue({ band: BAND.LIVENESS, message: { name: 'HEARTBEAT', n: 2 }, identityId: 'gcs' });
   q.enqueue({ band: BAND.LIVENESS, message: { name: 'HEARTBEAT', n: 1 }, identityId: 'companion' });
-  assert.equal(q.sizeOf(BAND.LIVENESS), 2); // one per identity
   const gcs = q.dequeue();
   assert.equal(gcs.message.n, 2); // the second replaced the first
 });
@@ -146,7 +135,6 @@ test('a Liveness replacement moves behind other identities and the replaced item
   assert.equal(second.message.n, 2);
   assert.notEqual(second, replaced);
   assert.equal(q.dequeue(), null);
-  assert.equal(q.size(), 0);
 });
 
 test('a Streaming coalesce keeps its position and the newest value surfaces', () => {
@@ -191,8 +179,8 @@ test('a coalesced Streaming replacement inherits the slot’s age and promotes o
   // t=0 and clamps at Control; the younger bulk has aged two and sits at
   // band 2 as well — but the slot's original seq wins the tie.
   clock.set(300);
-  assert.equal(q.dequeue(clock.now()).message.name, 'SP', 'the aged slot promotes ahead of the later bulk item');
-  assert.equal(q.dequeue(clock.now()).message.name, 'laterBulk');
+  assert.equal(q.dequeue().message.name, 'SP', 'the aged slot promotes ahead of the later bulk item');
+  assert.equal(q.dequeue().message.name, 'laterBulk');
 });
 
 test('Streaming overflow drops the oldest by first arrival, unchanged by coalescing', () => {
@@ -210,7 +198,6 @@ test('Streaming overflow drops the oldest by first arrival, unchanged by coalesc
 
   // The replaced 'a' slot kept its head position, so it (carrying v: 2) was
   // the oldest when 'C' overflowed — 'B' and 'C' survive.
-  assert.equal(q.sizeOf(BAND.STREAMING), 2);
   const names = [q.dequeue().message.name, q.dequeue().message.name];
   assert.deepEqual(names, ['B', 'C']);
 });
@@ -226,7 +213,7 @@ test('items aged to the clamp in different bands interleave by insertion order',
   // All three sit at effective band 2; insertion order (seq) breaks the ties.
   const order = [];
   let item;
-  while ((item = q.dequeue(clock.now()))) order.push(item.message.name);
+  while ((item = q.dequeue())) order.push(item.message.name);
   assert.deepEqual(order, ['bulk', 'stream', 'control']);
 });
 

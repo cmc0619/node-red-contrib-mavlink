@@ -260,11 +260,13 @@ test('NaN in param5/6 stays non-finite — no silent null island (§9)', () => {
 // of the new frame silently passing through unscaled (or a name-heuristic
 // silently guessing a divisor deployed firmware doesn't implement yet).
 
-const {
-  GLOBAL_FRAMES,
-  LOCAL_FRAMES,
-  NON_POSITION_FRAMES,
-} = require('../../lib/command/carrier');
+const { GLOBAL_FRAMES, LOCAL_FRAMES } = require('../../lib/command/carrier');
+
+// MAV_FRAME values whose x/y are not a position at all: MAV_FRAME_MISSION
+// ("NOT a coordinate frame" per the dialect) and the tombstoned RESERVED slots
+// 13-19. The runtime passes them through unscaled and holds no list; the
+// completeness pin below is the only reader.
+const NON_POSITION_FRAMES = new Set([MAV_FRAME.MISSION, 13, 14, 15, 16, 17, 18, 19]);
 
 test('every dialect MAV_FRAME entry is classified exactly once (drift pin, §9)', () => {
   const mf = loadBundled('common').enums.MAV_FRAME;

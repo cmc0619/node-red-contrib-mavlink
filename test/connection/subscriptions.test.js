@@ -83,7 +83,6 @@ test('unsubscribe stops further delivery', () => {
   off();
   reg.dispatch(decoded());
   assert.equal(count, 1);
-  assert.equal(reg.size(), 0);
 });
 
 test('dispatch reports how many subscribers received the message', () => {

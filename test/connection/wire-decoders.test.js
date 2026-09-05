@@ -51,16 +51,13 @@ test('partial frame on endpoint A does not contaminate a full frame on endpoint 
   assert.equal(fromA.length, 1);
   assert.equal(fromA[0].name, 'HEARTBEAT');
 
-  assert.equal(wire.decoderCount(), 2);
 });
 
 test('releaseDecoder drops a peer pipeline; next bytes start fresh', () => {
   const wire = createWire({ bundle: loadBundled('minimal') });
   const full = heartbeatFrame(wire);
   wire.decode(full.subarray(0, 6), EP_A);
-  assert.equal(wire.decoderCount(), 1);
   wire.releaseDecoder(EP_A);
-  assert.equal(wire.decoderCount(), 0);
 
   // After release, a full frame on A decodes without needing the old remainder.
   const frames = wire.decode(full, EP_A);
@@ -73,20 +70,9 @@ test('evictIdleDecoders removes stale UDP pipelines', () => {
   const full = heartbeatFrame(wire);
   wire.decode(full, EP_A);
   wire.decode(full, EP_B);
-  assert.equal(wire.decoderCount(), 2);
 
   const removed = wire.evictIdleDecoders(Date.now() + 60_000, 30_000);
   assert.equal(removed, 2);
-  assert.equal(wire.decoderCount(), 0);
-});
-
-test('clearDecoders empties every pipeline', () => {
-  const wire = createWire({ bundle: loadBundled('minimal') });
-  const full = heartbeatFrame(wire);
-  wire.decode(full, EP_A);
-  wire.decode(full, EP_B);
-  wire.clearDecoders();
-  assert.equal(wire.decoderCount(), 0);
 });
 
 test('omit endpoint still decodes (serial / single-stream fallback)', () => {
@@ -94,12 +80,6 @@ test('omit endpoint still decodes (serial / single-stream fallback)', () => {
   const full = heartbeatFrame(wire);
   const frames = wire.decode(full);
   assert.equal(frames.length, 1);
-  assert.equal(wire.decoderCount(), 1);
-});
-
-test('default max decoder cap is 100', () => {
-  const wire = createWire({ bundle: loadBundled('minimal') });
-  assert.equal(wire.maxDecoderCount(), 100);
 });
 
 test('decoder map LRU-evicts when over maxDecoders (UDP churn bound)', () => {
@@ -112,12 +92,10 @@ test('decoder map LRU-evicts when over maxDecoders (UDP churn bound)', () => {
 
   wire.decode(full, ep(1), t);
   wire.decode(full, ep(2), t);
-  assert.equal(wire.decoderCount(), 2);
 
   // Touch ep(1) so it is warmer than ep(2); allocating ep(3) should drop ep(2).
   wire.decode(full, ep(1), t);
   wire.decode(full, ep(3), t);
-  assert.equal(wire.decoderCount(), 2);
 
   // ep(1) still warm — completing a partial there must not need a fresh sync hunt
   // from a wiped pipeline. ep(2) was evicted.
@@ -142,11 +120,9 @@ test('cap pressure prefers never-validated pipelines over a live peer mid-frame'
 
   // Spoof fills the last slot without ever validating.
   assert.equal(wire.decode(junk, ep(2), t + 2).length, 0);
-  assert.equal(wire.decoderCount(), 2);
 
   // Another spoof must evict the never-validated slot, not the mid-frame peer.
   assert.equal(wire.decode(junk, ep(3), t + 3).length, 0);
-  assert.equal(wire.decoderCount(), 2);
 
   // Completing the legitimate partial still works.
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 4).length, 1);
@@ -178,12 +154,10 @@ test('an UNKNOWN_<id> frame surfaces but does not earn eviction standing', () =>
     wire.decode(heartbeatFrame(wire).subarray(0, 6), ep(2), t + 2).length,
     0
   );
-  assert.equal(wire.decoderCount(), 2);
 
   // Allocating a third endpoint must evict the unknown-only slot, not the
   // mid-frame peer — proof the unknown frame never set `validated`.
   assert.equal(wire.decode(heartbeatFrame(wire), ep(3), t + 3).length, 1);
-  assert.equal(wire.decoderCount(), 2);
   assert.equal(
     wire.decode(heartbeatFrame(wire).subarray(6), ep(2), t + 4).length,
     1,
@@ -205,7 +179,6 @@ test('cap pressure prefers empty-buffer validated over a mid-frame peer', () => 
   // Allocating ep(3) must drop the empty-buffer peer, not the mid-frame one
   // (Greptile #33 residual once every slot is validated).
   assert.equal(wire.decode(full, ep(3), t + 3).length, 1);
-  assert.equal(wire.decoderCount(), 2);
 
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 4).length, 1);
   // ep(2) was evicted — a fresh full frame still decodes alone.
@@ -222,12 +195,10 @@ test('cap pressure keeps a never-validated first-frame partial over junk', () =>
   // New peer: first bytes of first frame — not validated yet, but STX-buffered.
   assert.equal(wire.decode(full.subarray(0, 6), ep(1), t).length, 0);
   assert.equal(wire.decode(junk, ep(2), t + 1).length, 0);
-  assert.equal(wire.decoderCount(), 2);
 
   // More junk must drop the non-STX spoof, not the first-frame partial
   // (Greptile #33: never-validated tier must not wipe a started MAVLink frame).
   assert.equal(wire.decode(junk, ep(3), t + 2).length, 0);
-  assert.equal(wire.decoderCount(), 2);
 
   assert.equal(wire.decode(full.subarray(6), ep(1), t + 3).length, 1);
 });

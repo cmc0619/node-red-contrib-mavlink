@@ -47,7 +47,7 @@ test('a GCS-range sysid (>= 250) is tracked but its endpoint is never learned', 
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 6, autopilot: 8, base_mode: 0 }, 255, 190), EP1);
   table.update(heartbeat({ type: 6, autopilot: 8, base_mode: 0 }, 250, 190), EP2);
-  assert.equal(table.size(), 2, 'GCS peers are still tracked');
+  assert.equal(table.snapshot().length, 2, 'GCS peers are still tracked');
   assert.equal(table.endpointFor(255, 190), null);
   assert.equal(table.endpointFor(250, 190), null);
   assert.deepEqual(table.endpointsForBroadcast(0), []);
@@ -62,7 +62,7 @@ test('table is keyed by sysid with components nested underneath', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
   table.update(heartbeat({ type: 26, autopilot: 8, base_mode: 0 }, 1, 154), EP1); // gimbal
-  assert.equal(table.size(), 1); // one system
+  assert.equal(table.snapshot().length, 1); // one system
   assert.ok(table.getComponent(1, 1));
   assert.ok(table.getComponent(1, 154));
 });
@@ -104,7 +104,7 @@ test('stale then expired transitions emit events', () => {
   table.sweep(16000);
   assert.deepEqual(events, [['stale', 1], ['expired', 1]]);
   assert.equal(table.getComponent(1, 1), undefined); // dropped
-  assert.equal(table.size(), 0);
+  assert.equal(table.snapshot().length, 0);
 });
 
 test('a fresh heartbeat clears a stale mark', () => {
