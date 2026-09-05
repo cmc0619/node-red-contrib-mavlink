@@ -3,7 +3,6 @@
 const {
   buildMoveMessage,
   createMoveStream,
-  streamLocks,
   buildRepositionMessage,
   positionFrom,
   velocityFrom,
@@ -17,6 +16,7 @@ const {
   frameForReference,
   deriveSteerMode,
 } = require('../lib/move');
+const { streamLocks } = require('../lib/delivery/lock');
 const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
