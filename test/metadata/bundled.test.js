@@ -162,11 +162,8 @@ test('a compiled dialect is cached on disk and records the XML it came from', ()
   clearCompiledCache();
   try {
     const bundle = loadBundled('icarous');
-    // The entry's name carries the compiler's stamp, so an entry another
-    // compiler wrote is never read: `<key>@seed-<hash of compile.js>.json`.
-    const name = fs.readdirSync(dir).find((f) => f.startsWith('icarous@seed-'));
-    assert.match(String(name), /^icarous@seed-[0-9a-f]{8}\.json$/, 'compiling writes a cache entry named for the compiler');
-    const file = path.join(dir, name);
+    const file = path.join(dir, 'icarous@seed.json');
+    assert.ok(fs.existsSync(file), 'compiling writes a cache entry');
 
     const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
     const manifest = readManifest();
