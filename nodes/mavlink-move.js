@@ -7,7 +7,6 @@ const {
   positionFrom,
   velocityFrom,
   accelFrom,
-  valueFrom,
   buildTurnMessage,
   buildSpeedMessage,
   buildAttitudeMessage,
@@ -17,6 +16,7 @@ const {
   deriveSteerMode,
 } = require('../lib/move');
 const { streamLocks } = require('../lib/delivery/lock');
+const { valueFrom } = require('../lib/addressing/resolve');
 const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
@@ -316,7 +316,7 @@ module.exports = function registerMavlinkMove(RED) {
           case 'turn': {
             // Turn is an acked MAV_CMD, not a setpoint (§9 roster): command
             // tiers only, no Stream — the editor does not offer that tier.
-            const relative = payload.relative === undefined ? config.relative : payload.relative;
+            const relative = valueFrom(payload, config, 'relative');
             const message = buildTurnMessage({
               heading: valueFrom(payload, config, 'heading'),
               rate: valueFrom(payload, config, 'turnRate'),
@@ -335,7 +335,7 @@ module.exports = function registerMavlinkMove(RED) {
             const message = buildSpeedMessage({
               speed: valueFrom(payload, config, 'speed'),
               throttle: valueFrom(payload, config, 'throttle'),
-              speedType: payload.speedType === undefined ? config.speedType : payload.speedType,
+              speedType: valueFrom(payload, config, 'speedType'),
               target,
             });
             if (deliverCommand(action, message, target, identityId, connectionNode, send, done)) return;
@@ -360,7 +360,7 @@ module.exports = function registerMavlinkMove(RED) {
                 // path. The altitude reference is the one frame choice that exists.
                 const message = buildRepositionMessage({
                   mode: 'position',
-                  frame: frameForAltRef(payload.altRef === undefined ? config.altRef : payload.altRef),
+                  frame: frameForAltRef(valueFrom(payload, config, 'altRef')),
                   target,
                   position: payload.position === undefined ? positionFrom(config) : payload.position,
                   speed: valueFrom(payload, config, 'speed'),
@@ -372,7 +372,7 @@ module.exports = function registerMavlinkMove(RED) {
                   // Measured (§14 2026-08-12): the flag is the gate on both stacks;
                   // without it, outside GUIDED (AP) / Hold (PX4), the answer is
                   // DENIED (2).
-                  changeMode: payload.changeMode === undefined ? config.changeMode : payload.changeMode,
+                  changeMode: valueFrom(payload, config, 'changeMode'),
                 });
                 // Async on the confirm tier: the ack arrives later and the confirm
                 // flow owns done() from here.
@@ -488,7 +488,7 @@ function setpointFor(action, payload, config, target, profile) {
       // trust) — it does not refuse over one.
       return buildMoveMessage({
         mode: 'position',
-        frame: frameForAltRef(payload.altRef === undefined ? config.altRef : payload.altRef),
+        frame: frameForAltRef(valueFrom(payload, config, 'altRef')),
         target,
         position: payload.position === undefined ? positionFrom(config) : payload.position,
         yaw: valueFrom(payload, config, 'yaw'),
@@ -506,7 +506,7 @@ function setpointFor(action, payload, config, target, profile) {
       return buildMoveMessage({
         mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
         frame: frameForReference(
-          payload.reference === undefined ? config.reference : payload.reference,
+          valueFrom(payload, config, 'reference'),
           profile
         ),
         target,
