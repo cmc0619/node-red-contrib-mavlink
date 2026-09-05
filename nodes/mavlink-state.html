@@ -23,7 +23,6 @@
     ];
 
     function parseSavedEvents(raw) {
-      if (Array.isArray(raw)) return raw.map(String);
       if (typeof raw === 'string' && raw.trim()) {
         return raw.split(',').map((s) => s.trim()).filter(Boolean);
       }

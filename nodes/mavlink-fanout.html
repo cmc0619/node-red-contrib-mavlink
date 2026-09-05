@@ -245,7 +245,7 @@
       function refreshVisibility() {
         const d = $('#node-input-delivery').val() || 'build';
         const sel = $('#node-input-selectionMode').val() || 'all';
-        let exec = $('#node-input-executionMode').val() || 'sequential';
+        const exec = $('#node-input-executionMode').val() || 'sequential';
         // Build requires the explicit list (see defaults.selectionMode) — grey
         // the selections that need a live peer table rather than red-ringing
         // after the fact. Broadcast goes with them: it only pairs with the
@@ -253,13 +253,6 @@
         $('#node-input-selectionMode option[value="all"], #node-input-selectionMode option[value="filter"]')
           .prop('disabled', d === 'build');
         $('#node-input-executionMode option[value="broadcast"]').prop('disabled', d === 'build');
-        // Disabling greys the option but keeps a retained value — a node
-        // switched from a Broadcast wire tier would save Build+Broadcast and
-        // refuse every message. Move it to the only mode Build supports.
-        if (d === 'build' && exec === 'broadcast') {
-          exec = 'sequential';
-          $('#node-input-executionMode').val(exec);
-        }
         // Build never uses a Connection now (the list is the directory), so
         // the picker hides like every other sender's does on Build (§6).
         $('#row-fanout-connection').toggle(d !== 'build');
