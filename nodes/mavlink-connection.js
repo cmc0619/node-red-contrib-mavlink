@@ -198,11 +198,6 @@ module.exports = function registerMavlinkConnection(RED) {
   });
 };
 
-// Exposed for direct unit testing (test/nodes/connection-signing.test.js).
-module.exports.buildSigning = buildSigning;
-module.exports.makeRejectedHandler = makeRejectedHandler;
-module.exports.applyStatus = applyStatus;
-
 /**
  * Build the runtime identity snapshot from a Local Identity config node,
  * deriving the companion's sysid from the vehicle and resolving heartbeat enum
