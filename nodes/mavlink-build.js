@@ -40,7 +40,7 @@ const {
   applyActionStatus,
 } = require('../lib/delivery');
 const { dialectForTier } = require('../lib/addressing/dialect');
-const { catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata/messages-list');
+const { catalogMessagesFromBundle } = require('../lib/metadata/messages-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
@@ -212,7 +212,6 @@ module.exports = function registerMavlinkBuild(RED) {
     registerDialectCatalogRoute(RED, {
       path: '/mavlink/build/messages',
       fromBundle: catalogMessagesFromBundle,
-      fromDialect: listMessagesCatalog,
     });
     messagesRouteRegistered = true;
   }

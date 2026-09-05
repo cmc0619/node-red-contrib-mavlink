@@ -50,7 +50,7 @@ const {
   MODE_FLAG_CUSTOM_MODE_ENABLED,
   setModeParams,
 } = require('../lib/vehicle/modes');
-const { catalogFromBundle, listCommandsCatalog } = require('../lib/metadata/commands-list');
+const { catalogFromBundle } = require('../lib/metadata/commands-list');
 const { isBlank } = require('../lib/addressing/resolve');
 const { dialectForTier } = require('../lib/addressing/dialect');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
@@ -575,7 +575,6 @@ module.exports = function registerMavlinkCommand(RED) {
   registerDialectCatalogRoute(RED, {
     path: '/mavlink/command/commands',
     fromBundle: catalogFromBundle,
-    fromDialect: listCommandsCatalog,
   });
 
   RED.nodes.registerType('mavlink-command', MavlinkCommandNode);

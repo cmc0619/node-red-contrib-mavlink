@@ -15,7 +15,6 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { loadBundled } = require('../lib/metadata/bundled');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
@@ -184,10 +183,6 @@ module.exports = function registerMavlinkPayload(RED) {
               throw new Error(source.body.error);
             case 'bundle':
               bundle = source.bundle;
-              dialect = source.dialect;
-              break;
-            case 'dialect':
-              bundle = loadBundled(source.dialect);
               dialect = source.dialect;
               break;
             default: break; // This space intentionally left blank (§5)
