@@ -27,7 +27,6 @@ test('makeStatusRecord returns the default plain-object shape', () => {
     result: 'accepted',
     resultCode: null,
     resultParam2: null,
-    confirmedBy: undefined,
     target: null,
     elapsed: 0,
     retries: 0,
