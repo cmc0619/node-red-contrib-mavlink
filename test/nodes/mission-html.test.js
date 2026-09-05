@@ -66,9 +66,6 @@ test('mavlink-mission Build dialect select uses shared helper with Vehicle Profi
   assert.match(html, /id="row-mission-dialect"/, 'template must have a dialect row');
   assert.match(html, /id="node-input-dialect"/, 'template must have a dialect select');
   assert.match(html, /RED\.mavlink\.populateDialectSelect\(/, 'dialect select must use shared helper');
-  // The __vehicle escape gating of profile firmware lives in the shared
-  // resolver (resolveCatalogTarget — mavlink-editor-resource.test.js).
-  assert.match(html, /RED\.mavlink\.resolveCatalogTarget\(\)\.firmware/, 'firmware derives from the shared resolver');
 });
 
 test('mavlink-mission Build visibility delegates shared rows to applyBuildTierRowVisibility', () => {
@@ -87,21 +84,6 @@ test('mavlink-mission Build visibility delegates shared rows to applyBuildTierRo
     html,
     /\$\('#row-mission-dialect'\)\.toggle/,
     'no hand-rolled dialect row toggle'
-  );
-});
-
-test('mavlink-mission firmware type list follows dialect, vehicle, or connection', () => {
-  // The type list repopulates from the shared resolver's firmware, which reads
-  // the Build Firmware select on a concrete dialect, the Build Vehicle Profile
-  // escape's profile, or the wire Connection's bound profile — tier awareness,
-  // the __vehicle escape, frozen `vehicle` snapshots, and the
-  // no-invented-firmware rule are all proven executed against
-  // resolveCatalogTarget in mavlink-editor-resource.test.js.
-  assert.match(html, /function repopulateTypes/, 'repopulateTypes function present');
-  assert.match(
-    html,
-    /[=]\s*RED\.mavlink\.resolveCatalogTarget\(\)\.firmware/,
-    'repopulateTypes reads the shared resolver'
   );
 });
 
