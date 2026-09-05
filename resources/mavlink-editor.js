@@ -75,7 +75,7 @@
     RED.mavlink.BAND_OPTIONS.forEach((opt) => {
       $('<option></option>').val(opt.value).text(opt.label).appendTo($select);
     });
-    $select.val(saved !== undefined && saved !== null ? String(saved) : '2');
+    $select.val(String(saved));
   };
 
   /**
@@ -1335,22 +1335,17 @@
       return catalog;
     }
 
-    function render(catalog) {
-      cb(catalog);
-    }
-
     if (!target.query) {
-      render(emptyShape(''));
+      cb(emptyShape(''));
       return;
     }
 
     $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, (data) => {
       if (seq !== state.seq) return;
-      const catalog = fromData(data || {});
-      render(catalog);
+      cb(fromData(data || {}));
     }).fail((_xhr, _status, err) => {
       if (seq !== state.seq) return;
-      render(emptyShape(target.dialect, String(err || 'load failed')));
+      cb(emptyShape(target.dialect, String(err || 'load failed')));
     });
   };
 
@@ -1915,19 +1910,6 @@
   };
 
   /**
-   * Show or hide a form row, tolerating a selector that matches nothing —
-   * a dialog may legitimately not have every row a shared helper can toggle.
-   *
-   * @param {string} selector
-   * @param {boolean} shown
-   */
-  RED.mavlink.toggleRow = function (selector, shown) {
-    if (!selector) return;
-    const $el = $(selector);
-    if ($el && $el.length) $el.toggle(Boolean(shown));
-  };
-
-  /**
    * Toggle the Build-tier dialect / vehicle / firmware / connection rows from
    * the current dialect + Build state. Thin helper — each node keeps ownership
    * of its remaining role/mode rows; this covers only the shared four.
@@ -1944,11 +1926,10 @@
     opts = opts || {};
     const isBuild = Boolean(opts.isBuild);
     const dialect = opts.dialect || '';
-    const toggle = RED.mavlink.toggleRow;
-    toggle(opts.dialectRow, isBuild);
-    toggle(opts.vehicleRow, isBuild && dialect === '__vehicle');
-    toggle(opts.firmwareRow, isBuild && Boolean(dialect) && dialect !== '__vehicle');
-    toggle(opts.connectionRow, !isBuild);
+    $(opts.dialectRow).toggle(isBuild);
+    $(opts.vehicleRow).toggle(isBuild && dialect === '__vehicle');
+    $(opts.firmwareRow).toggle(isBuild && Boolean(dialect) && dialect !== '__vehicle');
+    $(opts.connectionRow).toggle(!isBuild);
   };
 
   /**
@@ -1973,10 +1954,9 @@
     const isCompanion = !isBuild && RED.mavlink.identityRole(identityId) === 'companion';
     const targetSystem = isBuild || !isCompanion;
     const targetComponent = hideCompid ? (isBuild || !isCompanion) : true;
-    const toggle = RED.mavlink.toggleRow;
-    if (opts.combinedTargetRow) toggle(opts.combinedTargetRow, targetSystem);
-    toggle(opts.targetSystemRow, targetSystem);
-    toggle(opts.targetComponentRow, targetComponent);
+    $(opts.combinedTargetRow).toggle(targetSystem);
+    $(opts.targetSystemRow).toggle(targetSystem);
+    $(opts.targetComponentRow).toggle(targetComponent);
     return {
       isCompanion,
       targetSystem,

@@ -991,7 +991,6 @@
       $('#node-input-params').val(JSON.stringify(params));
     },
 
-    oneditcancel() {},
   });
 }());
 </script>
@@ -1103,7 +1102,7 @@
 
   <div class="form-row" id="row-cmd-timeoutMs">
     <label for="node-input-timeoutMs" style="width:120px">ACK timeout</label>
-    <input type="number" id="node-input-timeoutMs" style="width:80px"> ms
+    <input type="number" id="node-input-timeoutMs" min="1" style="width:80px"> ms
   </div>
 
   <div class="form-row" id="row-cmd-maxRetries">

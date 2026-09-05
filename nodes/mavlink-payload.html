@@ -325,8 +325,7 @@
       Object.keys(RED.mavlink.PAYLOAD_VERBS).forEach((topic) => {
         $topic.append($('<option></option>').val(topic).text(humanize(topic)));
       });
-      $topic.val(node.topic || 'camera');
-      if (!$topic.val()) $topic.val('camera');
+      $topic.val(node.topic);
 
       $topic.on('change', () => {
         RED.mavlink.refreshVerbOptions();
@@ -403,7 +402,7 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option></select></div>
   <div class="form-row" id="row-payload-sendAs"><label for="node-input-sendAs">Send as</label><select id="node-input-sendAs" style="width:70%"><option value="int">COMMAND_INT (positional; degE7 on the wire)</option><option value="long">COMMAND_LONG (float params)</option></select></div>
   <div class="form-row" id="row-payload-frame" style="display:none"><label for="node-input-frame">Frame</label><select id="node-input-frame" style="width:70%"><option value="3">Global, relative alt (default)</option><option value="0">Global, absolute alt (AMSL)</option><option value="10">Global, terrain alt</option><option value="1">Local NED (metres)</option></select></div>
-  <div class="form-row" id="row-payload-timeoutMs"><label for="node-input-timeoutMs">ACK timeout</label><input type="number" id="node-input-timeoutMs" style="width:80px"> ms</div>
+  <div class="form-row" id="row-payload-timeoutMs"><label for="node-input-timeoutMs">ACK timeout</label><input type="number" id="node-input-timeoutMs" min="1" style="width:80px"> ms</div>
   <div class="form-row" id="row-payload-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
   <div class="form-row"><label for="node-input-topic">Topic</label><select id="node-input-topic"></select></div>
   <div class="form-row" id="row-payload-verb"><label for="node-input-verb">Verb</label><select id="node-input-verb"></select></div>

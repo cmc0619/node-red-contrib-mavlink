@@ -252,13 +252,12 @@
         const action = $('#node-input-action').val() || 'read';
         const namesOne = action !== 'request-list';
         const byIndex = indexAddressed(node);
-        const toggle = RED.mavlink.toggleRow;
 
         const showName = namesOne && !byIndex;
-        toggle('#row-param-lookup', action === 'read');
-        toggle('#row-paramId', showName);
-        toggle('#row-paramIndex', namesOne && byIndex);
-        toggle('#row-value', action === 'set');
+        $('#row-param-lookup').toggle(action === 'read');
+        $('#row-paramId').toggle(showName);
+        $('#row-paramIndex').toggle(namesOne && byIndex);
+        $('#row-value').toggle(action === 'set');
         applyTypeRowVisibility();
 
         if (!byIndex) $('#node-input-paramIndex').val(-1);
@@ -509,7 +508,7 @@
       function applyTypeRowVisibility() {
         const action = $('#node-input-action').val() || 'read';
         const decorative = RED.mavlink.resolveCatalogTarget().firmware === 'ardupilot';
-        RED.mavlink.toggleRow('#row-paramType', action === 'set' && !decorative);
+        $('#row-paramType').toggle(action === 'set' && !decorative);
       }
 
       /**
@@ -936,7 +935,7 @@
     <input type="number" id="node-input-value">
   </div>
   <div class="form-row" id="row-paramType"><label for="node-input-paramType">Type</label><select id="node-input-paramType"></select><span id="mav-param-type-display" style="display:none"></span></div>
-  <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Timeout (ms)</label><input type="number" id="node-input-timeoutMs" placeholder="10000"></div>
+  <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Timeout (ms)</label><input type="number" id="node-input-timeoutMs" min="1" placeholder="10000"></div>
   <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
 </script>
 

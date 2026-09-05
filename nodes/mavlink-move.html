@@ -820,8 +820,7 @@
           ['stream', 'Stream']
         ]
       };
-      // The Action list, rebuilt per bound vehicle. Same labels as the static
-      // markup — that copy is what a browser renders before oneditprepare runs.
+      // The Action list, rebuilt per bound vehicle.
       const ACTION_OPTIONS = [
         ['goto', 'Go to (guided goto, acknowledged)'],
         ['steer', 'Steer (setpoints, fire-and-forget)'],
@@ -1286,29 +1285,14 @@
   <div class="form-row" id="row-move-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-move-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
   <div class="form-row" id="row-move-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity" style="width:70%"></select></div>
-  <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action" style="width:70%">
-    <option value="goto">Go to (guided goto, acknowledged)</option>
-    <option value="steer">Steer (setpoints, fire-and-forget)</option>
-    <option value="turn">Turn (heading, acknowledged)</option>
-    <option value="speed">Speed (change speed, acknowledged)</option>
-    <option value="attitude">Attitude (setpoints, fire-and-forget)</option>
-    <option value="manual">Manual (joystick sticks)</option>
-  </select></div>
-  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send &amp; confirm</option><option value="stream">Stream</option></select></div>
+  <div class="form-row"><label for="node-input-action">Action</label><select id="node-input-action" style="width:70%"></select></div>
+  <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"></select></div>
   <div class="form-row" id="row-move-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
-  <div class="form-row" id="row-move-altRef"><label for="node-input-altRef">Altitude reference</label><select id="node-input-altRef" style="width:70%">
-    <option value="home">Above home</option>
-    <option value="msl">Absolute (MSL)</option>
-    <option value="terrain">Above terrain (ArduPilot)</option>
-  </select></div>
+  <div class="form-row" id="row-move-altRef"><label for="node-input-altRef">Altitude reference</label><select id="node-input-altRef" style="width:70%"></select></div>
   <div class="form-row" id="row-move-lat"><label for="node-input-lat">Degrees lat</label><input type="text" id="node-input-lat" step="any" style="width:120px"> deg</div>
   <div class="form-row" id="row-move-lon"><label for="node-input-lon">Degrees lon</label><input type="text" id="node-input-lon" step="any" style="width:120px"> deg</div>
   <div class="form-row" id="row-move-alt"><label for="node-input-alt" id="label-move-alt">Metres alt</label><input type="text" id="node-input-alt" step="any" style="width:120px"> m</div>
-  <div class="form-row" id="row-move-reference"><label for="node-input-reference">Reference</label><select id="node-input-reference" style="width:70%">
-    <option value="world">World (Local NED)</option>
-    <option value="body">Body (adapts to firmware)</option>
-    <option value="offset">Offset from here (relative)</option>
-  </select></div>
+  <div class="form-row" id="row-move-reference"><label for="node-input-reference">Reference</label><select id="node-input-reference" style="width:70%"></select></div>
   <div class="form-row" id="row-move-groups"><label>Fields</label>
     <span style="display:inline-block">
       <label style="width:auto;margin-right:12px" for="move-group-position"><input type="checkbox" id="move-group-position" style="display:inline-block;width:auto;margin-right:4px;"> Position</label>
@@ -1354,7 +1338,7 @@
   <div class="form-row"><a href="#" id="move-advanced-toggle">&#x25B8; Advanced</a></div>
   <div id="move-advanced" style="display:none">
     <div class="form-row" id="row-move-changeMode"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"></div>
-    <div class="form-row" id="row-move-timeoutMs"><label for="node-input-timeoutMs">ACK timeout</label><input type="number" id="node-input-timeoutMs" style="width:80px" placeholder="10000"> ms</div>
+    <div class="form-row" id="row-move-timeoutMs"><label for="node-input-timeoutMs">ACK timeout</label><input type="number" id="node-input-timeoutMs" min="1" style="width:80px" placeholder="10000"> ms</div>
     <div class="form-row" id="row-move-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
     <div class="form-row" id="row-move-rollRate"><label for="node-input-rollRate">Roll rate</label><input type="text" id="node-input-rollRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>
     <div class="form-row" id="row-move-pitchRate"><label for="node-input-pitchRate">Pitch rate</label><input type="text" id="node-input-pitchRate" step="any" style="width:120px" placeholder="(ignored)"> deg/s</div>

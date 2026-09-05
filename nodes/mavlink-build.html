@@ -17,7 +17,7 @@
     // Build node's tier field is `tier`; the dialect picker governs on Build,
     // the connection's bound Vehicle Profile on wire tiers. No silent default.
     function buildTierIsBuild() {
-      return ($('#node-input-tier').val() || 'send') === 'build';
+      return $('#node-input-tier').val() === 'build';
     }
 
     function loadMessagesCatalog(cb) {
@@ -173,12 +173,9 @@
         TIER_OPTIONS.forEach((opt) => {
           $('<option>').val(opt.value).text(opt.label).appendTo($tier);
         });
-        $tier.val(node.tier || 'send');
+        $tier.val(node.tier);
 
-        RED.mavlink.fillBandSelect(
-          $('#node-input-band'),
-          node.band !== undefined ? String(node.band) : '2'
-        );
+        RED.mavlink.fillBandSelect($('#node-input-band'), String(node.band));
 
         function updateVisibility() {
           const dialectVal = $('#node-input-dialect').val() || node.dialect || '';
@@ -191,7 +188,6 @@
           });
         }
         $tier.on('change', () => {
-          clearCatalogs();
           updateVisibility();
           reloadCatalogs();
         });
@@ -269,16 +265,11 @@
             if (multi) {
               sel.val(RED.mavlink.selectedBitmaskValues(saved, entries));
             } else if (saved !== undefined && saved !== null && saved !== '') {
-              const match = entries.find((e) => String(e.value) === String(saved));
-              if (match) {
-                sel.val(String(match.value));
-              } else {
-                // A saved value the table lacks — a dialect switch, a newer
-                // firmware's entry — must survive open-and-save, not silently
-                // deselect and drop the field on Done.
-                RED.mavlink.ensureSavedEnumOption(sel, String(saved));
-                sel.val(String(saved));
-              }
+              // A saved value the table lacks — a dialect switch, a newer
+              // firmware's entry — must survive open-and-save, not silently
+              // deselect and drop the field on Done.
+              RED.mavlink.ensureSavedEnumOption(sel, String(saved));
+              sel.val(String(saved));
             }
             return sel;
           }
@@ -498,20 +489,14 @@
           });
         }
 
-        function clearCatalogs() {
-          _currentMsgCatalog = null;
-        }
-
         $('#node-input-vehicle').on('change', () => {
           if ($tier.val() === 'build' && $('#node-input-dialect').val() === '__vehicle') {
-            clearCatalogs();
             reloadCatalogs();
           }
         });
 
         $('#node-input-connection').on('change', () => {
           if ($tier.val() !== 'build') {
-            clearCatalogs();
             reloadCatalogs();
           }
         });
@@ -520,7 +505,6 @@
         // validator accepts a concrete dialect or the Vehicle Profile escape.
         const $dialect = $('#node-input-dialect');
         $dialect.on('change', () => {
-          clearCatalogs();
           updateVisibility();
           reloadCatalogs();
         });
