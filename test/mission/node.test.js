@@ -194,7 +194,7 @@ test('an unknown payload.missionType rides as given — never resolved to 0, nev
     connection: 'conn',
     delivery: 'confirm',
     missionType: 'mission',
-    timeout: 5,
+    timeoutMs: 5,
     maxRetries: 0,
   });
   const res = await runInput(clearNode, { payload: { missionType: 'bogus' } });
