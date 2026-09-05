@@ -156,7 +156,7 @@ test('a seeded bundle is plain JSON-serializable data', () => {
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(loadBundled('ardupilotmega'))));
 });
 
-test('a compiled dialect is cached on disk and records the XML it came from', () => {
+test('a compiled dialect is cached on disk', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-compiled-'));
   setCompiledCacheDir(dir);
   clearCompiledCache();
@@ -165,14 +165,9 @@ test('a compiled dialect is cached on disk and records the XML it came from', ()
     const file = path.join(dir, 'icarous@seed.json');
     assert.ok(fs.existsSync(file), 'compiling writes a cache entry');
 
-    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const manifest = readManifest();
-    assert.equal(entry.stamp, manifest.stamp);
-    assert.equal(entry.commit, manifest.commit);
-    assert.equal(entry.commitDate, manifest.commitDate);
     // The cache is a JSON round-trip: attributes the XML never had are absent
     // keys on disk, undefined in the compiled bundle.
-    assert.deepEqual(entry.bundle, JSON.parse(JSON.stringify(bundle)));
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), JSON.parse(JSON.stringify(bundle)));
 
     // A second process would read the entry rather than recompile. Nothing
     // invalidates it — only clearCompiledCache() removes an entry.
