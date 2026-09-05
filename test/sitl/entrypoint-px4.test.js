@@ -35,6 +35,21 @@ test('entrypoint rewrites early MAV_SYS_ID and asserts before commander start', 
   );
   assert.match(src, /sed -i -E/, 'early rewrite uses sed');
   assert.match(src, /nrc_lab_params_pre_mavlink/, 'must still assert before mavlink');
+  assert.match(
+    src,
+    /find \/logs -mindepth 1 -delete/,
+    'must wipe the /logs bind mount on every start'
+  );
+  assert.match(
+    src,
+    /ROOTFS_DIR=.*rootfs\/\$\{INSTANCE\}/,
+    'ulog redirect must target the posix rootfs instance dir, not PX4_PREFIX/log'
+  );
+  assert.match(
+    src,
+    /ln -sfn \/logs "\$\{ROOTFS_DIR\}\/log"/,
+    'rootfs ./log must symlink to the Compose /logs mount'
+  );
 });
 
 // The entrypoint runs inside the PX4 Linux container: it resolves OUT_HOST via
@@ -76,38 +91,34 @@ test('fixture rcS gets lab SYSID before commander start', { skip: containerOnly 
 
   // Source the patching portion by running the entrypoint with a stub px4 that exits.
   // resolve-out-host needs a resolvable OUT_HOST; use 127.0.0.1.
+  const homeDir = path.join(dir, 'home');
+  const logsDir = path.join(dir, 'logs');
+  fs.mkdirSync(homeDir, { recursive: true });
+  fs.mkdirSync(logsDir, { recursive: true });
+  // Leave a stale file so the wipe line has something to delete.
+  fs.writeFileSync(path.join(logsDir, 'stale.ulg'), 'old');
+
   const env = {
     ...process.env,
+    HOME: homeDir,
     SYSID: '11',
     INSTANCE: '0',
     OUT_HOST: '127.0.0.1',
     OUT_PORT: '14560',
     PATH: `${path.join(prefix, 'bin')}:${process.env.PATH}`,
   };
-  // Entrypoint cds to PX4_PREFIX and execs px4 — point it at our fixture tree by
-  // placing the script's expected layout under a temp root and chroot-style env.
-  // Easier: run bash -c that sets PX4 paths via copying script logic… Instead,
-  // invoke the real script after binding PX4_PREFIX via a wrapper that replaces
-  // /opt/px4 with our fixture using a bind — not available. Patch by exporting
-  // and running only through sed by invoking script with modified PATH where
-  // `dirname` resolve still finds resolve-out-host next to the real script.
-  //
+
   // Soften: copy entrypoint + resolve helper into the temp tree and rewrite the
-  // PX4_PREFIX detection to use our fixture.
+  // PX4_PREFIX detection to use our fixture. Retarget every /logs use (mkdir,
+  // wipe find, rootfs symlink) — the fixture has no container bind mount.
   const scriptCopy = path.join(dir, 'entrypoint-px4.sh');
   const resolveCopy = path.join(dir, 'resolve-out-host.sh');
-  const logsDir = path.join(dir, 'logs');
-  fs.mkdirSync(logsDir, { recursive: true });
   let body = fs.readFileSync(SCRIPT, 'utf8');
   body = body.replace(
     /if \[\[ -d \/opt\/px4-gazebo \]\]; then\n {2}PX4_PREFIX=\/opt\/px4-gazebo\nelse\n {2}PX4_PREFIX=\/opt\/px4\nfi/,
     `PX4_PREFIX="${prefix}"`
   );
-  body = body.replace(/mkdir -p \/logs/, `mkdir -p "${logsDir}"`);
-  body = body.replace(
-    /ln -sfn \/logs "\$\{PX4_PREFIX\}\/log"/,
-    `ln -sfn "${logsDir}" "\${PX4_PREFIX}/log"`
-  );
+  body = body.replaceAll('/logs', logsDir);
   fs.writeFileSync(scriptCopy, body, { mode: 0o755 });
   fs.copyFileSync(
     path.join(__dirname, '../../sitl/scripts/resolve-out-host.sh'),
@@ -116,6 +127,23 @@ test('fixture rcS gets lab SYSID before commander start', { skip: containerOnly 
 
   const result = spawnSync('bash', [scriptCopy], { env, encoding: 'utf8' });
   assert.equal(result.status, 0, `entrypoint failed: ${result.stderr || result.stdout}`);
+
+  assert.equal(
+    fs.existsSync(path.join(logsDir, 'stale.ulg')),
+    false,
+    'wipe on start must clear prior files in the logs dir'
+  );
+  const rootfsLog = path.join(
+    homeDir,
+    '.local',
+    'share',
+    'px4',
+    'rootfs',
+    '0',
+    'log'
+  );
+  assert.equal(fs.lstatSync(rootfsLog).isSymbolicLink(), true, 'rootfs log must be a symlink');
+  assert.equal(fs.readlinkSync(rootfsLog), logsDir, 'rootfs log must point at the bind mount');
 
   const patched = fs.readFileSync(rcs, 'utf8');
   const commanderAt = patched.indexOf('commander start');
