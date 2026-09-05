@@ -178,13 +178,10 @@ module.exports = function registerMavlinkPayload(RED) {
                 notice: source.notice,
               });
             case 'error':
-              // getDialect / resolve failures can include filesystem paths —
-              // keep the client response generic (same posture as the catch below).
-              RED.log.error(`[mavlink-payload] field-tips unavailable: ${source.body.error}`);
-              return res.status(400).json({
-                fields: {},
-                error: 'field tips unavailable',
-              });
+              // getDialect / resolve failures land in the catch below with
+              // the rest: logged server-side, answered generic.
+              // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a Vehicle Profile that is not deployed is runtime state
+              throw new Error(source.body.error);
             case 'bundle':
               bundle = source.bundle;
               dialect = source.dialect;
