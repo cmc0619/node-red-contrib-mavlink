@@ -194,7 +194,6 @@ function makeHarness() {
   // machinery under test (loadCatalog, resolveCatalogTarget, adminApiUrl,
   // populateDialectSelect, fillEnumSelect) stays real.
   Object.assign(context.RED.mavlink, {
-    ensureConfigNodePicker() {},
     reloadTargetCompId() {},
     refreshIdentitySelect() {},
     applyBuildTierRowVisibility() {},

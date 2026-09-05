@@ -116,8 +116,8 @@ test('mavlink-move Action surface: goto default, both actions offered, retired f
   // Defaults-based, not a source regex: action grew a validator (the Steer
   // "something to command" rule), so its literal is no longer one line.
   assert.equal(loadNodeDefaults('mavlink-move').action.value, 'goto', 'action defaults to goto');
-  assert.match(html, /option value="goto"/, 'goto action offered');
-  assert.match(html, /option value="steer"/, 'steer action offered');
+  assert.match(html, /\['goto', '/, 'goto action offered');
+  assert.match(html, /\['steer', '/, 'steer action offered');
   // Defaults-based, not a source regex: altRef grew its membership ring.
   assert.equal(loadNodeDefaults('mavlink-move').altRef.value, 'home', 'altRef defaults to home (the GCS default)');
   // Defaults-based, not a source regex: reference grew a validator (Codex
@@ -481,7 +481,6 @@ test('mavlink-move keeps target sysid/compid and reloadCompIdSelect catalog', ()
   assert.match(html, /id="node-input-targetSystem"/, 'target sysid field remains');
   assert.match(html, /id="node-input-targetComponent"/, 'target compid select remains');
   assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid enum catalog uses shared helper');
-  assert.match(html, /ensureConfigNodePicker/, 'connection picker remains');
   assertChangeHandlerContains(
     html,
     "$('#node-input-connection')",
@@ -508,7 +507,6 @@ test('mavlink-move has vehicle and identity defaults for role × tier matrix (§
   // The vehicle (mavlink-vehicle) descriptor is contributed by the shared
   // buildTierDialectDefaults(); the delegation is asserted below.
   assert.match(html, /identity:\s*\{\s*value:\s*''/, 'identity default is empty string');
-  assert.match(html, /ensureConfigNodePicker[^)]*'vehicle'/, 'vehicle uses config node picker');
   assert.match(html, /id="node-input-identity"/, 'identity select exists in template');
   assert.match(html, /id="row-move-vehicle"/, 'vehicle row has ID for tier-driven toggling');
   assert.match(html, /id="row-move-identity"/, 'identity row has ID for tier-driven toggling');
@@ -789,11 +787,7 @@ test('mavlink-move: Steer cannot be set to the confirm tier', () => {
 // ── Offset from here: LOCAL_OFFSET_NED as Steer's third reference ────────────
 
 test('mavlink-move: Offset is offered as a Steer reference and the markup carries it', () => {
-  assert.match(
-    html,
-    /<option value="offset">Offset from here \(relative\)<\/option>/,
-    'the static template offers Offset'
-  );
+  assert.match(html, /\['offset', 'Offset from here \(relative\)'\]/, 'Offset is offered');
   assert.match(html, /const REFERENCE_OPTIONS = \[/, 'the reference list is rebuildable, like delivery');
   assert.match(html, /function refreshReferenceOptions/, 'the list is rebuilt per firmware');
   // The rebuild has to run before anything reads the reference back, because
@@ -941,10 +935,8 @@ test('mavlink-move: terrain altRef reds on a PX4 profile rather than being silen
     true,
     'the altitude reference is a Go to field'
   );
-  // The dropdown half: the rebuilt list withholds terrain per firmware, and
-  // the static markup offers it so the two copies cannot drift.
+  // The dropdown half: the rebuilt list withholds terrain per firmware.
   assert.match(html, /const ALTREF_OPTIONS = \[/, 'the altRef list is rebuilt per firmware');
-  assert.match(html, /<option value="terrain">/, 'terrain is offered in the static markup');
   assert.match(
     html,
     /return value === 'terrain' && Boolean\(firmware\) && firmware !== 'ardupilot';/,
@@ -984,8 +976,8 @@ test('mavlink-move: Offset cannot be set to the stream tier', () => {
 // ── Turn and Speed: the acked motion commands ───────────────────────────────
 
 test('mavlink-move: Turn and Speed are offered, with the command tiers only', () => {
-  assert.match(html, /option value="turn"/, 'turn action offered');
-  assert.match(html, /option value="speed"/, 'speed action offered');
+  assert.match(html, /\['turn', '/, 'turn action offered');
+  assert.match(html, /\['speed', '/, 'speed action offered');
   const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
   assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
   for (const action of ['turn', 'speed']) {
@@ -1086,8 +1078,8 @@ test('mavlink-move: a command action cannot be set to the stream tier', () => {
 // ── Attitude and Manual: the setpoint-shaped roster rows ────────────────────
 
 test('mavlink-move: Attitude and Manual are offered with the setpoint tiers', () => {
-  assert.match(html, /option value="attitude"/, 'attitude offered');
-  assert.match(html, /option value="manual"/, 'manual offered');
+  assert.match(html, /\['attitude', '/, 'attitude offered');
+  assert.match(html, /\['manual', '/, 'manual offered');
   const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
   for (const action of ['attitude', 'manual']) {
     const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
@@ -1454,24 +1446,6 @@ test('mavlink-move: a fixed wing collapses Steer to the one frame it reads', () 
     'the collapse is ArduPlane\'s handler, not a property of fixed wings'
   );
 });
-
-test('mavlink-move: the rebuilt Action list and the static markup cannot drift', () => {
-  // Two copies of the action list now exist — the <option> markup a browser
-  // renders before oneditprepare runs, and ACTION_OPTIONS which replaces it.
-  // A value in one and not the other is a silently unreachable action.
-  const table = /const ACTION_OPTIONS = \[[\s\S]*?\n {6}\];/.exec(html);
-  assert.ok(table, 'ACTION_OPTIONS must be extractable');
-  const rebuilt = [...table[0].matchAll(/\['([a-z]+)',/g)].map((m) => m[1]);
-  const markup = [...html.matchAll(/<option value="([a-z]+)">[^<]*\(/g)].map((m) => m[1]);
-  for (const action of rebuilt) {
-    assert.ok(markup.includes(action), `${action} is rebuilt but not in the static markup`);
-  }
-  assert.deepEqual(
-    rebuilt, ['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'],
-    'the roster is the six built primitives'
-  );
-});
-
 
 // ── Steer group disclosure (#304 §4, owner request) ──────────────────────────
 

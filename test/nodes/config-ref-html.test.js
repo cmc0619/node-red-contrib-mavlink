@@ -7,8 +7,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 
 const { loadNodeDefaults } = require('./html-assert');
 
@@ -38,11 +36,7 @@ const ALWAYS_REQUIRED = [
 const NODES = BUILD_TIER_SENDERS.concat(ALWAYS_REQUIRED);
 
 for (const name of NODES) {
-  test(`${name}: connection is a typed config ref and ensureConfigNodePicker is called`, () => {
-    const html = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'nodes', `${name}.html`),
-      'utf8'
-    );
+  test(`${name}: connection is a typed config ref`, () => {
     // Executed rather than grepped: a node may declare connection itself or
     // receive it from buildTierDialectDefaults, and only running the
     // registration shows which descriptor actually survived the merge.
@@ -68,10 +62,5 @@ for (const name of NODES) {
     } else {
       assert.equal(connection.required, true, `${name} has no Build tier`);
     }
-    assert.match(
-      html,
-      /ensureConfigNodePicker\([^,]+,\s*'connection'/,
-      `${name} must call ensureConfigNodePicker for connection`
-    );
   });
 }

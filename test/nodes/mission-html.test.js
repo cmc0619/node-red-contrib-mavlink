@@ -224,14 +224,6 @@ test('mavlink-mission has no clear-confirmation control (owner ruling, 2026-08-1
   assert.ok(!/msg\.confirmed/.test(html), 'help no longer documents msg.confirmed');
 });
 
-test('mavlink-mission ensureConfigNodePicker called for vehicle', () => {
-  assert.match(
-    html,
-    /ensureConfigNodePicker\(node,\s*'vehicle',\s*'mavlink-vehicle'/,
-    'ensureConfigNodePicker invoked for vehicle field'
-  );
-});
-
 test('mavlink-mission enum catalog loaded via shared reloadTargetCompId helper', () => {
   assert.match(html, /RED\.mavlink\.reloadTargetCompId\(node\)/, 'compid catalog loaded via shared helper');
   assert.match(html, /node-input-targetComponent/, 'targetComponent select is filled');

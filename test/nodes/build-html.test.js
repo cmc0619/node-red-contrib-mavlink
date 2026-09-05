@@ -131,11 +131,6 @@ test('Build target_component is a MAV_COMPONENT pulldown, not a bare number (§6
   );
 });
 
-test('Build oneditprepare ensures standard config-node pickers', () => {
-  assert.match(html, /ensureConfigNodePicker\(node,\s*'vehicle'/);
-  assert.match(html, /ensureConfigNodePicker\(node,\s*'connection'/);
-});
-
 test('Build message-field enums and bitmasks save wire numbers', () => {
   const collector = sliceBetween('function collectFieldInputsFromDom', 'RED.nodes.registerType');
   const fieldRenderer = sliceBetween('function fieldInput', 'function syncSavedFieldsFromDom');
@@ -151,7 +146,7 @@ test('Build message-field enums and bitmasks save wire numbers', () => {
   assert.match(fieldRenderer, /\.val\(String\(entry\.value\)\)/, 'options carry the wire value, never the entry name');
   assert.match(fieldRenderer, /multi \? ['"]bitmask-mask['"] : ['"]enum['"]/, 'a bitmask field folds to one mask through the same collector branch as command params');
   assert.match(fieldRenderer, /RED\.mavlink\.selectedBitmaskValues\(saved, entries\)/, 'a saved mask re-selects its bits on open');
-  assert.match(fieldRenderer, /sel\.val\(String\(match\.value\)\)/, 'a saved value selects by value');
+  assert.match(fieldRenderer, /sel\.val\(String\(saved\)\)/, 'a saved value selects by value');
   assert.match(collector, /kind === ['"]enum['"]\) \{\s*fields\[name\] = Number\(raw\)/, 'the enum branch saves the option number');
   assert.doesNotMatch(collector, /kind === ['"]bitmask['"]\)/, 'no name-array branch');
 });

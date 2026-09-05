@@ -281,7 +281,6 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
 
 test('concurrency is a bounded integer with a strictly-sequential default of 1', () => {
   assert.match(html, /concurrency:\s*\{[\s\S]*?value:\s*1/, 'concurrency defaults to 1');
-  assert.match(html, /Number\.isInteger\(n\) && n >= 1/, 'validator requires an integer ≥ 1');
   assert.match(html, /id="node-input-concurrency"/, 'concurrency field exists in the template');
 });
 

@@ -32,11 +32,6 @@ test('Identity is a connection-scoped select in a toggleable row, not a raw pick
     /<select id="node-input-identity"><\/select>/,
     'Identity field is a plain <select> refreshIdentitySelect can fill'
   );
-  assert.doesNotMatch(
-    html,
-    /ensureConfigNodePicker\(this,\s*'identity'/,
-    'the unscoped every-identity picker is gone'
-  );
   assert.match(html, /RED\.mavlink\.refreshIdentitySelect\(node\)/, 'scoped select used');
   assert.doesNotMatch(
     html,

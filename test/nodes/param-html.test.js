@@ -152,14 +152,6 @@ test('mavlink-param defs load delegates its catalog target to the shared resolve
     'and is branched on delivery tier');
 });
 
-test('mavlink-param ensureConfigNodePicker called for vehicle', () => {
-  assert.match(
-    html,
-    /ensureConfigNodePicker\(node,\s*'vehicle',\s*'mavlink-vehicle'/,
-    'ensureConfigNodePicker invoked for vehicle field'
-  );
-});
-
 test('mavlink-param populates Dialect select with Vehicle Profile escape', () => {
   assert.match(html, /populateDialectSelect/, 'Dialect helper is called');
 });

@@ -75,17 +75,14 @@ test('mavlink-state: filter targetComponent allows blank = any', () => {
   const html = readHtml('mavlink-state');
   assert.match(html, /<select id="node-input-targetComponent">/);
   assert.ok(!html.includes('type="number" id="node-input-targetComponent"'));
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
-  assert.match(html, /allowEmpty:\s*true[\s\S]*Any component/);
+  assert.match(html, /reloadCompIdSelect\(\$\('#node-input-targetComponent'\)[\s\S]*Any component/);
 });
 
 test('mavlink-in: compid filter is a MAV_COMPONENT select', () => {
   const html = readHtml('mavlink-in');
   assert.match(html, /<select id="node-input-compid"/);
   assert.ok(!html.includes('id="node-input-compid" placeholder="blank = all"'));
-  assert.match(html, /loadEnumsCatalog\(\['MAV_COMPONENT'\]/);
-  assert.match(html, /fillCompIdSelect\([\s\S]*node-input-compid/);
-  assert.match(html, /allowEmpty:\s*true[\s\S]*Any component/);
+  assert.match(html, /reloadCompIdSelect\(\$\('#node-input-compid'\)[\s\S]*Any component/);
 });
 
 test('mavlink-local-identity: HB enums and source CompID use selects; SysID stays numeric', () => {

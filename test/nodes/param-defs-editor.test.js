@@ -737,9 +737,6 @@ function mountActionRows(action, lookup) {
     // under test here.
     applyTypeRowVisibility: () => element('#row-paramType').toggle(action === 'set'),
   };
-  context.RED.mavlink.toggleRow = (selector, shown) => {
-    if (selector) element(selector).toggle(Boolean(shown));
-  };
   vm.runInNewContext(
     `${paramHtml.slice(start, end + '\n      }'.length)}\nthis.run = applyActionRows;`,
     context

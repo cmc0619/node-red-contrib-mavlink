@@ -177,7 +177,6 @@ test('mavlink-payload has vehicle and identity defaults for role × tier matrix 
   assert.match(payloadHtml, /id="row-payload-vehicle"/, 'vehicle row has ID for tier-driven toggling');
   assert.match(payloadHtml, /id="row-payload-identity"/, 'identity row has ID for tier-driven toggling');
   assert.match(payloadHtml, /id="row-payload-connection"/, 'connection row has ID for tier-driven toggling');
-  assert.match(payloadHtml, /ensureConfigNodePicker[^)]*'vehicle'/, 'vehicle uses config node picker');
 });
 
 test('mavlink-payload companion hides sysid row but NOT compid row (§6 spec exception)', () => {

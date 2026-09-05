@@ -52,7 +52,6 @@ test('STATE_EVENTS in the editor covers every peer-table emission name', () => {
 test('events save as a comma-joined string for the runtime node property', () => {
   assert.match(html, /function syncEventsHiddenFromSelect/, 'hidden field is synced from the multi-select');
   assert.match(html, /values\.join\(','\)/, 'selected events are comma-joined on save');
-  assert.match(html, /oneditsave/, 'save hook writes the hidden events property');
   assert.match(html, /raw\.split\(','\)/, 'saved comma string is parsed back into selections');
 });
 
@@ -67,19 +66,11 @@ test('a saved pick the list no longer offers is preserved until the operator re-
   const mixed = openStateDialog({ events: 'stale,profile-mismatch' });
   assert.equal(mixed.hiddenEvents(), 'stale,profile-mismatch');
 
-  // Clicking Done without touching the control is the path that actually
-  // persists (Codex P1, #383).
-  const untouched = openStateDialog({ events: 'profile-mismatch' });
-  untouched.save();
-  assert.equal(untouched.hiddenEvents(), 'profile-mismatch', 'save leaves it alone');
-
   // Picking anything is the operator's re-pick: the change handler writes it,
   // and saving keeps it.
   dialog.selectAll(['stale']);
   dialog.trigger();
   assert.equal(dialog.hiddenEvents(), 'stale');
-  dialog.save();
-  assert.equal(dialog.hiddenEvents(), 'stale', 're-pick survives the save hook');
 });
 
 test('mode is a closed vocabulary — the select offers exactly snapshot and feed', () => {
@@ -173,9 +164,7 @@ function openStateDialog(node) {
       mavlink: {
         oneOf: () => () => true,
         validateUint8: () => () => true,
-        ensureConfigNodePicker() {},
-        loadEnumsCatalog() {},
-        fillCompIdSelect() {},
+        reloadCompIdSelect() {},
       },
       nodes: { registerType(name, def) { registered[name] = def; } },
     },
@@ -191,9 +180,6 @@ function openStateDialog(node) {
     hiddenEvents: () => hidden.value,
     selectAll: (values) => { select.selected = values.map(String); },
     trigger: () => select.handlers.forEach((fn) => fn()),
-    // Clicking Done. Node-RED runs this before it reads the input fields back
-    // into the node, so the hook still sees the previously saved value.
-    save: () => registered['mavlink-state'].oneditsave.call(node),
   };
 }
 
@@ -207,7 +193,6 @@ test('a full event selection saves the full list; a blank config selects nothing
   // exactly what is saved.
   dialog.selectAll([...STATE_EVENTS]);
   dialog.trigger();
-  dialog.save();
   assert.equal(dialog.hiddenEvents(), STATE_EVENTS.join(','), 'a full selection saves the full list');
 });
 

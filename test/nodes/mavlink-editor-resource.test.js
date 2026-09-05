@@ -1528,7 +1528,7 @@ test('px4ModeEntries answers only for DO_SET_MODE param2 on a PX4 profile', () =
   assert.equal(ap.mavlink.customModeEnum(176, 2), 'COPTER_MODE', 'AP behavior unchanged');
 });
 
-// ── isBlank / liveOr / toggleRow / fillEnumSelect precedence ─────────────────
+// ── isBlank / liveOr / fillEnumSelect precedence ─────────────────
 
 test('isBlank is one spelling of "nothing was entered"', () => {
   const { RED } = loadResource();
@@ -1581,13 +1581,6 @@ test('liveOr: the live field speaks only for the node whose dialog is on top (#2
   // No owner (or an owner without an id) can never read live — fail closed.
   assert.equal(own.mavlink.liveOr(null, '#node-input-action', 'read'), 'read');
   assert.equal(own.mavlink.liveOr({}, '#node-input-action', 'read'), 'read');
-});
-
-test('toggleRow tolerates a row the dialog does not have', () => {
-  const { RED } = loadResource({}, {}, { trackToggle: true });
-  assert.doesNotThrow(() => RED.mavlink.toggleRow('#row-not-here', true));
-  assert.doesNotThrow(() => RED.mavlink.toggleRow('', true));
-  assert.doesNotThrow(() => RED.mavlink.toggleRow(undefined, false));
 });
 
 test('fillEnumSelect: preferLive decides which value survives a refill', () => {
