@@ -91,7 +91,6 @@
       label() { return this.name || 'mavlink state'; },
       oneditprepare() {
         const node = this;
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
         const enumLoadToken = { cancelled: false };

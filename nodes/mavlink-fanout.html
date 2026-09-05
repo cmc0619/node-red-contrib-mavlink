@@ -169,7 +169,6 @@
       const node = this;
       const enumLoadToken = { cancelled: false };
       node._mavEnumLoadToken = enumLoadToken;
-      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       // Members table: one editableList row per member — sysid, N/E/Up
       // offsets in metres, and an optional raw wire-unit patch. Same stock

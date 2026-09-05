@@ -289,14 +289,6 @@
       });
       $baud.val(String(this.baudRate === undefined ? '57600' : this.baudRate));
 
-      RED.mavlink.ensureConfigNodePicker(this, 'vehicle', 'mavlink-vehicle', 'node-config-input');
-      RED.mavlink.ensureConfigNodePicker(
-        this,
-        'localIdentity',
-        'mavlink-local-identity',
-        'node-config-input'
-      );
-
       // Extra identities: additionalIdentities is a *list* of
       // Local Identity config refs, and the stock config picker handles one
       // ref per property — so the list uses Node-RED's editableList with a

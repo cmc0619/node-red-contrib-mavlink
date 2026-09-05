@@ -114,8 +114,6 @@
     }
 
     function preparePayload(node) {
-      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
       RED.mavlink.refreshIdentitySelect(node);
 
       // The saved values, used to paint the verb this node was saved on.

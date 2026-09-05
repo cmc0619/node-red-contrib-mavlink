@@ -139,7 +139,6 @@
       },
       oneditprepare() {
         const node = this;
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
         // §6: the compare-fields row only exists while Changed only is on.
         function refreshChangedFieldsRow() {

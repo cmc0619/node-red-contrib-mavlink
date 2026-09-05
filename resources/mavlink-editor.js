@@ -21,55 +21,6 @@
   RED.mavlink = RED.mavlink || {};
 
   /**
-   * Ensure a config-node property uses Node-RED's standard <select> plus
-   * edit (pencil) and add (+) buttons (DESIGN.md §6).
-   *
-   * Node-RED builds this before oneditprepare when defaults[prop].type names
-   * a registered config type. Call from oneditprepare as a safety net when
-   * the field is still free-form or a buttonless <select>.
-   *
-   * @param {object} node
-   * @param {string} property
-   * @param {string} type
-   * @param {string} [prefix]
-   */
-  RED.mavlink.ensureConfigNodePicker = function (node, property, type, prefix) {
-    prefix = prefix || 'node-input';
-    if ($(`#${prefix}-btn-${property}-add`).length) {
-      return;
-    }
-
-    const typeDef = RED.nodes.getType(type);
-    const $el = $(`#${prefix}-${property}`);
-    if (!$el.length) return;
-
-    if (!typeDef || typeDef.category !== 'config') {
-      if ($el.is('input[type="text"]') || ($el.is('input') && !$el.attr('type'))) {
-        $el.prop('readonly', true)
-          .attr(
-            'placeholder',
-            `${type} not loaded — check Node-RED log / dependencies`
-          );
-      }
-      return;
-    }
-
-    if ($el.is('select')) {
-      const val = $el.val();
-      const style = $el.attr('style') || 'width:70%';
-      const $input = $('<input type="text">')
-        .attr('id', `${prefix}-${property}`)
-        .attr('style', style);
-      if (val) node[property] = val;
-      $el.replaceWith($input);
-    } else if ($el.attr('type') === 'hidden') {
-      return;
-    }
-
-    RED.editor.prepareConfigNodeSelect(node, property, type, prefix, node._def.defaults[property].filter);
-  };
-
-  /**
    * Shared enum option label. Server catalogs should already include labels,
    * but local/generated entries use the same §6 NAME (value) format
    * (Node twin: `lib/metadata/commands-list.js` `enumOptionLabel`).

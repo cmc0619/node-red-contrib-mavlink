@@ -106,9 +106,6 @@
     icon: 'font-awesome/fa-th',
     label() { return this.name || 'mavlink formation'; },
     oneditprepare() {
-      const node = this;
-      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-
       function refreshAnchorRows() {
         const mode = $('#node-input-anchorMode').val() || 'leader';
         $('#row-formation-leader').toggle(mode === 'leader');

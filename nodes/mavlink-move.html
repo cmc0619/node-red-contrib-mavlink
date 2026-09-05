@@ -738,8 +738,6 @@
     label() { return this.name || 'mavlink move'; },
     oneditprepare() {
       const node = this;
-      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
-      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
 
       RED.mavlink.refreshIdentitySelect(node);
 

@@ -167,8 +167,6 @@
           COMMAND_PARAM_KEYS.forEach((key) => { delete savedFields[key]; });
         }
 
-        RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-        RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
         const $tier = $('#node-input-tier');
         $tier.empty();
