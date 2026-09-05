@@ -319,7 +319,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
       // ── Delivery ──────────────────────────────────────────────────────────
       // Build and Send finish here; Confirm and Complete share the ack waiter
-      // below, where `delivery === 'complete'` adds the completion poll.
+      // below and differ in what an ACCEPTED ack hands off to.
       switch (delivery) {
         case 'build': {
           const message = buildCarrierMessage(configuredCarrier);
@@ -346,8 +346,10 @@ module.exports = function registerMavlinkCommand(RED) {
           return;
         }
         case 'confirm':
+          await confirmTier(reportAccepted);
+          return;
         case 'complete':
-          await confirmTier();
+          await confirmTier(completionKey ? pollCompletion : reportAccepted);
           return;
         default: break; // This space intentionally left blank (§5)
       }
@@ -358,12 +360,14 @@ module.exports = function registerMavlinkCommand(RED) {
       return;
 
       /**
-       * Send under the ack waiter and settle on its COMMAND_ACK; on Complete,
-       * poll the peer table for the completion condition after an ACCEPTED.
-       * Rejections propagate to handleInput's caller, which routes them to
-       * failInput like any other send failure.
+       * Send under the ack waiter and settle on its COMMAND_ACK; an ACCEPTED
+       * hands off to the tier's continuation. Rejections propagate to
+       * handleInput's caller, which routes them to failInput like any other
+       * send failure.
+       *
+       * @param {(ackOutcome: object, myGen: number, completionFrame: number|undefined) => Promise<void>|void} onAccepted
        */
-      async function confirmTier() {
+      async function confirmTier(onAccepted) {
         // ── Delivery: Confirm / Complete ────────────────────────────────────
         // slot.run below cancels whatever wait the previous input left.
         const myGen = ++_generation;
@@ -449,87 +453,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
         // Terminal ack result.
         if (ackOutcome.result === 'accepted') {
-          // ── Complete tier: poll peer table for actual completion. ────────
-          if (delivery === 'complete' && completionKey) {
-            applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
-            const completionWait = waitForCompletion({
-              completionKey,
-              params: requestedParams,
-              peerTable: connNode.peerTable,
-              sysid: target.sysid,
-              compid: target.compid,
-              frame: completionFrame,
-              timeoutMs: completionTimeoutMs,
-            });
-            if (myGen === _generation) {
-              slot.active = completionWait;
-            } else {
-              // The ack settled and a close or new input ran in the same
-              // synchronous stack: the sweep fired before this continuation
-              // could record its handle, so nothing else can cancel the wait
-              // it just created — cancel it here. Also keeps a
-              // stale run from clobbering the newer run's handle.
-              completionWait.cancel();
-            }
-            let compOutcome;
-            try {
-              compOutcome = await completionWait.promise;
-            } finally {
-              slot.release(completionWait);
-            }
-
-            // A redeploy cancelled the wait (close() calls the completion
-            // cancel), or the wait settled before any cancel could land —
-            // waitForCompletion polls once at creation, so an already-satisfied
-            // completion resolves synchronously and the settle-once cancel()
-            // becomes a no-op. Either way this run is stale:
-            // finish quietly, same rule as the ack cancel above (M1).
-            if (compOutcome.cancelled || myGen !== _generation) {
-              done();
-              return;
-            }
-
-            if (compOutcome.success) {
-              const rec = makeRecord({
-                ...ackRecordFields(ackOutcome),
-                // 'state' when the peer table confirmed; 'ack' when the
-                // condition was unverifiable and the accepted ack is the
-                // whole evidence (base-only SET_MODE).
-                confirmedBy: compOutcome.confirmedBy,
-                elapsed: Date.now() - startMs,
-                detail: compOutcome.detail,
-              });
-              applyActionStatus(node, 'ok', `${displayName} done`);
-              emitStatus(rec, send, true, rec);
-            } else {
-              // This branch is gated on an ACCEPTED ack: the vehicle answered,
-              // then the state never arrived. The ack's resultParam2 and
-              // retry count ride through; its resultCode does not — null is
-              // the record's "no terminal verdict".
-              const rec = makeRecord({
-                ...ackRecordFields(ackOutcome),
-                result: 'timeout',
-                resultCode: null,
-                confirmedBy: 'none',
-                elapsed: Date.now() - startMs,
-                detail: compOutcome.detail,
-              });
-              applyActionStatus(node, 'error', `${displayName} timeout`);
-              emitStatus(rec, send, false);
-              done();
-              return;
-            }
-            done();
-            return;
-          }
-
-          // Confirm tier or complete tier with no condition: accepted is
-          // complete, and the waiter's own elapsed (first send to terminal
-          // ack) is the record's.
-          const rec = makeRecord(ackRecordFields(ackOutcome));
-          applyActionStatus(node, 'ok', `${displayName} accepted`);
-          emitStatus(rec, send, true, rec);
-          done();
+          await onAccepted(ackOutcome, myGen, completionFrame);
           return;
         }
 
@@ -538,6 +462,97 @@ module.exports = function registerMavlinkCommand(RED) {
         applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
         emitStatus(rec, send, false);
         done();
+      }
+
+      /**
+       * Confirm tier, or Complete with no condition: an accepted ack is the
+       * whole result, and the waiter's own elapsed (first send to terminal
+       * ack) is the record's.
+       *
+       * @param {object} ackOutcome
+       */
+      function reportAccepted(ackOutcome) {
+        const rec = makeRecord(ackRecordFields(ackOutcome));
+        applyActionStatus(node, 'ok', `${displayName} accepted`);
+        emitStatus(rec, send, true, rec);
+        done();
+      }
+
+      /**
+       * Complete tier: poll the peer table for the completion condition after
+       * an ACCEPTED ack.
+       *
+       * @param {object} ackOutcome
+       * @param {number} myGen  the run's generation, for the stale-run check
+       * @param {number|undefined} completionFrame
+       */
+      async function pollCompletion(ackOutcome, myGen, completionFrame) {
+        applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
+        const completionWait = waitForCompletion({
+          completionKey,
+          params: requestedParams,
+          peerTable: connNode.peerTable,
+          sysid: target.sysid,
+          compid: target.compid,
+          frame: completionFrame,
+          timeoutMs: completionTimeoutMs,
+        });
+        if (myGen === _generation) {
+          slot.active = completionWait;
+        } else {
+          // The ack settled and a close or new input ran in the same
+          // synchronous stack: the sweep fired before this continuation
+          // could record its handle, so nothing else can cancel the wait
+          // it just created — cancel it here. Also keeps a
+          // stale run from clobbering the newer run's handle.
+          completionWait.cancel();
+        }
+        const compOutcome = await completionWait.promise.finally(() => slot.release(completionWait));
+
+        // A redeploy cancelled the wait (close() calls the completion
+        // cancel), or the wait settled before any cancel could land —
+        // waitForCompletion polls once at creation, so an already-satisfied
+        // completion resolves synchronously and the settle-once cancel()
+        // becomes a no-op. Either way this run is stale:
+        // finish quietly, same rule as the ack cancel above (M1).
+        if (compOutcome.cancelled || myGen !== _generation) {
+          done();
+          return;
+        }
+
+        if (compOutcome.success) {
+          const rec = makeRecord({
+            ...ackRecordFields(ackOutcome),
+            // 'state' when the peer table confirmed; 'ack' when the
+            // condition was unverifiable and the accepted ack is the
+            // whole evidence (base-only SET_MODE).
+            confirmedBy: compOutcome.confirmedBy,
+            elapsed: Date.now() - startMs,
+            detail: compOutcome.detail,
+          });
+          applyActionStatus(node, 'ok', `${displayName} done`);
+          emitStatus(rec, send, true, rec);
+        } else {
+          // This branch is gated on an ACCEPTED ack: the vehicle answered,
+          // then the state never arrived. The ack's resultParam2 and
+          // retry count ride through; its resultCode does not — null is
+          // the record's "no terminal verdict" — and neither does its
+          // confirmedBy: an accepted ack is not the completion.
+          const rec = makeRecord({
+            ...ackRecordFields(ackOutcome),
+            result: 'timeout',
+            resultCode: null,
+            confirmedBy: undefined,
+            elapsed: Date.now() - startMs,
+            detail: compOutcome.detail,
+          });
+          applyActionStatus(node, 'error', `${displayName} timeout`);
+          emitStatus(rec, send, false);
+          done();
+          return;
+        }
+        done();
+        return;
       }
     }
 

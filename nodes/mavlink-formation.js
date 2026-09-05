@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive } = require('../lib/fanout');
-const { isBlank } = require('../lib/addressing/resolve');
+const { isBlank, valueFrom } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
 const { REPOSITION_FLAG_CHANGE_MODE } = require('../lib/move/reposition');
 const { getPreset, buildParamArray } = require('../lib/command/presets');
@@ -62,9 +62,7 @@ module.exports = function registerMavlinkFormation(RED) {
           return;
         }
         const payload = msg.payload;
-        const sysids = parseSysidList(
-          payload.sysids !== undefined ? payload.sysids : config.sysids
-        );
+        const sysids = parseSysidList(valueFrom(payload, config, 'sysids'));
         const { anchor, headingDeg, leaderSysid } = resolveAnchor(
           config, payload, connectionNode.peerTable
         );

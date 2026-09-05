@@ -38,6 +38,7 @@ const {
   catalogLabel,
 } = require('../lib/param/seed');
 const { BAND } = require('../lib/connection/bands');
+const { valueFrom } = require('../lib/addressing/resolve');
 const {
   makeStatusRecord,
   shouldSuppress,
@@ -454,20 +455,20 @@ module.exports = function registerMavlinkParam(RED) {
  * @returns {object} normalized param request
  */
 function requestFrom(config, payload, { target, profile, capabilities }) {
-  const firmware = payload.firmware === undefined ? profile.firmware : payload.firmware;
+  const firmware = valueFrom(payload, profile, 'firmware');
   // `paramEncoding` is the one override key for the encoding.
   const encoding = payload.paramEncoding;
   return {
-    action: payload.action === undefined ? config.action : payload.action,
+    action: valueFrom(payload, config, 'action'),
     target,
-    paramId: payload.paramId === undefined ? config.paramId : payload.paramId,
+    paramId: valueFrom(payload, config, 'paramId'),
     // paramIndex 0 is a valid index; keep it rather than letting `||` drop it to
     // the library's -1 default. Absent (undefined) is left for the library.
-    paramIndex: payload.paramIndex === undefined ? config.paramIndex : payload.paramIndex,
-    value: payload.value !== undefined ? payload.value : config.value,
+    paramIndex: valueFrom(payload, config, 'paramIndex'),
+    value: valueFrom(payload, config, 'value'),
     // No REAL32 fallback: an absent type resolves to nothing, never to a
     // guess — guessing the type silently mis-encodes the value.
-    paramType: payload.paramType === undefined ? config.paramType : payload.paramType,
+    paramType: valueFrom(payload, config, 'paramType'),
     firmware,
     encoding,
     capabilities,

@@ -6,6 +6,7 @@ const {
   carrierMattersFor,
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
+const { valueFrom } = require('../lib/addressing/resolve');
 const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
 const { resolveFrame } = require('../lib/command/carrier');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
@@ -71,15 +72,15 @@ module.exports = function registerMavlinkPayload(RED) {
         });
 
         const builtCmd = buildPayloadMessage({
-          topic: payload.topic === undefined ? config.topic : payload.topic,
-          verb: payload.verb === undefined ? config.verb : payload.verb,
-          path: payload.path === undefined ? config.path : payload.path,
+          topic: valueFrom(payload, config, 'topic'),
+          verb: valueFrom(payload, config, 'verb'),
+          path: valueFrom(payload, config, 'path'),
           target,
-          values: payload.values === undefined ? config.values : payload.values,
+          values: valueFrom(payload, config, 'values'),
           // Required for command-backed verbs (§9): a non-member carrier
           // selects no builder (§5), so the message ships undefined and
           // craters at the tier that touches it.
-          carrier: payload.sendAs === undefined ? config.sendAs : payload.sendAs,
+          carrier: valueFrom(payload, config, 'sendAs'),
           frame: resolveFrame(payload.mavFrame, config.frame),
         });
 

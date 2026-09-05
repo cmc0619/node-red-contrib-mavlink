@@ -1,6 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
+const { valueFrom } = require('../lib/addressing/resolve');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
 
 module.exports = function registerMavlinkFanout(RED) {
@@ -28,7 +29,7 @@ module.exports = function registerMavlinkFanout(RED) {
         const { message, opts } = unwrapPayload(msg.payload);
         const selection = opts.selection === undefined ? selectionFrom(config) : opts.selection;
         const selectionMode = selection.mode;
-        const effectiveDelivery = opts.delivery === undefined ? config.delivery : opts.delivery;
+        const effectiveDelivery = valueFrom(opts, config, 'delivery');
         const listSelected = selectionMode === 'list' || opts.targets !== undefined;
 
         let effectiveConnection = connectionNode;
@@ -63,13 +64,13 @@ module.exports = function registerMavlinkFanout(RED) {
           // Affirmative dispatch (§5): lib/fanout maps only broadcast and
           // sequential — an unknown or blank mode selects no case, so no run
           // starts and the aggregate comes back undefined (handled below).
-          mode: opts.executionMode === undefined ? config.executionMode : opts.executionMode,
+          mode: valueFrom(opts, config, 'executionMode'),
           delivery: effectiveDelivery,
           intervalMs: numberOption(opts, config, 'intervalMs'),
           timeoutMs: numberOption(opts, config, 'timeoutMs'),
           maxRetries: numberOption(opts, config, 'maxRetries'),
           concurrency: numberOption(opts, config, 'concurrency'),
-          stopOnError: opts.stopOnError === undefined ? config.stopOnError : opts.stopOnError,
+          stopOnError: valueFrom(opts, config, 'stopOnError'),
           identityId: opts.identityId === undefined ? config.identity : opts.identityId,
         }));
 
