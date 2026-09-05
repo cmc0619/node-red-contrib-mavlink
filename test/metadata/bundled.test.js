@@ -179,6 +179,36 @@ test('a compiled dialect is cached on disk', () => {
   }
 });
 
+test('a stale stamp/commit wrapper cache entry is ignored and recompiled', () => {
+  // Older writers stored `{ stamp, commit, commitDate, bundle }` instead of a
+  // DialectBundle. Returning that wrapper as the bundle made Connection crash
+  // on `bundle.enums.MAV_TYPE`. Treat it as a miss and rewrite a real bundle.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-compiled-'));
+  setCompiledCacheDir(dir);
+  clearCompiledCache();
+  try {
+    const file = path.join(dir, 'common@seed.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        stamp: 'stale',
+        commit: 'deadbeef',
+        commitDate: '1970-01-01T00:00:00Z',
+        bundle: { dialect: 'common', enums: {} },
+      })
+    );
+    const loaded = loadBundled('common');
+    assert.ok(loaded.enums.MAV_TYPE, 'recompile must yield a DialectBundle with enums');
+    assert.equal(loaded.dialect, 'common');
+    const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.ok(onDisk.enums, 'cache rewrite stores the DialectBundle, not the wrapper');
+    assert.equal(onDisk.stamp, undefined);
+  } finally {
+    setCompiledCacheDir(null);
+    clearCompiledCache();
+  }
+});
+
 test('clearCompiledCache drops the seed memos — the next load re-reads the blob from disk', () => {
   // The accessors hand back the memoized objects verbatim, so a re-read of
   // the seed is observable as a new, deep-equal object.
