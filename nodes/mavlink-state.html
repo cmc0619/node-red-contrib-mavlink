@@ -93,22 +93,11 @@
         const node = this;
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
-        const enumLoadToken = { cancelled: false };
-        node._mavEnumLoadToken = enumLoadToken;
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], (catalog) => {
-          RED.mavlink.fillCompIdSelect(
-            $('#node-input-targetComponent'),
-            ((catalog || {}).enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: 'Any component', saved: node.targetComponent }
-          );
-        }, enumLoadToken);
+        RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
+          initialSaved: node.targetComponent,
+          emptyLabel: 'Any component',
+        });
       },
-      oneditsave() {
-        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
-      },
-      oneditcancel() {
-        if (this._mavEnumLoadToken) this._mavEnumLoadToken.cancelled = true;
-      }
     });
   }());
 </script>

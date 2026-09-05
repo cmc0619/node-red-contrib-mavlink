@@ -165,12 +165,9 @@
 
         $('#node-input-connection').on('change', refreshMessageOptions);
         refreshMessageOptions();
-        RED.mavlink.loadEnumsCatalog(['MAV_COMPONENT'], (catalog) => {
-          RED.mavlink.fillCompIdSelect(
-            $('#node-input-compid'),
-            (catalog.enums || {}).MAV_COMPONENT || [],
-            { allowEmpty: true, emptyLabel: 'Any component', saved: node.compid }
-          );
+        RED.mavlink.reloadCompIdSelect($('#node-input-compid'), {
+          initialSaved: node.compid,
+          emptyLabel: 'Any component',
         });
       },
 

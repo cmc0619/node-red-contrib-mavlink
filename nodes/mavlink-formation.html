@@ -87,16 +87,7 @@
       pitchDeg: { value: 0, validate: RED.validators.number() },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       changeMode: { value: false },
-      intervalMs: {
-        value: 100,
-        // The input's min="0" is not enforced on save, and the runtime reads a
-        // present value as Number(): blank would ride as 0 and a negative
-        // paces nothing — an unthrottled fleet send either way.
-        validate(v, _opt) {
-          return (finiteRequired(v) && Number(v) >= 0)
-            || 'must be a number of milliseconds >= 0 — blank rides as an unthrottled 0';
-        },
-      },
+      intervalMs: { value: 100, validate: RED.mavlink.validateAtLeast(0) },
       // Timeout and Retries rows are always on screen here.
       ...RED.mavlink.ackDefaults(() => true),
     },

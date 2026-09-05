@@ -145,15 +145,7 @@
         // a saved negative paces nothing.
         validate: RED.mavlink.validateAtLeast(0),
       },
-      concurrency: {
-        value: 1,
-        // Two args so the reason renders (§14).
-        validate(v, _opt) {
-          const n = Number(v);
-          if (Number.isInteger(n) && n >= 1) return true;
-          return 'must be a whole number of in-flight members >= 1';
-        },
-      },
+      concurrency: { value: 1, validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
       stopOnError: { value: false },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       // Timeout and Retries exist on Send & confirm alone, the tier that waits;
