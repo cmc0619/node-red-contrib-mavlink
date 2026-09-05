@@ -104,6 +104,11 @@ ArduPilot starts with `LOG_DISARMED 0`. PX4 sets `SDLOG_MODE=1` (arm→disarm) v
 so prior sessions do not accumulate. Stop (without restart) still leaves the
 last session on the host for pull; the next start clears it.
 
+- ArduPilot: `cwd/logs` → `/logs` (aircraft dir under `/home/sitl/aircraft/…`).
+- PX4: `~/.local/share/px4/rootfs/<instance>/log` → `/logs` (not
+  `/opt/px4/log` — posix SITL chdirs into that rootfs and writes `./log`
+  there; a prefix-level symlink never receives files).
+
 ```bash
 touch logs/ap-1/.arm-marker          # immediately before arming
 # …arm in Node-RED…

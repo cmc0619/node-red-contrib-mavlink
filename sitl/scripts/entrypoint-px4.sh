@@ -31,9 +31,13 @@ else
   PX4_PREFIX=/opt/px4
 fi
 
-# Persist ulogs into the Compose bind mount (PX4 writes ./log under the prefix).
-rm -rf "${PX4_PREFIX}/log"
-ln -sfn /logs "${PX4_PREFIX}/log"
+# PX4 posix SITL does not write under ${PX4_PREFIX}/log. With `-i ${INSTANCE}`
+# it chdirs to ~/.local/share/px4/rootfs/${INSTANCE} and logs to ./log there —
+# which is the container writable layer unless we redirect it.
+ROOTFS_DIR="${HOME:-/root}/.local/share/px4/rootfs/${INSTANCE}"
+mkdir -p "${ROOTFS_DIR}"
+rm -rf "${ROOTFS_DIR}/log"
+ln -sfn /logs "${ROOTFS_DIR}/log"
 
 MAVLINK_RC="${PX4_PREFIX}/etc/init.d-posix/px4-rc.mavlink"
 RCS="${PX4_PREFIX}/etc/init.d-posix/rcS"
