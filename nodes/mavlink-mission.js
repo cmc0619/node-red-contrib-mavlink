@@ -156,7 +156,6 @@ module.exports = function registerMavlinkMission(RED) {
         }),
       ]);
       done();
-      return;
       }
 
       /** Run the transfer machine to its MISSION_ACK. */

@@ -17,7 +17,7 @@
 const { capBadge } = require('../lib/delivery');
 const { setCompiledCacheDir, clearCompiledCache } = require('../lib/metadata/bundled');
 const { XmlCatalog, dialectLibrary } = require('../lib/metadata/xml-catalog');
-const { catalogEnumsFromBundle, listEnumsCatalog } = require('../lib/metadata/enums-list');
+const { catalogEnumsFromBundle } = require('../lib/metadata/enums-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 const { resolveDialect, knownDialects } = require('../lib/vehicle');
 
@@ -95,7 +95,6 @@ module.exports = function registerMavlinkVehicle(RED) {
       path: ENUMS_ROUTE,
       fromBundle: (bundle, dialect, req) =>
         catalogEnumsFromBundle(bundle, dialect, req.query.names),
-      fromDialect: (dialect, req) => listEnumsCatalog(dialect, req.query.names),
     });
     _enumsRouteRegistered = true;
   }

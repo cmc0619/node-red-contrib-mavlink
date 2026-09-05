@@ -15,7 +15,6 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { loadBundled } = require('../lib/metadata/bundled');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';
@@ -108,7 +107,7 @@ module.exports = function registerMavlinkPayload(RED) {
             completeAck(node, send, built, outcome);
             done();
           } else {
-            failAck(node, send, built, outcome, msg, done);
+            failAck(node, send, built, outcome, done);
           }
         }
 
@@ -178,19 +177,12 @@ module.exports = function registerMavlinkPayload(RED) {
                 notice: source.notice,
               });
             case 'error':
-              // getDialect / resolve failures can include filesystem paths —
-              // keep the client response generic (same posture as the catch below).
-              RED.log.error(`[mavlink-payload] field-tips unavailable: ${source.body.error}`);
-              return res.status(400).json({
-                fields: {},
-                error: 'field tips unavailable',
-              });
+              // getDialect / resolve failures land in the catch below with
+              // the rest: logged server-side, answered generic.
+              // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a Vehicle Profile that is not deployed is runtime state
+              throw new Error(source.body.error);
             case 'bundle':
               bundle = source.bundle;
-              dialect = source.dialect;
-              break;
-            case 'dialect':
-              bundle = loadBundled(source.dialect);
               dialect = source.dialect;
               break;
             default: break; // This space intentionally left blank (§5)
@@ -236,7 +228,7 @@ function completeAck(node, send, built, outcome) {
   ]);
 }
 
-function failAck(node, send, built, outcome, msg, done) {
+function failAck(node, send, built, outcome, done) {
   applyActionStatus(node, 'error', `${built.message.name} ${outcome.result}`);
   send([
     null,

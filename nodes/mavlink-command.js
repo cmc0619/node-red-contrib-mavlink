@@ -50,7 +50,7 @@ const {
   MODE_FLAG_CUSTOM_MODE_ENABLED,
   setModeParams,
 } = require('../lib/vehicle/modes');
-const { catalogFromBundle, listCommandsCatalog } = require('../lib/metadata/commands-list');
+const { catalogFromBundle } = require('../lib/metadata/commands-list');
 const { isBlank } = require('../lib/addressing/resolve');
 const { dialectForTier } = require('../lib/addressing/dialect');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
@@ -62,20 +62,23 @@ const {
 const { BAND } = require('../lib/connection/bands');
 
 /**
- * Return the command ID for the current node config (preset or advanced).
+ * Return the command ID for the current node config, and the preset row when
+ * Preset mode names one.
  *
  * @param {object} config  node config from editor
- * @returns {number}
+ * @returns {{commandId: number, preset: ?object}}
  */
-function resolveCommandId(config) {
+function resolveCommand(config) {
   switch (config.mode) {
     case 'advanced':
-      return Number(config.advancedCommand);
-    case 'preset':
-      return getPreset(config.preset).commandId;
+      return { commandId: Number(config.advancedCommand), preset: null };
+    case 'preset': {
+      const preset = getPreset(config.preset);
+      return { commandId: preset.commandId, preset };
+    }
     default: break; // This space intentionally left blank (§5)
   }
-  return NaN; // nothing matched: no behavior selected (§5)
+  return { commandId: NaN, preset: null }; // nothing matched: no behavior selected (§5)
 }
 
 module.exports = function registerMavlinkCommand(RED) {
@@ -95,11 +98,7 @@ module.exports = function registerMavlinkCommand(RED) {
     // The editor guarantees both (§6, ruled 2026-08-12): a node missing its
     // command or its wire message wears Node-RED's red triangle, and there is
     // no deploy-time badge or refusing input handler restating it here.
-    const commandId = resolveCommandId(config);
-
-    // Affirmative: only Preset mode reads the field, so a mode the editor
-    // cannot save resolves no preset (and no command id above with it).
-    const preset = config.mode === 'preset' ? getPreset(config.preset) : null;
+    const { commandId, preset } = resolveCommand(config);
     const commandName =
       preset ? preset.command : `MAV_CMD(${commandId})`;
     const displayName = preset ? preset.name : `#${commandId}`;
@@ -576,7 +575,6 @@ module.exports = function registerMavlinkCommand(RED) {
   registerDialectCatalogRoute(RED, {
     path: '/mavlink/command/commands',
     fromBundle: catalogFromBundle,
-    fromDialect: listCommandsCatalog,
   });
 
   RED.nodes.registerType('mavlink-command', MavlinkCommandNode);
