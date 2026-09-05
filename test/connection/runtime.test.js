@@ -476,7 +476,7 @@ test('a GCS-range sysid (>= 250) never becomes a broadcast destination', async (
     { address: '10.0.0.66', port: 14550 }
   );
 
-  assert.equal(connection.peerTable.has(250), true, 'the GCS is still visible to mavlink-state');
+  assert.ok(connection.peerTable.snapshot().some((p) => p.sysid === 250), 'the GCS is still visible to mavlink-state');
   assert.equal(connection.peerTable.endpointFor(250, 190), null, 'its endpoint is not learned');
   assert.deepEqual(connection.peerTable.endpointsForBroadcast(0), [], 'no broadcast destination');
   connection.close();
@@ -1638,7 +1638,7 @@ test('reconnect demotes learned endpoints — primacy is re-established by the f
   assert.equal(connection.getState(), STATE.CONNECTED);
 
   assert.equal(connection.peerTable.endpointFor(1, 1), null, 'the dead link’s endpoint no longer routes');
-  assert.equal(connection.peerTable.has(1), true, 'the peer record survived — history stays for mavlink-state');
+  assert.ok(connection.peerTable.snapshot().some((p) => p.sysid === 1), 'the peer record survived — history stays for mavlink-state');
   // Stale until routing is relearned, and deliberately so: selectFanoutMembers
   // reads this field, and a member with no primary endpoint resolves to a null
   // destination that a TCP server with no reconnected client drops as a quiet
