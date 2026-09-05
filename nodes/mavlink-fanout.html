@@ -131,9 +131,9 @@
         value: 'sequential',
         // Membership first (§5's editor half, as on selectionMode). Then the
         // Build rule: Broadcast only pairs with the "All" selection, which
-        // Build cannot choose — the reshape below also resets a retained
-        // Broadcast, but a hand-set value must still red rather than deploy a
-        // node the runtime refuses on every message.
+        // Build cannot choose — the reshape below greys the option, and a
+        // retained or hand-set value reds rather than deploying a node the
+        // runtime refuses on every message.
         validate: RED.mavlink.oneOf(['sequential', 'broadcast'], function (v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
           return v !== 'broadcast' || 'Broadcast needs the "All" selection, which Build cannot use';

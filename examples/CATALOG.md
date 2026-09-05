@@ -25,7 +25,7 @@ reference these by name rather than re-explaining them each time.
 | Node | Values |
 |---|---|
 | `mavlink-command` | `build` \| `send` \| `confirm` \| `complete` |
-| `mavlink-move` | `build` \| `send` \| `confirm` (Go to only) \| `stream` |
+| `mavlink-move` | `build` \| `send` \| `confirm` (Go to, Turn, Speed) \| `stream` |
 | `mavlink-param` | `build` \| `send` \| `confirm` (set echo) \| `collect` (list) |
 | `mavlink-payload` | `build` \| `send` \| `confirm` |
 | `mavlink-build` | `build` \| `send` (config key is `tier`) |
@@ -44,7 +44,7 @@ a JSON string keyed by param index (`"{\"7\":20}"` = param7 = 20).
 
 **Move** `action`: `goto` (one-shot guided goto — `DO_REPOSITION` as COMMAND_INT on
 Build/Send/Send & confirm, `SET_POSITION_TARGET_GLOBAL_INT` on Stream; `altRef`: `home` \|
-`msl` is the only frame choice, plus `speed`/`radius`/`changeMode`/`timeoutMs`/`maxRetries` on the
+`msl` \| `terrain` (ArduPilot), plus `speed`/`radius`/`changeMode`/`timeoutMs`/`maxRetries` on the
 command path) or `steer` (setpoints; `reference`: `world` = Local NED everywhere, `body`
 derives the frame from the bound firmware and fails closed without one). There is no
 mode pulldown: the type_mask derives from which field groups are non-blank — filling
@@ -58,9 +58,9 @@ curved path is either many setpoints from a Function node, `DO_ORBIT`, or a miss
 `trigger-distance`; gimbal → `aim` (with `path: "manager"` for
 `GIMBAL_MANAGER_SET_PITCHYAW`, else `legacy` for `DO_MOUNT_CONTROL`), `set-mode`,
 `roi-set`, `roi-clear`; servo → `set`, `repeat`; release → `gripper`, `winch`,
-`parachute`. Only `aim`+`manager` has no ack; everything else is `command_ack`.
+`parachute`. `aim`+`manager` and `aim`+`attitude` ride setpoint messages with no ack; everything else is `command_ack`.
 
-**Mission** `action`: `download` \| `upload` \| `clear`; `missionType`: `mission` \|
+**Mission** `operation`: `download` \| `upload` \| `clear`; `missionType`: `mission` \|
 `fence` \| `rally`. Upload items arrive on `msg.payload` as an array of
 `{command, frame, param1..4, x, y, z, current, autocontinue}`; every field rides as
 given, none is defaulted at runtime.
