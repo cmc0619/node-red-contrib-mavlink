@@ -328,7 +328,7 @@
       // tier. The editor knows both fields at deploy, so it says so here.
       delivery: {
         value: 'build',
-        validate(v, _opt) {
+        validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'stream'], function (v, _opt) {
           const action = RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer');
           // Same class of finding as steer × confirm below, and caught the same
           // way: the dialog never offers this pair (refreshDeliveryOptions
@@ -379,7 +379,7 @@
           if (action === 'goto' || action === 'turn' || action === 'speed') return true;
           return 'this action cannot confirm — setpoints and sticks carry no COMMAND_ACK, so '
             + 'there is nothing to wait for. Use Send, or switch to Go to, Turn or Speed';
-        },
+        }),
       },
       // Action × Delivery derives the wire (§6 redesign, 2026-08-12): the
       // operator states an intent; carrier, message name, frame number, and
@@ -395,7 +395,7 @@
       // Two args so the reason renders (§14).
       action: {
         value: 'goto',
-        validate(v, _opt) {
+        validate: RED.mavlink.oneOf(['goto', 'steer', 'turn', 'speed', 'attitude', 'manual'], function (v, _opt) {
           // The vehicle half of §9 ruling 6's "red on saved": the dropdown
           // stops offering an action the bound vehicle has no handler for, and
           // a node that already held one keeps it and lands here. Every entry
@@ -461,7 +461,7 @@
           if (filled(['yaw', 'yawRate'])) return true;
           return 'Steer needs at least one field filled — a position, a velocity, '
             + 'an acceleration, or a yaw';
-        },
+        }),
       },
       // Go to's one frame choice: altitude above home, absolute MSL, or above
       // terrain. A stray token is a frame the builder never selects (§5's
