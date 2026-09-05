@@ -122,15 +122,15 @@
    * A Steer group is all-or-nothing.
    *
    * Filling any axis makes this a position / velocity / acceleration setpoint —
-   * the runtime derives the type_mask from which groups carry values — and the
-   * axes left blank used to encode 0. Under that mask a 0 is a *commanded*
+   * the runtime derives the type_mask from which groups carry values — and an
+   * axis left blank would encode 0. Under that mask a 0 is a *commanded*
    * zero, not a blank: on an absolute local frame a blank position lands on the
    * EKF origin, a real place and rarely where the vehicle is, and a blank
    * velocity axis commands "hold zero" on an axis nobody mentioned. Group-level
    * optionality is what makes Steer work ("filling fields IS the mode"); within
    * a group it is a half-typed form, reachable by tabbing past two boxes.
    *
-   * The runtime refuses these too now (owner ruling, 2026-08-14), so this is
+   * The runtime refuses these as well (owner ruling, 2026-08-14), so this is
    * the editor half of one rule rather than the only layer that holds it — the
    * dialog is where an operator finds out, before deploying a node that fails
    * every input.
@@ -143,7 +143,7 @@
    * Velocity and acceleration get no such exemption on any frame: a zero rate
    * is a rate, whatever the origin is measured from.
    *
-   * Siblings are read through `ownDialogField`, NOT `liveOr` (Codex, #284).
+   * Siblings are read through `ownDialogField`, NOT `liveOr`.
    * `liveOr` treats a blank live value as "no answer" and falls back to the
    * saved one — right for a field that inherits, wrong here, where an empty
    * box is the operator's answer. With `liveOr` a saved full triplet could
@@ -186,7 +186,7 @@
    *
    * ATTITUDE_IGNORE is a single bit over the whole quaternion, so unlike the
    * body rates — which each have their own bit — there is no encoding for
-   * "roll 10, yaw unsaid". A blank yaw used to reach the wire as 0, a commanded
+   * "roll 10, yaw unsaid". A blank yaw would reach the wire as 0, a commanded
    * heading of north the vehicle would swing to on a setpoint that carries no
    * ack to argue with. So filling any angle requires all three, and the runtime
    * refuses the same shape (lib/move/attitude.js).
@@ -224,7 +224,7 @@
    * one multi-select — Node-RED's typedInput with `multiple`, whose value is
    * the comma-separated bit indices — and the two helpers translate between
    * that and the mask the property holds. Button 3 is bit 2 is the value 4:
-   * the off-by-one an operator hand-composing the number used to fall into.
+   * the off-by-one an operator hand-composing the number falls into.
    */
   const BUTTON_OPTIONS = [];
   for (let bit = 0; bit < 16; bit++) BUTTON_OPTIONS.push({ value: String(bit), label: `Button ${bit + 1}` });
@@ -252,8 +252,8 @@
    * A manual-control stick: required, -1..1.
    *
    * Required because the runtime refuses a blank axis (owner ruling,
-   * 2026-08-14) — the INT16_MAX "not driven" sentinel is gone, so a node saved
-   * with an empty stick would deploy clean and fail every input. The range is
+   * 2026-08-14): a node saved with an empty stick would deploy clean and fail
+   * every input. The range is
    * enforced here because the wire is ±1000 and the operator surface is ±1 — a
    * 500 typed into a stick box is someone thinking in wire units, which would
    * scale to 500000 and clip. The runtime scales whatever it is handed (§2), so
@@ -280,18 +280,18 @@
       // −1000..1000 with neutral 0 like the other three (§14, source-read). The
       // ±1000 scaling is the dialect's own declaration for all four axes, so
       // the runtime keeps applying it uniformly — a per-family map is exactly
-      // the unmeasured guess doctrine keeps off the wire, and #304 §5 item 4
-      // is the rig run that would settle it.
+      // the unmeasured guess doctrine keeps off the wire; a rig run would
+      // settle it.
       //
       // What that leaves is an operator surface that *lies* on a Sub: −1..1
       // reads as "0 is neutral", while 0 scales to 0 and lands on full reverse
-      // vertical thrust (Codex, #303). With the blank sentinel gone there is no
+      // vertical thrust. With the blank sentinel gone there is no
       // escape hatch at all — every axis is sent — so this check is the only
       // thing between an operator's "neutral" and a dive. The editor is the
       // layer that knows the family, so it says so here. Negative values
       // have no representation at all on that axis; the rest of the range maps
       // straight through, with 0.5 as the neutral an operator means by 0.
-      // `n <= 0`, not `n < 0`: 0 is the trap Codex named, because it is exactly
+      // `n <= 0`, not `n < 0`: 0 is the trap, because it is exactly
       // what an operator types for "neutral" on a −1..1 surface and exactly
       // what lands on full reverse. 0.5 is the neutral a Sub reads, so the
       // usable range there is (0, 1] and everything at or below 0 is refused.
@@ -425,13 +425,11 @@
           // ignore bit — 199 — and commands nothing while the node still
           // reports `sent` or `streaming`. A setpoint carries no ack, so that
           // is the failure mode with no symptom, and the editor is the only
-          // layer that can see it (Codex, #303).
+          // layer that can see it.
           //
           // Manual needs no equivalent: every one of its four sticks is
           // required outright (stickValidator), so there is no all-blank form
-          // left to catch. That changed with the INT16_MAX sentinel's removal —
-          // an all-blank Manual used to be a real message, every axis
-          // explicitly not driven, and now it is simply refused.
+          // left to catch: an all-blank Manual is refused outright.
           if (v === 'attitude') {
             if (filled(['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust'])) {
               return true;
@@ -489,18 +487,17 @@
       // without one. On the wire tiers the Connection's Vehicle Profile
       // supplies the firmware; on Build only the Vehicle Profile dialect
       // escape does — so Body on Build with a concrete dialect is a node
-      // that deploys clean and refuses every input (Codex, #277), and the
+      // that deploys clean and refuses every input, and the
       // editor must not offer that shape. Deploy-time validation reads the
-      // saved values; the live read is own-dialog scoped (#217).
+      // saved values; the live read is own-dialog scoped.
       reference: {
         value: 'world',
         // Membership first (oneOf), then the firmware/tier gates on the
         // members themselves.
         validate: RED.mavlink.oneOf(['world', 'body', 'offset'], function (v, _opt) {
           const ref = RED.mavlink.liveOr(this, '#node-input-reference', v, 'world');
-          // 'steer' fallback like every other action gate in this file — two of
-          // these read blank as 'goto' until 2026-08-14, so a hand-edited flow
-          // with no action key skipped exactly the Steer checks it needed.
+          // 'steer' fallback like every other action gate in this file: a
+          // hand-edited flow with no action key must not skip the Steer checks.
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'steer') return true;
           // Offset on PX4 is measured inert — accepted and no motion at all,
           // burst and stream (§14 2026-08-05). The dropdown stops offering it
@@ -638,8 +635,8 @@
       // Broadcast (0) is refused only where an ack is actually awaited: the
       // Send & confirm tier, which the delivery rebuild offers on the acked
       // actions (Go to, Turn, Speed). Send/Stream/Build stay broadcast-legal,
-      // so this reds nothing they configure (#260). The driver no longer
-      // restates it — this is the only layer that catches the pair (§0).
+      // so this reds nothing they configure. The driver does not
+      // restate it — this is the only layer that catches the pair (§0).
       targetSystem: {
         value: '',
         validate: RED.mavlink.validateTargetSystem(['confirm']),
@@ -648,11 +645,10 @@
       // Steer groups are optional and default blank: filling fields IS the
       // mode — the runtime derives the type_mask from the non-blank groups and
       // builds the honest all-ignore packet for an all-blank steer (the editor
-      // requires one filled field, so the configured path never sends it) —
-      // this used to say the runtime refuses it, which stopped being true when
-      // deriveSteerMode grew its yaw-only arm. That is a per-*group* rule;
-      // a half-filled triplet is a different thing, and steerAxisValidator is
-      // where the dialog catches it before the runtime does.
+      // requires one filled field, so the configured path never sends it).
+      // That is a per-*group* rule; a half-filled triplet is a different
+      // thing, and steerAxisValidator is where the dialog catches it before
+      // the runtime does.
       north: { value: '', validate: steerAxisValidator(POSITION_AXES, 'north', 'position') },
       east: { value: '', validate: steerAxisValidator(POSITION_AXES, 'east', 'position') },
       up: { value: '', validate: steerAxisValidator(POSITION_AXES, 'up', 'position') },
@@ -770,13 +766,10 @@
         $adv.toggle();
         $(this).text(`${$adv.is(':visible') ? '▾' : '▸'} Advanced`);
       });
-      // A configured Advanced value must be visible on open (CodeRabbit,
-      // #277): an invalid timeout hiding behind a collapsed section leaves
-      // the operator staring at a red node with no visible cause. The
-      // acceleration triplet used to be checked here too and no longer is —
-      // it left Advanced for the Steer group disclosure, which opens it
-      // whenever it holds a value by the same rule and in the same place as
-      // position and velocity.
+      // A configured Advanced value must be visible on open: an invalid
+      // timeout hiding behind a collapsed section leaves the operator staring
+      // at a red node with no visible cause. The acceleration triplet lives
+      // under the Steer group disclosure, which opens by the same rule.
       if (!RED.mavlink.isBlank(node.timeoutMs) || !RED.mavlink.isBlank(node.radius)
         || !RED.mavlink.isBlank(node.turnRate) || !RED.mavlink.isBlank(node.throttle)
         || !RED.mavlink.isBlank(node.rollRate) || !RED.mavlink.isBlank(node.pitchRate)
@@ -1205,13 +1198,13 @@
         // Hidden directly, not through `show`: the target rows are the two this
         // function does NOT toggle from that object — applyCompanionTargetVisibility
         // owns them, and it ran above. Setting show.targetComponent here was a
-        // no-op that left the row on screen (Gitar, #303).
+        // no-op that left the row on screen.
         if (isManual) $('#row-move-targetComponent').hide();
 
         // Every key of `show` is a row suffix, so the toggles are a loop: a
-        // key that reaches no toggle is the exact bug Gitar found in #303
-        // (`show.targetComponent` was assigned and never read), and a loop
-        // makes it unrepresentable rather than caught by review. The two
+        // key that reaches no toggle (`show.targetComponent` assigned and never
+        // read) is a bug a loop makes unrepresentable rather than caught by
+        // review. The two
         // target rows are skipped because applyCompanionTargetVisibility
         // already toggled them above — listing them here would fight it.
         Object.keys(show).forEach((key) => {

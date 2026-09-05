@@ -63,11 +63,9 @@ module.exports = function registerMavlinkOut(RED) {
       // unknown identity — exits through one terminal record plus done(err),
       // so the chain halts and a Catch node hears about it (§2, §9).
       try {
-        // No shape guardrail: an unrecognised payload rides as given and
-        // craters in connectionNode.send, whose serializer throws
-        // synchronously on a non-message before anything is enqueued
-        // (lib/connection/runtime.js send()) — the same crater as any shape the
-        // wire cannot carry, no curated "expected { name, fields }" hand-holding.
+        // An unrecognised payload rides as given and craters in
+        // connectionNode.send, whose serializer throws synchronously on a
+        // non-message before anything is enqueued (§0).
         const message = resolveMessage(msg);
         // msg.band overrides the config default by presence and rides as
         // given — msg is trusted (§0); a band no queue case answers to
@@ -95,8 +93,9 @@ module.exports = function registerMavlinkOut(RED) {
 };
 
 /**
- * Extract the `{ name, fields }` message from the various accepted message
- * shapes.
+ * Extract the `{ name, fields }` message: `msg.payload.message` when present,
+ * else `msg.topic` as the name over `msg.payload` as the fields, else
+ * `msg.payload` itself.
  *
  * @param {object} msg  the inbound Node-RED message
  * @returns {{ name: string, fields: object }}

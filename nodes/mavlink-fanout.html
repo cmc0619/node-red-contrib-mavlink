@@ -44,7 +44,7 @@
         // so the Connection's only remaining job is the member directory — and
         // an explicit list is the one selection that does not need it.
         // Requiring the list on Build is what lets `connection` above share
-        // the standard blank-on-Build rule (#191). All/filter selection stays
+        // the standard blank-on-Build rule. All/filter selection stays
         // on the wire tiers, where a Connection is present anyway.
         validate: RED.mavlink.oneOf(['all', 'list', 'filter'], function (v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
@@ -171,7 +171,7 @@
       node._mavEnumLoadToken = enumLoadToken;
       RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
-      // Members table (#163): one editableList row per member — sysid, N/E/Up
+      // Members table: one editableList row per member — sysid, N/E/Up
       // offsets in metres, and an optional raw wire-unit patch. Same stock
       // widget the Connection node uses for its extra identities.
       const $members = $('#mav-fanout-members');

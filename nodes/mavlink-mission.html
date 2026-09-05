@@ -51,7 +51,7 @@
           }
           if (!Array.isArray(arr)) return 'must be a JSON array';
           // A configured [] would upload MISSION_COUNT 0 — the wire's
-          // "erase the plan" — not a no-op (#241). Use Clear for that.
+          // "erase the plan" — not a no-op. Use Clear for that.
           if (arr.length === 0) return 'must not be empty — use the Clear operation to erase a plan';
           // Per-item red rings (§9 "Item validation is per type"): the wire
           // `command` is a uint16 (a fractional id truncates into the reserved
@@ -62,7 +62,7 @@
             const item = arr[i];
             // The raw value must be present and numeric before Number() runs:
             // '' / null / false all coerce to 0, a legal uint16, and would
-            // upload command 0 instead of red-ringing the blank (Codex). An
+            // upload command 0 instead of red-ringing the blank. An
             // explicit numeric 0 and a numeric string stay legal.
             const raw = item && typeof item === 'object' ? item.command : undefined;
             const cmd = typeof raw === 'number' ? raw

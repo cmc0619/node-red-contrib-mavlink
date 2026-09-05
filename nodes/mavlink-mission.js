@@ -47,7 +47,7 @@ module.exports = function registerMavlinkMission(RED) {
 
     // No `|| DOWNLOAD`. The editor always saves an operation, so an absent
     // one is drift — and this default is the one that made a SITL node named
-    // `ex09-upload` silently *download* (#224). Both tiers now reject it:
+    // `ex09-upload` silently *download*. Both tiers now reject it:
     // createMachine on the wire, buildPlan on Build.
     const operation = config.operation;
     const connNode = RED.nodes.getNode(config.connection);
@@ -165,7 +165,7 @@ module.exports = function registerMavlinkMission(RED) {
         // undefined; the crater is the start() dereference below, inside the
         // try that frees the lock — a throw between acquire and the promise
         // chain would otherwise hold it until redeploy, every later op on this
-        // target reporting "busy" over a transfer that never started (#222).
+        // target reporting "busy" over a transfer that never started.
         // Constructors are store-only; the subscription only opens in start().
         const machine = createMachine(operation, {
           send: (message) =>

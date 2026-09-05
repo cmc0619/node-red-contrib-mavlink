@@ -258,7 +258,7 @@
    * True when param5/6 carry metres rather than degrees, so the ±90/±180 gate
    * must not fire. Only COMMAND_INT carries a frame at all; the LONG carrier
    * and every unknown frame stay on the degree path, which is the safe
-   * direction — a missing frame must not buy a bypass (§9, #263).
+   * direction — a missing frame must not buy a bypass (§9).
    */
   /** Whether the COMMAND_INT carrier is selected — the int32 param5/6 path. */
   function intCarrierSelected(owner) {
@@ -332,7 +332,7 @@
       identity:          { value: '' },
       // A statically configured broadcast (0) on an ack-confirmed tier is a
       // cross-field static requirement, so it reds at deploy rather than on
-      // the first message (#260). The driver no longer restates it — this is
+      // the first message. The driver does not restate it — this is
       // the only layer that catches the pair (§0).
       targetSystem: {
         value: '',
@@ -353,7 +353,7 @@
       // Gulf of Guinea, at sea level. Range is checked wherever a degree
       // coordinate is *present*, independently of whether the preset requires
       // one: takeoff and land expose lat/lon without requiring them, and 200°
-      // there is still garbage that scales into a real place (§9, #263).
+      // there is still garbage that scales into a real place (§9).
       // Two args so the reasons render (§14).
       params: {
         value: '{}',
@@ -363,7 +363,7 @@
           // is drift the editor can already see at deploy. The preset rules
           // below are preset-only. Blank reds too: mergeParams parses this
           // string as saved and '' is not JSON — '{}' is the empty spelling —
-          // while paramValues' own '' fallback would vouch for it (Codex).
+          // while paramValues' own '' fallback would vouch for it.
           if (RED.mavlink.isBlank(v)) return 'is not valid JSON — {} is the empty set';
           const values = paramValues(this, v);
           if (values === null) return 'is not valid JSON';
@@ -764,7 +764,7 @@
        * Build the input control for one Advanced param via the shared ladder
        * (enum= → <select>, bitmask multi-select, FALSE/TRUE and magic
        * booleans → checkbox, otherwise a number field with units/range, §6 —
-       * with the #198 saved-value sentinel applied inside the builder).
+       * with the saved-value sentinel applied inside the builder).
        * @param {object} spec
        * @param {Object<string, Array>} enums
        * @param {string|number} commandId  the MAV_CMD being configured
@@ -834,7 +834,7 @@
        * the decomposed pair the wire wants, recomposed here so open-and-save
        * round-trips. A saved pair the table lacks survives via the shared
        * sentinel \u2014 the same rule advancedParamInput applies to the AP mode
-       * dropdown (Codex #198).
+       * dropdown.
        *
        * A saved pair the packing cannot even represent (a hand-edited packed
        * word in param2, say) returns null instead — the raw number fields
@@ -867,7 +867,7 @@
       function refreshParamFields() {
         container.empty();
         // True only when a real form (or a legitimate zero-param form) is on
-        // screen; oneditsave refuses to scrape placeholders (Codex #36).
+        // screen; oneditsave refuses to scrape placeholders.
         node._mavParamsRendered = false;
 
         const mode = $('#node-input-mode').val();
@@ -920,7 +920,7 @@
           // scrape zero `.param-input` fields over the saved blob — open the
           // node while the admin API is down, click Done, params gone.
           //
-          // Same class as the rendered-guard itself (Codex #36) with a
+          // Same class as the rendered-guard itself with a
           // different trigger — there the form had not rendered yet, here it
           // rendered nothing — so the answer is the same: leave the flag off
           // and oneditsave keeps its hands off the saved params.
@@ -945,8 +945,7 @@
           // source for labels, units, enums, bitmask-ness, descriptions, and
           // ranges; PRESET_PARAMS only curates exposure and guidance (§6).
           // Paint from the catalog the loader hands back (Style C). oneditsave's
-          // rendered-guard keeps a premature Done from scraping the empty form
-          // (Codex #36).
+          // rendered-guard keeps a premature Done from scraping the empty form.
           const commandId = presetCommandId(presetId);
           container.append($('<div class="form-row"><em>Loading command parameters\u2026</em></div>'));
           loadCommandsCatalog(_cmdCatalogSites.presetParams, (catalog) => {
@@ -979,7 +978,7 @@
     oneditsave() {
       // Scrape only a rendered form. If Done lands while the catalog is still
       // loading (or an error placeholder is showing), the container holds no
-      // inputs — scraping it would silently wipe the saved params (Codex #36).
+      // inputs — scraping it would silently wipe the saved params.
       if (!this._mavParamsRendered) return;
       // Collect param values from the dynamic fields — the same scrape the
       // validator judges, so Done cannot write values the validator never saw.

@@ -53,8 +53,7 @@
       defaults: {
         name:        { value: '' },
         connection:  { value: '', type: 'mavlink-connection', required: true },
-        // A list, not a single name (#211). An empty list matches every
-        // message, which is what a blank single filter used to mean. The
+        // A list of message names; an empty list matches every message. The
         // runtime subscribes straight off this array, so the ring guarantees
         // the shape oneditsave produces: an array of non-blank names.
         messages:    {
@@ -64,7 +63,7 @@
             // Strings only: the runtime filter compares each entry strictly
             // against the decoded name, so a hand-edited number or object
             // matches nothing and the node listens while discarding every
-            // frame (Codex) — the ring must not vouch for that.
+            // frame — the ring must not vouch for that.
             return v.every((name) => typeof name === 'string' && !RED.mavlink.isBlank(name)) || 'every entry must be a non-blank message name string';
           },
         },
@@ -148,7 +147,7 @@
         }
         $('#node-input-changedOnly').on('change', refreshChangedFieldsRow);
         refreshChangedFieldsRow();
-        // Message filters (#211): one catalog-backed select per row. Same
+        // Message filters: one catalog-backed select per row. Same
         // stock widget the Connection and Fan-out dialogs use for their lists.
         const $messages = $('#mav-in-messages');
         $messages.editableList({

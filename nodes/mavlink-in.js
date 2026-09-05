@@ -33,7 +33,7 @@ const { isBlank } = require('../lib/addressing/resolve');
  * The interval applies unconditionally — no exemption for a changed message
  * name, and none for changed badge text. Either would fire on essentially every
  * frame: the delivery count differs every time, and with a multi-message filter
- * (#211) so does the arriving name.
+ * so does the arriving name.
  *
  * A write suppressed inside a window is dropped: the badge names recent
  * traffic, nothing more.
@@ -45,14 +45,12 @@ const STATUS_MIN_INTERVAL_MS = 250;
  * Fields excluded from the changed-only comparison when `changedFields` is
  * blank. Every one advances on every frame, so comparing them makes each
  * message look changed and the filter delivers the whole stream — the exact
- * opposite of what changed-only is for, and the defect this set fixes (#300).
+ * opposite of what changed-only is for, and the defect this set fixes.
  * The names are the timestamp spellings actually used across the bundled
- * dialects, found by enumerating every field of every message (2026-08-14) —
- * an earlier version of this comment claimed four spellings and a reference
- * implementation neither of which survived checking. `time_boot_us` is
+ * dialects, found by enumerating every field of every message. `time_boot_us` is
  * AUTOPILOT_STATE_FOR_GIMBAL_DEVICE's clock, streamed continuously by gimbal
  * devices; `uptime` is ONBOARD_COMPUTER_STATUS's, advancing every frame —
- * both reproduced the #300 defect under changed-only before joining the set.
+ * both reproduced the defect under changed-only before joining the set.
  *
  * Deliberately NOT excluded: UTM_GLOBAL_POSITION's `time` (its position
  * fields march with it, so the exclusion would buy nothing) and
@@ -95,7 +93,7 @@ module.exports = function registerMavlinkIn(RED) {
     // log, per the flow that shipped the bad reference (§0).
     const connectionNode = RED.nodes.getNode(config.connection);
 
-    // Message filters — an empty list means "match all" (#211). The editor
+    // Message filters — an empty list means "match all". The editor
     // owns the shape: oneditsave trims each row and drops blanks and
     // duplicates, and the array red ring guards a hand-edited flow.
     const filterMessages = config.messages;
@@ -103,7 +101,7 @@ module.exports = function registerMavlinkIn(RED) {
     const filterCompid = isBlank(config.compid) ? undefined : Number(config.compid);
 
     // Unknown frames are opt-in. A msgid the dialect does not carry arrives as
-    // UNKNOWN_<id> (#344); that is a diagnostic, not traffic a working flow
+    // UNKNOWN_<id>; that is a diagnostic, not traffic a working flow
     // asked for, so an In node stays quiet about it until the box is ticked.
     const showUnknown = config.showUnknown;
 
@@ -172,8 +170,7 @@ module.exports = function registerMavlinkIn(RED) {
       // means every field *except* the timestamps, which is what makes the
       // feature work at all — comparing decoded.fields wholesale meant any
       // message carrying time_boot_ms differed on every frame, so changed-only
-      // silently passed the entire stream (#300). The comment here used to
-      // describe that exclusion while the code did not implement it.
+      // silently passed the entire stream.
       if (changedOnly) {
         // A named field the message does not carry reads as undefined on
         // every frame, so with every name absent the stream delivers once
@@ -205,7 +202,7 @@ module.exports = function registerMavlinkIn(RED) {
       // Rate-limit status writes to STATUS_MIN_INTERVAL_MS, unconditionally.
       //
       // No "refresh immediately when the name changes" exemption: with a
-      // multi-message filter (#211) the arriving name alternates on nearly
+      // multi-message filter the arriving name alternates on nearly
       // every frame, so that exemption fired every time and the throttle never
       // engaged — two 50 Hz streams wrote the badge 100×/s. Measured at 200 of
       // 200 deliveries before that came out.
@@ -252,7 +249,7 @@ module.exports = function registerMavlinkIn(RED) {
 
 /**
  * True for the synthetic name `decode()` gives a msgid the bound dialect does
- * not carry (#344). Matched on the prefix the wire produces, not on a
+ * not carry. Matched on the prefix the wire produces, not on a
  * registry lookup: by construction there is no definition to look up.
  *
  * @param {string} name  decoded message name

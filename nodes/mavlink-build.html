@@ -89,7 +89,7 @@
         // The second case is normal use, not hand-edited JSON: switch an
         // existing node's dialect or Connection and fillEnumSelect keeps the
         // old name selectable as `#NAME (not in dialect)` so it survives
-        // open-and-save (#198). Surviving is right; deploying is not.
+        // open-and-save. Surviving is right; deploying is not.
         messageName: {
           value: 'HEARTBEAT',
           validate(v, _opt) {
@@ -277,7 +277,7 @@
               } else {
                 // A saved value the table lacks — a dialect switch, a newer
                 // firmware's entry — must survive open-and-save, not silently
-                // deselect and drop the field on Done (Codex #198).
+                // deselect and drop the field on Done.
                 RED.mavlink.ensureSavedEnumOption(sel, String(saved));
                 sel.val(String(saved));
               }
@@ -351,7 +351,7 @@
             saved = savedFields[`param${spec.index}`];
           }
           // The control ladder (checkbox / pulldown / bitmask / magic boolean /
-          // number, with the #198 saved-value sentinel) is the shared builder;
+          // number, with the saved-value sentinel) is the shared builder;
           // Build contributes its collector attributes and the mask fold.
           return RED.mavlink.paramControl(spec, enums, {
             saved,

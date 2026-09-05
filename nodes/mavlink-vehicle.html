@@ -7,7 +7,7 @@
         // Both feed lookup tables (mode names, parameter metadata, frame
         // gates) keyed by exactly these members — a stray token looks nothing
         // up, silently, so membership reds here. `required` rides alongside
-        // (owner ruling, #372): blank then reds through the generic
+        // (owner ruling): blank then reds through the generic
         // missing-required path before the validator runs, and any non-blank
         // stray still gets the membership reason.
         vehicleFamily:         { value: 'unknown', required: true, validate: RED.mavlink.oneOf(

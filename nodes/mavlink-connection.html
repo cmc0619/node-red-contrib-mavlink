@@ -98,7 +98,7 @@
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
       } },
       // Sibling reads go through ownDialogField, not `live || saved` (the
-      // #284 lesson, same trap one node over): an emptied box is the
+      // same trap one node over): an emptied box is the
       // operator's answer, and a truthiness fallback would resurrect the
       // saved value — clearing both fields to go listen-only would red
       // forever, each blank vouched against by the other's ghost.
@@ -173,7 +173,7 @@
       //
       // Validating the list covers the whole bound set, primary included: the
       // additionals are the rows an operator can actually change. Siblings are
-      // read live through liveOr so the check is scoped to this dialog (#217).
+      // read live through liveOr so the check is scoped to this dialog.
       additionalIdentities: { value: [], validate(v, _opt) {
         const $live = RED.mavlink.ownDialogField(this, '#node-config-input-additionalIdentities');
         if ($live) v = $live.val();
@@ -219,7 +219,7 @@
       } },
       // Cross-field (the dependency-between-fields case AGENTS.md names): a
       // peer must go stale before it expires, or the sweep drops it with the
-      // stale event never fired. Read live through liveOr (#217).
+      // stale event never fired. Read live through liveOr.
       expireMs: { value: 15000, validate(v, opt) {
         if (RED.mavlink.isBlank(v)) return 'expire threshold is required';
         const shape = RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
@@ -249,7 +249,7 @@
       signingKeyHex: {
         type: 'password',
         /**
-         * The two signing rules the driver no longer restates (§0): the wire
+         * The two signing rules the driver does not restate (§0): the wire
          * format, and the exclusivity against the passphrase — the
          * dependency-between-fields case AGENTS.md names by name.
          *
@@ -297,7 +297,7 @@
         'node-config-input'
       );
 
-      // Extra identities (issue #94): additionalIdentities is a *list* of
+      // Extra identities: additionalIdentities is a *list* of
       // Local Identity config refs, and the stock config picker handles one
       // ref per property — so the list uses Node-RED's editableList with a
       // select per row. Options enumerate every Local Identity config node in

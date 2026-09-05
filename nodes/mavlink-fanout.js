@@ -9,10 +9,11 @@ module.exports = function registerMavlinkFanout(RED) {
     const node = this;
     const connectionNode = RED.nodes.getNode(config.connection);
 
-    // The editor requires an explicit sysid list on Build (#191), so config
+    // The editor requires an explicit sysid list on Build, so config
     // follows the standard rule: no Connection needed on Build, required on
-    // the wire tiers. Runtime payload overrides that ask for build+all or
-    // build+filter without a Connection are refused per message below.
+    // the wire tiers. A payload override asking for build+all or build+filter
+    // with no Connection selects no peer table and craters in the executor
+    // (§0).
 
     // Abort-on-close discipline: a redeploy aborts every run in flight and
     // waits for each to unwind. Rationale lives with delivery.inFlightTracker.
@@ -150,7 +151,7 @@ function selectionFrom(config) {
   const mode = config.selectionMode;
   return {
     mode,
-    // List selection reads its sysids from the members table rows (#163).
+    // List selection reads its sysids from the members table rows.
     sysids: mode === 'list' ? config.members.map((member) => member.sysid) : undefined,
     filter,
   };
@@ -177,7 +178,7 @@ function configMembersFor(config, opts) {
 }
 
 /**
- * A filter matching zero vehicles is the correct answer, not a fault (#226):
+ * A filter matching zero vehicles is the correct answer, not a fault:
  * the run reports quietly — grey badge, no done(err) — while output 1 still
  * carries the empty aggregate with success:false, so nothing downstream sees
  * a phantom success (§2). An empty explicit list or an empty 'all' stays

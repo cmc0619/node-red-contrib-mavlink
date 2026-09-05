@@ -134,7 +134,7 @@ module.exports = function registerMavlinkConnection(RED) {
 
     // Built before the identity claims — a signing misconfig throws with
     // nothing to release yet — and kept: the rejected/status wiring below
-    // needs hasKey and acceptInvalid (#243).
+    // needs hasKey and acceptInvalid.
     const signing = buildSigning(config, node.credentials);
 
     const identities = identityIds.map((id) => {
@@ -311,7 +311,7 @@ function buildSigning(config, credentials) {
 }
 
 /**
- * Consume the runtime's 'rejected' event (issue #243). Rejection is the
+ * Consume the runtime's 'rejected' event. Rejection is the
  * fail-closed policy working as designed; dropping traffic *silently* is not —
  * a signing vehicle pointed at a key-less connection would otherwise read as
  * total silence, with no hint that the recovery override even exists. One warn
@@ -365,7 +365,7 @@ function rejectedSurface(reason, hasKey) {
   }
   // 'first-contact-too-old', and any future verdict: the tag is already the
   // message. The floor is first-contact only — an established stream is
-  // governed by monotonicity alone (§7 signing, #264).
+  // governed by monotonicity alone (§7 signing).
   return { log: `dropping signed traffic — ${reason}`, badge: `drop: ${reason}` };
 }
 

@@ -10,7 +10,7 @@
 
     // One place decides single- vs multi-identity so the three sites that turn
     // on it — row visibility, save-time clear, and the validator — cannot drift
-    // apart (Sourcery). A Connection with at most one bound identity has no
+    // apart. A Connection with at most one bound identity has no
     // real choice: its sole identity is the Local Identity the runtime asserts.
     // The shared predicate answers the same question for every other dialog's
     // Identity row, so the palette hides the row on one rule, not seven.
@@ -35,7 +35,7 @@
      * for the promoted silent-false-success case (a lease on an unbound id no
      * scheduler heartbeats). command/fanout, whose unbound pick is not that
      * class, carry no identity validator. The connection is read live through
-     * liveOr so the check is scoped to this node's own open dialog (#217).
+     * liveOr so the check is scoped to this node's own open dialog.
      */
     function boundIdentityValidator(v, _opt) {
       const connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
