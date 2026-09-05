@@ -108,7 +108,7 @@ module.exports = function registerMavlinkPayload(RED) {
             completeAck(node, send, built, outcome);
             done();
           } else {
-            failAck(node, send, built, outcome, msg, done);
+            failAck(node, send, built, outcome, done);
           }
         }
 
@@ -233,7 +233,7 @@ function completeAck(node, send, built, outcome) {
   ]);
 }
 
-function failAck(node, send, built, outcome, msg, done) {
+function failAck(node, send, built, outcome, done) {
   applyActionStatus(node, 'error', `${built.message.name} ${outcome.result}`);
   send([
     null,

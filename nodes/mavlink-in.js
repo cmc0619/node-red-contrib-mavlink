@@ -108,7 +108,7 @@ module.exports = function registerMavlinkIn(RED) {
     const changedOnly = config.changedOnly;
     // Changed-only field subset: compare only these fields when set, so a
     // hot timestamp does not make every frame look "changed".
-    const changedFields = parseNameList(config.changedFields);
+    const changedFields = isBlank(config.changedFields) ? null : config.changedFields.split(',');
 
     // Field predicate: pass only frames where `fieldName` exists — and, when a
     // value is given, string-equals it (enums and BigInts compare naturally).
@@ -257,16 +257,6 @@ module.exports = function registerMavlinkIn(RED) {
  */
 function isUnknownName(name) {
   return name.startsWith('UNKNOWN_');
-}
-
-/**
- * Comma-separated name list → array, or null when blank (= all).
- *
- * @param {string} value  editor-owned comma list; the field red ring owns the shape
- * @returns {string[]|null}
- */
-function parseNameList(value) {
-  return isBlank(value) ? null : value.split(',');
 }
 
 /**
