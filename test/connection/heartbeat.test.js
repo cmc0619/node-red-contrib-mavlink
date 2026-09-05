@@ -87,13 +87,14 @@ test('the heartbeat resumes when the fault clears, logged once', () => {
 
 test('start/stop drive the injected interval and release it', () => {
   let intervalCleared = false;
+  const token = { unref() {} };
   const { scheduler, emitted } = build({
     setInterval: (fn) => {
       fn(); // fire once immediately
-      return 'token';
+      return token;
     },
-    clearInterval: (token) => {
-      intervalCleared = token === 'token';
+    clearInterval: (handle) => {
+      intervalCleared = handle === token;
     },
   });
   scheduler.add(GCS);
@@ -112,7 +113,7 @@ test('scheduler ticks at the minimum identity interval and emits each identity w
     setInterval: (fn, ms) => {
       tick = fn;
       intervalMs = ms;
-      return 'token';
+      return { unref() {} };
     },
     clearInterval() {},
   });
@@ -147,7 +148,7 @@ test('base timer follows a sole slow identity (does not clamp to 1000 ms)', () =
   const { scheduler } = build({
     setInterval: (_fn, ms) => {
       intervalMs = ms;
-      return 'token';
+      return { unref() {} };
     },
     clearInterval() {},
   });
