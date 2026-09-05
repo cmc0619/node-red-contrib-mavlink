@@ -35,7 +35,7 @@ test('resolveCatalogSource soft mode returns a notice for undeployed vehicle', (
   assert.match(source.notice, /not deployed/i);
 });
 
-test('registerDialectCatalogRoute wires fromBundle / fromDialect', () => {
+test('registerDialectCatalogRoute serves a deployed profile and a bundled dialect through one builder', () => {
   const handlers = new Map();
   const RED = {
     nodes: {
@@ -52,7 +52,6 @@ test('registerDialectCatalogRoute wires fromBundle / fromDialect', () => {
   registerDialectCatalogRoute(RED, {
     path: '/mavlink/test/catalog',
     fromBundle: (bundle, dialect) => ({ via: 'bundle', dialect, ok: Boolean(bundle) }),
-    fromDialect: (dialect) => ({ via: 'dialect', dialect }),
   });
   const handler = handlers.get('/mavlink/test/catalog');
   assert.ok(handler);
@@ -71,5 +70,5 @@ test('registerDialectCatalogRoute wires fromBundle / fromDialect', () => {
     json(b) { this.body = b; },
   };
   handler({ query: { dialect: 'common' } }, resDialect);
-  assert.deepEqual(resDialect.body, { via: 'dialect', dialect: 'common' });
+  assert.deepEqual(resDialect.body, { via: 'bundle', dialect: 'common', ok: true });
 });

@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata/bundled');
-const { listCommandsCatalog, catalogFromBundle } = require('../../lib/metadata/commands-list');
+const { catalogFromBundle } = require('../../lib/metadata/commands-list');
 const { commandLabel, isHiddenParam, enumOptionLabel } = require('../../lib/metadata/commands-list');
 
 test('commandLabel shows the full command name and value in parentheses (§6)', () => {
@@ -27,8 +27,8 @@ test('enumOptionLabel shows the enum entry name and value in parentheses (§6)',
   );
 });
 
-test('listCommandsCatalog includes params and referenced enums for Advanced UI', () => {
-  const catalog = listCommandsCatalog('ardupilotmega');
+test('the ardupilotmega command catalog includes params and referenced enums for Advanced UI', () => {
+  const catalog = catalogFromBundle(loadBundled('ardupilotmega'), 'ardupilotmega');
   assert.equal(catalog.dialect, 'ardupilotmega');
   assert.ok(catalog.commands.length > 50);
 

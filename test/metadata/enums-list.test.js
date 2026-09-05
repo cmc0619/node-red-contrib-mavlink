@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata/bundled');
-const { catalogEnumsFromBundle, listEnumsCatalog } = require('../../lib/metadata/enums-list');
+const { catalogEnumsFromBundle } = require('../../lib/metadata/enums-list');
 const { DEFAULT_ENUM_NAMES } = require('../../lib/metadata/enums-list');
 
 const FIXTURE_BUNDLE = {
@@ -84,8 +84,8 @@ test('catalogEnumsFromBundle adds requested names to the default set', () => {
   });
 });
 
-test('listEnumsCatalog loads bundled dialect enum entries', () => {
-  const catalog = listEnumsCatalog('ardupilotmega', 'MAV_TYPE');
+test('a bundled dialect's enum catalog carries its entries', () => {
+  const catalog = catalogEnumsFromBundle(loadBundled('ardupilotmega'), 'ardupilotmega', 'MAV_TYPE');
   const expectedCount = loadBundled('ardupilotmega').enums.MAV_TYPE.entries.length;
 
   assert.equal(catalog.dialect, 'ardupilotmega');
@@ -93,9 +93,9 @@ test('listEnumsCatalog loads bundled dialect enum entries', () => {
   assert.ok(catalog.enums.MAV_TYPE.some((entry) => entry.label === 'MAV_TYPE_GCS (6)'));
 });
 
-test('listEnumsCatalog serves MAV_COMPONENT with XML entry names for every stack', () => {
+test('MAV_COMPONENT carries XML entry names for every stack', () => {
   for (const dialect of ['common', 'ardupilotmega', 'development']) {
-    const catalog = listEnumsCatalog(dialect, 'MAV_COMPONENT');
+    const catalog = catalogEnumsFromBundle(loadBundled(dialect), dialect, 'MAV_COMPONENT');
     const entries = catalog.enums.MAV_COMPONENT || [];
     assert.ok(entries.length > 0, `${dialect} must expose MAV_COMPONENT`);
     const autopilot = entries.find((entry) => Number(entry.value) === 1);

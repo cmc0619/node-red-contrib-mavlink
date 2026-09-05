@@ -4,10 +4,8 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const {
-  catalogMessagesFromBundle,
-  listMessagesCatalog,
-} = require('../../lib/metadata/messages-list');
+const { catalogMessagesFromBundle } = require('../../lib/metadata/messages-list');
+const { loadBundled } = require('../../lib/metadata/bundled');
 const { commandLabel } = require('../../lib/metadata/commands-list');
 
 test('commandLabel renders a message id the same `NAME (value)` way (§6)', () => {
@@ -137,8 +135,8 @@ test('catalogMessagesFromBundle fixture: messages, fields, and referenced enums'
   });
 });
 
-test('listMessagesCatalog bundled smoke includes HEARTBEAT type enum', () => {
-  const catalog = listMessagesCatalog('ardupilotmega');
+test('the ardupilotmega message catalog includes HEARTBEAT and its type enum', () => {
+  const catalog = catalogMessagesFromBundle(loadBundled('ardupilotmega'), 'ardupilotmega');
   assert.equal(catalog.dialect, 'ardupilotmega');
 
   const heartbeat = catalog.messages.find((m) => m.name === 'HEARTBEAT');
