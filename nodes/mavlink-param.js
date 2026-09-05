@@ -455,9 +455,7 @@ module.exports = function registerMavlinkParam(RED) {
  */
 function requestFrom(config, payload, { target, profile, capabilities }) {
   const firmware = payload.firmware === undefined ? profile.firmware : payload.firmware;
-  // `paramEncoding` only. The old `payload.encoding` rung was undocumented,
-  // unexampled and untested — nothing in the repo ever wrote it (1a79c88 removed
-  // the matching config-side alias).
+  // `paramEncoding` is the one override key for the encoding.
   const encoding = payload.paramEncoding;
   return {
     action: payload.action === undefined ? config.action : payload.action,

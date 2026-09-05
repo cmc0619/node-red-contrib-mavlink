@@ -615,8 +615,7 @@
    *
    * A thin remainder over {@link RED.mavlink.resolveCatalogTarget}, which owns
    * Build-tier detection (delivery vs Build's tier field) and the
-   * connection → vehicle → dialect walk — the two halves this function used to
-   * re-implement and keep in sync by hand. What stays here is what the
+   * connection → vehicle → dialect walk. What stays here is what the
    * resolver has no field for: the config-node dialog branch
    * (`#node-config-input-dialect`, a selector no palette dialog carries) and
    * the enum-names filter.
@@ -1609,11 +1608,10 @@
    * @returns {string}
    */
   RED.mavlink.liveOr = function (owner, selector, saved, fallback) {
-    // A selector in the owner slot is the old two-argument shape, and under
-    // this signature it is not a stale-but-working call: the live read is
-    // silently skipped and `saved` is absent, so the caller's gate compares
-    // against '' forever — the Move stream validators shipped disabled that
-    // way. Throwing instead is contained and loud: red.js wraps validator
+    // A selector in the owner slot is a wrong-arity call, and not a working
+    // one: the live read is silently skipped and `saved` is absent, so the
+    // caller's gate compares against '' forever and a validator ships
+    // disabled. Throwing instead is contained and loud: red.js wraps validator
     // calls, logs the error, and reds the node naming the property, so a
     // wrong-shaped call site cannot survive its first validation.
     if (typeof owner === 'string') {
