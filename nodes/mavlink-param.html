@@ -805,6 +805,8 @@
       // exist at all — not just how the Value field is shaped.
       $('#node-input-action').on('change', () => {
         applyActionRows();
+        // Max retries belongs to the confirm-tier set, so the action moves it.
+        refreshVisibility();
         refreshParamInfo();
       });
       $('#mav-param-value-select').on('change', () => {
