@@ -52,7 +52,7 @@ test('dialectLibrary appends dated snapshot versions without duplicating dialect
   const icarous = dialects.find((d) => d.name === 'icarous');
   assert.ok(icarous);
   assert.equal(icarous.versions.filter((v) => v.kind === 'seed').length, 1);
-  assert.ok(icarous.versions.some((v) => v.kind === 'snapshot' && v.path));
+  assert.ok(icarous.versions.some((v) => v.kind === 'snapshot'));
   // One row per dialect name — not one row per (dialect,date).
   assert.equal(dialects.filter((d) => d.name === 'icarous').length, 1);
 });

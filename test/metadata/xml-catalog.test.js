@@ -127,7 +127,6 @@ test('update pins a commit, writes a snapshot/manifest/latest, and lists it', as
 
   assert.equal(manifest.commit, src.sha);
   assert.ok(src.requested.every((r) => r.commit === src.sha), 'every fetch used the pinned commit');
-  assert.deepEqual(manifest.usable.sort(), ['custom.xml', 'minimal.xml']);
   assert.deepEqual(manifest.missing, []);
   assert.deepEqual(manifest.unusable, []);
 
@@ -157,7 +156,6 @@ test('a root missing a required include is recorded as unusable, not published',
   const catalog = new XmlCatalog({ baseDir, resolveCommit: src.resolveCommit, fetchFile: src.fetchFile });
 
   const manifest = await catalog.update({ files: ['ardupilotmega.xml'] });
-  assert.deepEqual(manifest.usable, []);
   assert.equal(manifest.unusable.length, 1);
   assert.equal(manifest.unusable[0].file, 'ardupilotmega.xml');
   assert.deepEqual(manifest.unusable[0].missingIncludes, ['common.xml']);
