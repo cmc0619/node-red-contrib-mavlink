@@ -82,7 +82,7 @@
           return true;
         },
       },
-      timeout: { value: '1500', validate: RED.mavlink.validateAtLeast(0) },
+      timeoutMs: { value: '1500', validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
       maxRetries: { value: '5', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
     ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   };
@@ -161,7 +161,7 @@
         $('#row-identity').toggle(
           isWire && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
         );
-        $('#row-timeout').toggle(isWire);
+        $('#row-timeoutMs').toggle(isWire);
         $('#row-maxRetries').toggle(isWire);
 
         /* role-driven rows: companion hides both target rows */
@@ -224,7 +224,7 @@
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row mavlink-mission-items"><label for="node-input-items" style="vertical-align:top;">Items (JSON)</label><textarea id="node-input-items" rows="8" style="width:70%; font-family:monospace; resize:vertical;" placeholder="non-empty JSON array, or set msg.payload.items"></textarea></div>
-  <div class="form-row" id="row-timeout"><label for="node-input-timeout">Step timeout (ms)</label><input type="number" id="node-input-timeout" placeholder="1500"></div>
+  <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Step timeout (ms)</label><input type="number" id="node-input-timeoutMs" placeholder="1500"></div>
   <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" placeholder="5"></div>
 </script>
 
