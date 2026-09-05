@@ -177,7 +177,6 @@ test('a retry send that throws settles the transaction instead of escaping the t
     targetSystem: 1,
     targetComponent: 1,
     maxRetries: 2,
-    retryIntervalMs: 1,
     sendFn: () => {
       sends += 1;
       if (sends > 1) throw new Error('queue overflow on control band');
@@ -205,7 +204,6 @@ test('a duplicate TEMPORARILY_REJECTED while a retry is pending schedules no sec
     targetSystem: 1,
     targetComponent: 1,
     maxRetries: 3,
-    retryIntervalMs: 5,
     sendFn: () => { sends += 1; },
   });
   const p = waiter.start();
@@ -213,7 +211,7 @@ test('a duplicate TEMPORARILY_REJECTED while a retry is pending schedules no sec
   conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
   conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
 
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  await new Promise((resolve) => setTimeout(resolve, 1100));
   assert.equal(sends, 2, 'the initial send plus exactly one retry');
 
   conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
@@ -233,7 +231,6 @@ test('cancel after duplicate TEMPORARILY_REJECTED acks leaves no timer that can 
     targetSystem: 1,
     targetComponent: 1,
     maxRetries: 3,
-    retryIntervalMs: 5,
     sendFn: () => { sends += 1; },
   });
   const p = waiter.start();
@@ -243,7 +240,7 @@ test('cancel after duplicate TEMPORARILY_REJECTED acks leaves no timer that can 
   waiter.cancel();
   const sendsAtCancel = sends;
 
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  await new Promise((resolve) => setTimeout(resolve, 1100));
   assert.equal(sends, sendsAtCancel, 'no send fires after settlement');
   assert.equal((await p).result, 'cancelled');
 });

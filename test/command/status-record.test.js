@@ -27,7 +27,7 @@ test('makeStatusRecord returns the default plain-object shape', () => {
     result: 'accepted',
     resultCode: null,
     resultParam2: null,
-    confirmedBy: 'none',
+    confirmedBy: undefined,
     target: null,
     elapsed: 0,
     retries: 0,
@@ -66,7 +66,7 @@ test('makeStatusRecord includes all required fields', () => {
 test('makeStatusRecord fills defaults for optional fields', () => {
   const rec = makeStatusRecord('mavlink-command', { result: 'timeout' });
   assert.equal(rec.resultCode, null);
-  assert.equal(rec.confirmedBy, 'none');
+  assert.equal(rec.confirmedBy, undefined);
   assert.equal(rec.target, null);
   assert.equal(rec.elapsed, 0);
   assert.equal(rec.retries, 0);

@@ -624,7 +624,7 @@ test('a silent ACK window sends once, then settles the unconfirmed record', asyn
   assert.equal(output[0], null, 'output 0 must not fire');
   assert.equal(output[1].result, 'unconfirmed');
   assert.equal(output[1].resultCode, null);
-  assert.equal(output[1].confirmedBy, 'none');
+  assert.equal(output[1].confirmedBy, undefined);
   assert.equal(output[1].retries, 0);
   assert.equal(output[1].detail, 'no terminal COMMAND_ACK received within timeout');
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
@@ -1010,7 +1010,7 @@ test('a base-mode-only Set Mode whose ack is lost stays unconfirmed — no succe
 
   assert.ok(output, 'the timeout settled');
   assert.equal(output[1].result, 'unconfirmed');
-  assert.equal(output[1].confirmedBy, 'none');
+  assert.equal(output[1].confirmedBy, undefined);
   node.emit('close', () => {});
 });
 
@@ -1206,7 +1206,7 @@ test('a completion timeout keeps the accepted ack\'s result_param2 (CodeRabbit)'
   await new Promise((resolve) => setTimeout(resolve, 120));
 
   assert.equal(output[1].result, 'timeout');
-  assert.equal(output[1].confirmedBy, 'none', 'nothing confirmed the completion');
+  assert.equal(output[1].confirmedBy, undefined, 'nothing confirmed the completion');
   assert.equal(output[1].resultParam2, 7, 'the ack that did arrive is not erased by the state timeout');
   node.emit('close', () => {});
 });

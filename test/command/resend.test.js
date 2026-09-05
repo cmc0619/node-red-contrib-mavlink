@@ -62,11 +62,11 @@ test('a silent window sends once, then settles the timeout shape', async () => {
   assert.equal(sends, 1, 'the command is sent exactly once');
   assert.deepEqual(
     Object.keys(outcome).sort(),
-    ['confirmedBy', 'detail', 'elapsed', 'result', 'resultCode', 'resultParam2', 'retries']
+    ['detail', 'elapsed', 'result', 'resultCode', 'resultParam2', 'retries']
   );
   assert.equal(outcome.result, 'timeout');
   assert.equal(outcome.resultCode, null);
-  assert.equal(outcome.confirmedBy, 'none');
+  assert.equal(outcome.confirmedBy, undefined);
   assert.equal(outcome.retries, 0);
   // No terminal ack, so no terminal resultParam2 (§14: a decoded 0 is the
   // omitted-extension value, not a vehicle statement).
@@ -79,7 +79,7 @@ test('repeated IN_PROGRESS cannot extend the wait past the aggregate ceiling', a
   // Ceiling 2 → the wait may run to 2 × timeoutMs from start, no further.
   // Without the ceiling this test never finishes: every injection re-armed
   // the full window ahead of its expiry.
-  const waiter = makeWaiter(conn, { timeoutMs: 30, inProgressCeiling: 2 });
+  const waiter = makeWaiter(conn, { timeoutMs: 30 });
   const p = waiter.start();
   const pump = setInterval(
     () => conn.injectAck({ command: 400, result: MAV_RESULT.IN_PROGRESS }, 1, 1),
@@ -116,7 +116,6 @@ test('IN_PROGRESS then silence settles timeout at the ceiling with a single send
   let sends = 0;
   const waiter = makeWaiter(conn, {
     timeoutMs: 30,
-    inProgressCeiling: 2,
     sendFn: () => { sends += 1; },
   });
   const p = waiter.start();

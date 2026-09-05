@@ -170,7 +170,7 @@ test('waitForCompletion cancel settles promptly with cancelled: true and clears 
   const outcome = await wait.promise;
   assert.equal(outcome.cancelled, true);
   assert.equal(outcome.success, false);
-  assert.equal(outcome.confirmedBy, 'none');
+  assert.equal(outcome.confirmedBy, undefined);
 
   // Cleared timers: no poll runs after cancel, and no timeout is pending to
   // hold the process open for the remaining timeoutMs.
