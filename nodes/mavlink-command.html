@@ -341,8 +341,9 @@
       // Compid is a wire uint8; the select's catalog values all fit, so this
       // reds only a hand-edited flow. Blank inherits the profile default.
       targetComponent:      { value: '', validate: RED.mavlink.validateUint8(0) },
-      timeout:           { value: '10000', validate: RED.mavlink.validateAtLeast(0) },
-      maxRetries:        { value: '3', validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
+      // ACK timeout and Max retries: the shared definition, hidden with the
+      // rows on Build.
+      ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire),
       unconfirmedContinue: { value: false },
       completionTimeout: { value: '60000', validate: RED.mavlink.validateAtLeast(0) },
       // The preset params blob. Nothing checked it before, and the runtime
@@ -445,7 +446,7 @@
         $('#row-cmd-identity').toggle(
           !isBuild && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
         );
-        $('#row-cmd-timeout')[isBuild ? 'hide' : 'show']();
+        $('#row-cmd-timeoutMs')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-maxRetries')[isBuild ? 'hide' : 'show']();
         $('#row-cmd-unconfirmedContinue')[isBuild ? 'hide' : 'show']();
 
@@ -1103,9 +1104,9 @@
     <select id="node-input-targetComponent" style="width:80px"></select>
   </div>
 
-  <div class="form-row" id="row-cmd-timeout">
-    <label for="node-input-timeout" style="width:120px">ACK timeout</label>
-    <input type="number" id="node-input-timeout" style="width:80px"> ms
+  <div class="form-row" id="row-cmd-timeoutMs">
+    <label for="node-input-timeoutMs" style="width:120px">ACK timeout</label>
+    <input type="number" id="node-input-timeoutMs" style="width:80px"> ms
   </div>
 
   <div class="form-row" id="row-cmd-maxRetries">

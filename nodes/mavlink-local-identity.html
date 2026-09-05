@@ -85,7 +85,7 @@
       category: 'config',
       defaults: {
         name:              { value: '' },
-        role:              { value: 'gcs', required: true, validate: companionRoleValidator },
+        role:              { value: 'gcs', validate: RED.mavlink.oneOf(['gcs', 'companion', 'custom'], companionRoleValidator) },
         /**
          * SysID is NOT `required`: the companion role derives it from the
          * vehicle, so blank is the correct saved state in that role, and its

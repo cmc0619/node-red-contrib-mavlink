@@ -288,7 +288,8 @@
   every message look changed and pass the whole stream. Naming a timestamp in
   <b>Compare fields</b> compares it verbatim, so the clock is reachable when you
   actually want it — and a message whose only fields are timestamps delivers
-  once.</p>
+  once. So does a message that carries none of the named fields: a name the
+  message does not have compares as absent on every frame.</p>
   <p><b>Field</b>: pass only messages where the named field exists — and, when
   a value is given, equals it (compared as strings, so enums and 64-bit values
   work naturally). Example: <code>base_mode</code> = <code>217</code>.</p>

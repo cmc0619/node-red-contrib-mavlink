@@ -262,7 +262,7 @@ module.exports = function registerMavlinkCommand(RED) {
       const configuredCarrier = config.sendAs;
 
       // The editor owns the defaults and the number rings.
-      const timeoutMs = Number(config.timeout);
+      const timeoutMs = Number(config.timeoutMs);
       const maxRetries = Number(config.maxRetries);
       // Complete's poll timeout resolves here too, before the send: by the
       // post-ack continuation the vehicle has already begun executing the

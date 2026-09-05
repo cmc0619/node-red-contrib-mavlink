@@ -119,7 +119,7 @@ module.exports = function registerMavlinkMission(RED) {
       const missionType = missionTypeValue(missionTypeKey);
 
       // The editor owns the defaults and the number rings.
-      const timeoutMs = Number(config.timeout);
+      const timeoutMs = Number(config.timeoutMs);
       const maxRetries = Number(config.maxRetries);
 
       // Upload item source: msg.payload.items overrides configured items —

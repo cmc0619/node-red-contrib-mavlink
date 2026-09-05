@@ -156,7 +156,9 @@
       },
       stopOnError: { value: false },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
-      ...RED.mavlink.ackDefaults,
+      // Timeout and Retries exist on Send & confirm alone, the tier that waits;
+      // refreshVisibility hides the rows elsewhere and the rings follow.
+      ...RED.mavlink.ackDefaults((node) => RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) === 'confirm'),
     },
     inputs: 1,
     outputs: 2,

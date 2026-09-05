@@ -86,6 +86,7 @@
       headingDeg: { value: '', validate: RED.mavlink.validateRange(0, 360) },
       pitchDeg: { value: 0, validate: RED.validators.number() },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
+      changeMode: { value: false },
       intervalMs: {
         value: 100,
         // The input's min="0" is not enforced on save, and the runtime reads a
@@ -96,7 +97,8 @@
             || 'must be a number of milliseconds >= 0 — blank rides as an unthrottled 0';
         },
       },
-      ...RED.mavlink.ackDefaults,
+      // Timeout and Retries rows are always on screen here.
+      ...RED.mavlink.ackDefaults(() => true),
     },
     inputs: 1,
     outputs: 2,
@@ -137,6 +139,7 @@
   <div class="form-row"><label for="node-input-headingDeg">Heading deg</label><input type="number" id="node-input-headingDeg" placeholder="blank = leader's heading"></div>
   <div class="form-row"><label for="node-input-pitchDeg">Pitch deg</label><input type="number" id="node-input-pitchDeg" step="any"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
+  <div class="form-row"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"></div>
   <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
   <div class="form-row"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
   <div class="form-row"><label for="node-input-maxRetries">Retries</label><input type="number" id="node-input-maxRetries" min="0"></div>
@@ -188,6 +191,12 @@
   noses are not commanded: reposition yaw is sent as <code>NaN</code> (hold
   current heading), and speed as −1 (default) — the zero-fill for either would
   command yaw-to-north / zero ground speed.</p>
+  <p><b>Change mode</b> sets <code>MAV_DO_REPOSITION_FLAGS_CHANGE_MODE</code> on
+  every member's reposition, and the flag is the gate on both stacks
+  (measured, DESIGN.md §14.108): the reposition is accepted iff the flag is set
+  or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers
+  denied (2). It flies each vehicle into guided mode — a mode change, and
+  therefore an explicit opt-in, as on mavlink-move.</p>
   <h3>Input overrides</h3>
   <p><code>msg.payload.sysids</code> (comma list or array),
   <code>msg.payload.anchor</code> (<code>{lat, lon, alt}</code>),

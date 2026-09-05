@@ -81,7 +81,7 @@
     category: 'config',
     defaults: {
       name: { value: '' },
-      mode: { value: 'udp', required: true },
+      mode: { value: 'udp', validate: RED.mavlink.oneOf(['udp', 'tcp', 'serial']) },
       // The runtime hands bindHost/bindPort to the socket as saved, so both
       // must be present for the IP transports — blanking the host would bind
       // nothing nameable, not "all interfaces" (that is what 0.0.0.0 says).

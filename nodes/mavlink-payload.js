@@ -62,7 +62,7 @@ module.exports = function registerMavlinkPayload(RED) {
         }
 
         // The editor owns the defaults and the number rings.
-        const timeoutMs = Number(config.timeout);
+        const timeoutMs = Number(config.timeoutMs);
         const maxRetries = Number(config.maxRetries);
 
         const payload = msg.payload;
