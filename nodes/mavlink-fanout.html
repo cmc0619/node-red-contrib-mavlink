@@ -145,15 +145,7 @@
         // a saved negative paces nothing.
         validate: RED.mavlink.validateAtLeast(0),
       },
-      concurrency: {
-        value: 1,
-        // Two args so the reason renders (§14).
-        validate(v, _opt) {
-          const n = Number(v);
-          if (Number.isInteger(n) && n >= 1) return true;
-          return 'must be a whole number of in-flight members >= 1';
-        },
-      },
+      concurrency: { value: 1, validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
       stopOnError: { value: false },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       // Timeout and Retries exist on Send & confirm alone, the tier that waits;
@@ -169,7 +161,6 @@
       const node = this;
       const enumLoadToken = { cancelled: false };
       node._mavEnumLoadToken = enumLoadToken;
-      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       // Members table: one editableList row per member — sysid, N/E/Up
       // offsets in metres, and an optional raw wire-unit patch. Same stock
@@ -254,7 +245,7 @@
       function refreshVisibility() {
         const d = $('#node-input-delivery').val() || 'build';
         const sel = $('#node-input-selectionMode').val() || 'all';
-        let exec = $('#node-input-executionMode').val() || 'sequential';
+        const exec = $('#node-input-executionMode').val() || 'sequential';
         // Build requires the explicit list (see defaults.selectionMode) — grey
         // the selections that need a live peer table rather than red-ringing
         // after the fact. Broadcast goes with them: it only pairs with the
@@ -262,13 +253,6 @@
         $('#node-input-selectionMode option[value="all"], #node-input-selectionMode option[value="filter"]')
           .prop('disabled', d === 'build');
         $('#node-input-executionMode option[value="broadcast"]').prop('disabled', d === 'build');
-        // Disabling greys the option but keeps a retained value — a node
-        // switched from a Broadcast wire tier would save Build+Broadcast and
-        // refuse every message. Move it to the only mode Build supports.
-        if (d === 'build' && exec === 'broadcast') {
-          exec = 'sequential';
-          $('#node-input-executionMode').val(exec);
-        }
         // Build never uses a Connection now (the list is the directory), so
         // the picker hides like every other sender's does on Build (§6).
         $('#row-fanout-connection').toggle(d !== 'build');

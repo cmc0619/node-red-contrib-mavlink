@@ -287,15 +287,7 @@
       SERIAL_BAUDS.forEach((baud) => {
         $('<option></option>').val(baud).text(baud).appendTo($baud);
       });
-      $baud.val(String(this.baudRate === undefined ? '57600' : this.baudRate));
-
-      RED.mavlink.ensureConfigNodePicker(this, 'vehicle', 'mavlink-vehicle', 'node-config-input');
-      RED.mavlink.ensureConfigNodePicker(
-        this,
-        'localIdentity',
-        'mavlink-local-identity',
-        'node-config-input'
-      );
+      $baud.val(String(this.baudRate));
 
       // Extra identities: additionalIdentities is a *list* of
       // Local Identity config refs, and the stock config picker handles one

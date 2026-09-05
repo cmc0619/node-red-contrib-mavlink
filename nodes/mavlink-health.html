@@ -74,7 +74,6 @@
       },
       oneditprepare() {
         const node = this;
-        RED.mavlink.ensureConfigNodePicker(this, 'connection', 'mavlink-connection', 'node-input');
         // The Identity is a choice only when the Connection carries more than
         // one identity. A single-identity Connection has exactly one — its
         // Local Identity — so the field is hidden and oneditsave stores blank.

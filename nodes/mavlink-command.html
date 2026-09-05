@@ -422,8 +422,6 @@
       outdateCommandCatalog();
       const container = $('#node-input-params-container');
 
-      RED.mavlink.ensureConfigNodePicker(node, 'vehicle', 'mavlink-vehicle', 'node-input');
-      RED.mavlink.ensureConfigNodePicker(node, 'connection', 'mavlink-connection', 'node-input');
 
       // ── Role × tier visibility matrix (DESIGN.md §6) ──────────────────────
       function refreshVisibility() {
@@ -993,7 +991,6 @@
       $('#node-input-params').val(JSON.stringify(params));
     },
 
-    oneditcancel() {},
   });
 }());
 </script>
@@ -1105,7 +1102,7 @@
 
   <div class="form-row" id="row-cmd-timeoutMs">
     <label for="node-input-timeoutMs" style="width:120px">ACK timeout</label>
-    <input type="number" id="node-input-timeoutMs" style="width:80px"> ms
+    <input type="number" id="node-input-timeoutMs" min="1" style="width:80px"> ms
   </div>
 
   <div class="form-row" id="row-cmd-maxRetries">
