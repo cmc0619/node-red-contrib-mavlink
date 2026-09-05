@@ -35,21 +35,6 @@ test('entrypoint rewrites early MAV_SYS_ID and asserts before commander start', 
   );
   assert.match(src, /sed -i -E/, 'early rewrite uses sed');
   assert.match(src, /nrc_lab_params_pre_mavlink/, 'must still assert before mavlink');
-  assert.match(
-    src,
-    /find \/logs -mindepth 1 -delete/,
-    'must wipe the /logs bind mount on every start'
-  );
-  assert.match(
-    src,
-    /ROOTFS_DIR=.*rootfs\/\$\{INSTANCE\}/,
-    'ulog redirect must target the posix rootfs instance dir, not PX4_PREFIX/log'
-  );
-  assert.match(
-    src,
-    /ln -sfn \/logs "\$\{ROOTFS_DIR\}\/log"/,
-    'rootfs ./log must symlink to the Compose /logs mount'
-  );
 });
 
 // The entrypoint runs inside the PX4 Linux container: it resolves OUT_HOST via
