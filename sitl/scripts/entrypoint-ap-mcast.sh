@@ -80,6 +80,10 @@ LAT="$(awk -v b="$HOME_LAT" -v i="$INSTANCE" 'BEGIN { printf "%.8f", b + (i * 0.
 LON="$(awk -v b="$HOME_LON" -v i="$INSTANCE" 'BEGIN { printf "%.8f", b + (i * 0.0001) }')"
 
 mkdir -p /logs
+# New process = new session: clear the bind mount so prior DataFlash does not
+# accumulate across restarts. A stopped container still keeps logs on the host
+# until the next start.
+find /logs -mindepth 1 -delete
 AIRCRAFT="lab-ap-${SYSID}"
 RUN_DIR="/home/sitl/aircraft/${AIRCRAFT}"
 mkdir -p "${RUN_DIR}"

@@ -27,6 +27,10 @@ if [[ -z "${OUT_IP}" ]]; then
 fi
 
 mkdir -p /logs
+# New process = new session: clear the bind mount so prior DataFlash does not
+# accumulate across restarts. A stopped container still keeps logs on the host
+# until the next start.
+find /logs -mindepth 1 -delete
 AIRCRAFT="lab-ap-${SYSID}"
 RUN_DIR="/home/sitl/aircraft/${AIRCRAFT}"
 mkdir -p "${RUN_DIR}"
