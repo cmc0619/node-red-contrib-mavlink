@@ -105,10 +105,9 @@
       /* ── Connection and vehicle pickers ───────────────────────── */
 
       // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
-      // carries mission/fence/rally; PX4 (and unknown stacks) carry mission only.
+      // carries mission/fence/rally; every other stack carries mission only.
       const TYPES_BY_FIRMWARE = {
         ardupilot: [['mission', 'Mission (0)'], ['fence', 'Fence (1)'], ['rally', 'Rally (2)']],
-        px4:       [['mission', 'Mission (0)']],
         custom:    [['mission', 'Mission (0)']]
       };
 
