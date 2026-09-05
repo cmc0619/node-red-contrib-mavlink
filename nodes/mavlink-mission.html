@@ -104,32 +104,7 @@
 
       /* ── Connection and vehicle pickers ───────────────────────── */
 
-      // Mission types offered per firmware (§9 firmware gating, §11). ArduPilot
-      // carries mission/fence/rally; every other stack carries mission only.
-      const TYPES_BY_FIRMWARE = {
-        ardupilot: [['mission', 'Mission (0)'], ['fence', 'Fence (1)'], ['rally', 'Rally (2)']],
-        custom:    [['mission', 'Mission (0)']]
-      };
-
-      const $type = $('#node-input-missionType');
-      const $op   = $('#node-input-operation');
-
-      function repopulateTypes() {
-        const saved = $type.val();
-        // Effective firmware follows the shared catalog matrix (§6): the Build
-        // Firmware field on a concrete dialect, the Build Vehicle Profile
-        // escape's profile, or the connection's bound profile on wire tiers —
-        // frozen `vehicle` snapshots included (vehicleIdFrom).
-        const fw = RED.mavlink.resolveCatalogTarget().firmware;
-        const list = TYPES_BY_FIRMWARE[fw] || TYPES_BY_FIRMWARE.custom;
-        $type.empty();
-        list.forEach((entry) => {
-          $type.append($('<option>').val(entry[0]).text(entry[1]));
-        });
-        if (saved && list.some((e) => e[0] === saved)) {
-          $type.val(saved);
-        }
-      }
+      const $op = $('#node-input-operation');
 
       function refreshRows() {
         const op = $op.val();
@@ -170,7 +145,6 @@
         });
 
         refreshRows();
-        repopulateTypes();
       }
 
       $('#node-input-delivery').on('change', () => {
@@ -193,7 +167,6 @@
         refreshVisibility();
         RED.mavlink.reloadTargetCompId(node);
       });
-      $('#node-input-firmware').on('change', repopulateTypes);
       $op.on('change', refreshRows);
       // populateDialectSelect pins the saved dialect, then always fires the
       // dialect change handler — that one firing is the open's CompID load
@@ -217,7 +190,7 @@
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"><option value="download">Download</option><option value="upload">Upload</option><option value="clear">Clear</option></select></div>
-  <div class="form-row"><label for="node-input-missionType">Type</label><select id="node-input-missionType"></select></div>
+  <div class="form-row"><label for="node-input-missionType">Type</label><select id="node-input-missionType"><option value="mission">Mission (0)</option><option value="fence">Fence (1)</option><option value="rally">Rally (2)</option></select></div>
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row mavlink-mission-items"><label for="node-input-items" style="vertical-align:top;">Items (JSON)</label><textarea id="node-input-items" rows="8" style="width:70%; font-family:monospace; resize:vertical;" placeholder="non-empty JSON array, or set msg.payload.items"></textarea></div>
@@ -229,7 +202,7 @@
   <p>Downloads, uploads, or clears a mission, fence, or rally plan over the MAVLink mission protocol — the one exchange the vehicle drives.</p>
   <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
   <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
-  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type list is gated by the effective firmware — the Build Firmware field, the Build Vehicle Profile escape, or the connection's bound profile on wire tiers — because PX4 does not carry fence and rally the same way as ArduPilot.</p>
+  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type is not gated by firmware: a vehicle that does not carry fence or rally refuses the transfer itself, and the refusal rides to output 1.</p>
   <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>. An explicit empty array sends <code>MISSION_COUNT</code> 0 (the wire erase). A message that omits <code>items</code> over blank config does not invent an empty list. Use <b>Clear</b> to erase a plan on purpose.</p>
   <p><b>Clear</b> erases the selected plan on the vehicle. Selecting the Clear operation is the confirmation — any input triggers it.</p>
   <p>Set <code>msg.payload === false</code> to suppress. Status records are plain objects on output 1; they are not refused if wired into another action input — chain control is silence on output 0.</p>
