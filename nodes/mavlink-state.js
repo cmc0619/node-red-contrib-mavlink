@@ -1,7 +1,8 @@
 'use strict';
 
 const { createStateFeed, snapshotPeers } = require('../lib/state');
-const { firstDefined, dialectFromConnection } = require('../lib/addressing');
+const { firstDefined } = require('../lib/addressing/resolve');
+const { dialectFromConnection } = require('../lib/addressing/dialect');
 const {
   makeStatusRecord,
   applyActionStatus,

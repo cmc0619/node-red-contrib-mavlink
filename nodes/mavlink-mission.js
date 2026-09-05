@@ -30,19 +30,15 @@ const {
   failInput,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
+const { missionTypeValue, OPERATION } = require('../lib/mission/types');
 const {
-  createMachine,
-  missionTypeValue,
-  locks,
-  OPERATION,
   buildRequestList,
   buildCount,
   buildClearAll,
   buildItemInt,
-} = require('../lib/mission');
-const {
-  resolveDeliveryContext,
-} = require('../lib/addressing');
+} = require('../lib/mission/items');
+const { createMachine, locks } = require('../lib/mission');
+const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 
 module.exports = function registerMavlinkMission(RED) {
   function MavlinkMissionNode(config) {

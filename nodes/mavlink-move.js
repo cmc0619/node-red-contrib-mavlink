@@ -17,9 +17,9 @@ const {
   frameForReference,
   deriveSteerMode,
 } = require('../lib/move');
-const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command');
+const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
-const { resolveDeliveryContext } = require('../lib/addressing');
+const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
   shouldSuppress,
   makeStatusRecord,

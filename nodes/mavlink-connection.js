@@ -19,7 +19,8 @@
  * nodes are never re-resolved during teardown (§7).
  */
 
-const { Connection, STATE, PeerTable } = require('../lib/connection');
+const { Connection, STATE } = require('../lib/connection/runtime');
+const { PeerTable } = require('../lib/connection/peer-table');
 const { listSerialPorts } = require('../lib/connection/transport/serial');
 const { resolveIdentity } = require('../lib/identity/resolve');
 const { capBadge } = require('../lib/delivery');

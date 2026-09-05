@@ -15,7 +15,9 @@
  */
 
 const { capBadge } = require('../lib/delivery');
-const metadata = require('../lib/metadata');
+const { setCompiledCacheDir, clearCompiledCache } = require('../lib/metadata/bundled');
+const { XmlCatalog, dialectLibrary } = require('../lib/metadata/xml-catalog');
+const { catalogEnumsFromBundle, listEnumsCatalog } = require('../lib/metadata/enums-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 const { resolveDialect, knownDialects } = require('../lib/vehicle');
 
@@ -92,8 +94,8 @@ module.exports = function registerMavlinkVehicle(RED) {
     registerDialectCatalogRoute(RED, {
       path: ENUMS_ROUTE,
       fromBundle: (bundle, dialect, req) =>
-        metadata.catalogEnumsFromBundle(bundle, dialect, req.query.names),
-      fromDialect: (dialect, req) => metadata.listEnumsCatalog(dialect, req.query.names),
+        catalogEnumsFromBundle(bundle, dialect, req.query.names),
+      fromDialect: (dialect, req) => listEnumsCatalog(dialect, req.query.names),
     });
     _enumsRouteRegistered = true;
   }
@@ -108,9 +110,9 @@ module.exports = function registerMavlinkVehicle(RED) {
    * GET  /mavlink/xml-catalog/compare  informational diff vs the seed dialect
    */
   if (!_xmlCatalogRouteRegistered) {
-    metadata.setCompiledCacheDir(compiledCacheDir(RED));
+    setCompiledCacheDir(compiledCacheDir(RED));
 
-    const newCatalog = () => new metadata.XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
+    const newCatalog = () => new XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
 
     // GET list: needs read permission (§6). Never discloses the absolute base
     // dir — only the dialect names and snapshot dates the Version pulldown offers.
@@ -120,7 +122,7 @@ module.exports = function registerMavlinkVehicle(RED) {
       (_req, res) => {
         try {
           const catalog = newCatalog();
-          const library = metadata.dialectLibrary(catalog);
+          const library = dialectLibrary(catalog);
           res.json({ ok: true, dialects: library.dialects });
         } catch (err) {
           res.status(500).json({ ok: false, error: err.message, code: err.code });
@@ -182,7 +184,7 @@ module.exports = function registerMavlinkVehicle(RED) {
       `${DIALECT_CACHE_ROUTE}/rebuild`,
       RED.auth.needsPermission('mavlink.write'),
       (_req, res) => {
-        res.json({ ok: true, cleared: metadata.clearCompiledCache() });
+        res.json({ ok: true, cleared: clearCompiledCache() });
       }
     );
 
@@ -210,7 +212,7 @@ module.exports = function registerMavlinkVehicle(RED) {
 
     let problem = null;
 
-    /** @type {import('../lib/metadata').DialectBundle|null} */
+    /** @type {import('../lib/metadata/compile').DialectBundle|null} */
     node._bundle = null;
 
     try {
@@ -241,7 +243,7 @@ module.exports = function registerMavlinkVehicle(RED) {
     /**
      * The compiled DialectBundle for this profile.
      *
-     * @returns {import('../lib/metadata').DialectBundle}
+     * @returns {import('../lib/metadata/compile').DialectBundle}
      * @throws {Error} when the configured dialect and revision did not compile
      */
     node.getDialect = () => {

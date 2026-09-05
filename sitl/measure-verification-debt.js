@@ -16,18 +16,18 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const ROOT = path.resolve(__dirname, '..');
-const { Connection, BAND } = require(path.join(ROOT, 'lib/connection'));
-const { loadBundled } = require(path.join(ROOT, 'lib/metadata'));
-const { buildCommandLong } = require(path.join(ROOT, 'lib/command/carrier'));
-const { waitForCompletion } = require(path.join(ROOT, 'lib/command/completion'));
-const { COMPLETION } = require(path.join(ROOT, 'lib/command/presets'));
+const { Connection } = require('../lib/connection/runtime');
+const { BAND } = require('../lib/connection/bands');
+const { loadBundled } = require('../lib/metadata/bundled');
+const { buildCommandLong } = require('../lib/command/carrier');
+const { waitForCompletion } = require('../lib/command/completion');
+const { COMPLETION } = require('../lib/command/presets');
 const {
   buildMoveMessage,
   createMoveStream,
   MAV_FRAME,
-} = require(path.join(ROOT, 'lib/move'));
-const { buildRepositionMessage, DO_REPOSITION } = require(path.join(ROOT, 'lib/move/reposition'));
+} = require('../lib/move');
+const { buildRepositionMessage, DO_REPOSITION } = require('../lib/move/reposition');
 
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-vdebt-'));
 const OUT = path.join(WORK, 'verification-debt-results.json');

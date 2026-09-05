@@ -6,22 +6,16 @@ const {
   carrierMattersFor,
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
-const {
-  ackWaiterFor,
-  ackRecordFields,
-  cancelSlot,
-  resolveFrame,
-} = require('../lib/command');
-const {
-  resolveDeliveryContext,
-} = require('../lib/addressing');
+const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { resolveFrame } = require('../lib/command/carrier');
+const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
   shouldSuppress,
   makeStatusRecord,
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const { loadBundled } = require('../lib/metadata');
+const { loadBundled } = require('../lib/metadata/bundled');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
 const FIELD_TIPS_ROUTE = '/mavlink/payload/field-tips';

@@ -22,7 +22,7 @@
  */
 
 const { capBadge } = require('../lib/delivery');
-const { isBlank } = require('../lib/addressing');
+const { isBlank } = require('../lib/addressing/resolve');
 
 /**
  * Minimum interval (ms) between status-badge writes.

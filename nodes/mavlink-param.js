@@ -44,9 +44,7 @@ const {
   applyActionStatus,
   failInput,
 } = require('../lib/delivery');
-const {
-  resolveDeliveryContext,
-} = require('../lib/addressing');
+const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 
 /** Admin route for the parameter definition catalog. */
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';

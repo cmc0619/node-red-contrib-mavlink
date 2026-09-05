@@ -2,16 +2,11 @@
 
 const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive } = require('../lib/fanout');
-const { isBlank } = require('../lib/addressing');
+const { isBlank } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
 const { REPOSITION_FLAG_CHANGE_MODE } = require('../lib/move/reposition');
-const {
-  getPreset,
-  buildParamArray,
-  buildCommandInt,
-  DEFAULT_FRAME,
-  scaleLatLon,
-} = require('../lib/command');
+const { getPreset, buildParamArray } = require('../lib/command/presets');
+const { buildCommandInt, DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
 
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.

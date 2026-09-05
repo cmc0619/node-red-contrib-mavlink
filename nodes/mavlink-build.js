@@ -39,8 +39,8 @@ const {
   shouldSuppress,
   applyActionStatus,
 } = require('../lib/delivery');
-const { dialectForTier } = require('../lib/addressing');
-const { catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata');
+const { dialectForTier } = require('../lib/addressing/dialect');
+const { catalogMessagesFromBundle, listMessagesCatalog } = require('../lib/metadata/messages-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
 /** Module-scope guard — the constructor is recreated each factory call. */
@@ -76,7 +76,7 @@ module.exports = function registerMavlinkBuild(RED) {
     const repeatMs = Number(config.repeatMs);
     let repeatTimer = null;
 
-    /** @type {import('../lib/metadata').DialectBundle} */
+    /** @type {import('../lib/metadata/compile').DialectBundle} */
     const bundle = dialectForTier(RED, tier, config, connectionNode);
     const messageMeta = bundle.messages[messageName];
     const bigIntFields = messageMeta.fields
