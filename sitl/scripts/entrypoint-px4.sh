@@ -20,6 +20,10 @@ if [[ -f /params/px4-logging.env ]]; then
 fi
 
 mkdir -p /logs
+# New process = new session: clear the bind mount so prior ulogs do not
+# accumulate across restarts. A stopped container still keeps logs on the host
+# until the next start.
+find /logs -mindepth 1 -delete
 
 if [[ -d /opt/px4-gazebo ]]; then
   PX4_PREFIX=/opt/px4-gazebo

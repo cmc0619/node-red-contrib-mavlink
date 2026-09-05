@@ -100,7 +100,9 @@ docker compose logs -f ap-1
 **Flight logs (arm-only)**  
 ArduPilot starts with `LOG_DISARMED 0`. PX4 sets `SDLOG_MODE=1` (arm→disarm) via
 `params/px4-logging.env`. Entrypoints symlink firmware log dirs to the Compose
-`./logs/<service>` mount.
+`./logs/<service>` mount, and **wipe that directory on every container start**
+so prior sessions do not accumulate. Stop (without restart) still leaves the
+last session on the host for pull; the next start clears it.
 
 ```bash
 touch logs/ap-1/.arm-marker          # immediately before arming
