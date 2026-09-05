@@ -38,8 +38,7 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "dialectRevision": "seed",
-    "additionalDialects": "",
-    "paramDefsUrl": ""
+    "additionalDialects": ""
   },
   {
     "id": "ex10-connection",

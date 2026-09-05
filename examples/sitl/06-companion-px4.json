@@ -37,7 +37,6 @@
     "dialect": "common",
     "defaultTargetSystem": 21,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": "",
     "dialectRevision": "seed",
     "additionalDialects": ""
   },

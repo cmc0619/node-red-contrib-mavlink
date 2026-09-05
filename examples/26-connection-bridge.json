@@ -38,8 +38,7 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "dialectRevision": "seed",
-    "additionalDialects": "",
-    "paramDefsUrl": ""
+    "additionalDialects": ""
   },
   {
     "id": "ex26-vehicle-mirror",
@@ -51,8 +50,7 @@
     "defaultTargetSystem": 1,
     "defaultTargetComponent": 1,
     "dialectRevision": "seed",
-    "additionalDialects": "",
-    "paramDefsUrl": ""
+    "additionalDialects": ""
   },
   {
     "id": "ex26-connection-src",

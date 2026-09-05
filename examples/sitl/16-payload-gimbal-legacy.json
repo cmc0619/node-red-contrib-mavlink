@@ -37,7 +37,6 @@
     "dialect": "ardupilotmega",
     "defaultTargetSystem": 31,
     "defaultTargetComponent": 1,
-    "paramDefsUrl": "",
     "dialectRevision": "seed",
     "additionalDialects": ""
   },

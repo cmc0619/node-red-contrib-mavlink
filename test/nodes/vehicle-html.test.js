@@ -76,8 +76,7 @@ test('seed refresh is button-only and commits straight to the branch, behind the
     'the suite gates the push');
 });
 
-test('paramDefsUrl is persisted and shown as an input', () => {
-  assert.match(html, /paramDefsUrl:\s*\{\s*value:\s*''\s*\}/);
+test('the param defs URL is a dialog input the Update button reads', () => {
   assert.match(html, /<input type="text" id="node-config-input-paramDefsUrl"/);
 });
 
