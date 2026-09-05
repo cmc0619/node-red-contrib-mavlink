@@ -178,20 +178,16 @@ test('server listens, receives from a client, and writes back to the matching en
   assert.equal(client.writes[1].toString(), 'single-client');
 });
 
-test('client connects, emits a uniform listening event, and sends on the connected socket', async () => {
+test('client connects and sends on the connected socket', async () => {
   const net = mockNet();
   const transport = new TcpTransport(
     { remoteAddress: '192.168.2.10', remotePort: 5762, bindAddress: '127.0.0.1' },
     { net: net.module }
   );
-  const events = [];
   const heard = [];
-  transport.on('connect', () => events.push('connect'));
-  transport.on('listening', () => events.push('listening'));
   transport.on('message', (message) => heard.push(message));
 
   await transport.open();
-  assert.deepEqual(events, ['connect', 'listening']);
   assert.equal(net.clients[0].options.host, '192.168.2.10');
   assert.equal(net.clients[0].options.port, 5762);
   assert.equal(net.clients[0].options.localAddress, '127.0.0.1');

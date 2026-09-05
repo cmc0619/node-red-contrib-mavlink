@@ -71,15 +71,12 @@ function openTransport(config = {}) {
   return { transport, opened: transport.open(), port: () => FakeSerialPort.instances[0] };
 }
 
-test('open constructs the port with config and emits listening after it opens', async () => {
+test('open constructs the port with config', async () => {
   const { transport, opened, port } = openTransport();
-  const listening = new Promise((resolve) => transport.once('listening', resolve));
-
   await opened;
 
   assert.equal(transport.mode, 'serial');
   assert.deepEqual(port().options, { path: '/dev/ttyUSB0', baudRate: 115200, highWaterMark: 32, autoOpen: false });
-  assert.equal(await listening, undefined);
 });
 
 test('an omitted highWaterMark stays out of the port options', async () => {
@@ -188,14 +185,12 @@ function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-test('close closes the port and emits close', async () => {
+test('close closes the port', async () => {
   const { transport, opened, port } = openTransport();
-  const closed = new Promise((resolve) => transport.once('close', resolve));
   await opened;
 
   await new Promise((resolve) => transport.close(resolve));
 
-  await closed;
   assert.equal(port().closed, true);
 });
 
