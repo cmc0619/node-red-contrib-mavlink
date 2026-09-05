@@ -84,7 +84,7 @@
         validate: whenAnchorMode('fixed', (v, _opt) => finiteRequired(v) || 'needs an altitude — blank would ride as ground level'),
       },
       headingDeg: { value: '', validate: RED.mavlink.validateRange(0, 360) },
-      pitchDeg: { value: 0, validate: RED.validators.number() },
+      pitchDeg: { value: 0, validate: RED.mavlink.validateRange(-180, 180) },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       changeMode: { value: false },
       intervalMs: { value: 100, validate: RED.mavlink.validateAtLeast(0) },
