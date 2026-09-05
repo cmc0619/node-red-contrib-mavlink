@@ -84,7 +84,7 @@ test('catalogEnumsFromBundle adds requested names to the default set', () => {
   });
 });
 
-test('a bundled dialect's enum catalog carries its entries', () => {
+test('a bundled dialect enum catalog carries its entries', () => {
   const catalog = catalogEnumsFromBundle(loadBundled('ardupilotmega'), 'ardupilotmega', 'MAV_TYPE');
   const expectedCount = loadBundled('ardupilotmega').enums.MAV_TYPE.entries.length;
 
