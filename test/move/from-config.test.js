@@ -2,7 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { positionFrom, velocityFrom, valueFrom } = require('../../lib/move');
+const { positionFrom, velocityFrom } = require('../../lib/move');
+const { valueFrom } = require('../../lib/addressing/resolve');
 
 test('positionFrom maps editor keys', () => {
   assert.deepEqual(
