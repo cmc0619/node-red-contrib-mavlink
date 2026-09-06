@@ -128,12 +128,12 @@ test('a verified peer ahead of local clock raises the outbound floor for every s
   // a DIFFERENT, not-yet-met peer — must not keep reading as if that peer's
   // clock never existed, or that new peer's own first-contact floor
   // (its own now - one minute) can reject our very first packet to it.
-  const s = new SigningState({ now: () => NOW_MS });
+  const state = new SigningState({ now: () => NOW_MS });
   const ahead = NOW_UNITS + 2 * ONE_MINUTE_UNITS;
-  const v = s.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead }));
-  assert.equal(v.accept, true);
+  const verdict = state.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead }));
+  assert.equal(verdict.accept, true);
 
-  const outbound = s.nextOutboundTimestamp(1, 1); // an unrelated identity/stream
+  const outbound = state.nextOutboundTimestamp(1, 1); // an unrelated identity/stream
   assert.ok(
     outbound >= ahead,
     `expected the outbound floor to track the verified peer's clock (${ahead}), got ${outbound}`
@@ -144,17 +144,17 @@ test('an invalid or unsigned accept never raises the outbound floor', () => {
   // Only a cryptographically verified packet is a time reference worth
   // trusting — the same rule this module already applies to the per-stream
   // inbound store (a forged packet must not raise any floor, §7 "On accept").
-  const s = new SigningState({ now: () => NOW_MS, acceptInvalid: true });
+  const state = new SigningState({ now: () => NOW_MS, acceptInvalid: true });
   const ahead = NOW_UNITS + 2 * ONE_MINUTE_UNITS;
 
-  s.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead, signatureValid: false }));
-  const afterInvalid = s.nextOutboundTimestamp(1, 1);
+  state.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead, signatureValid: false }));
+  const afterInvalid = state.nextOutboundTimestamp(1, 1);
   assert.ok(afterInvalid < ahead, 'an invalid-but-admitted packet must not raise the floor');
 
-  s.acceptInbound(
+  state.acceptInbound(
     frame({ sysid: 9, compid: 2, timestamp: ahead, signaturePresent: false, messageName: 'HEARTBEAT' })
   );
-  const afterUnsigned = s.nextOutboundTimestamp(1, 2);
+  const afterUnsigned = state.nextOutboundTimestamp(1, 2);
   assert.ok(afterUnsigned < ahead, 'an unsigned packet must not raise the floor either');
 });
 

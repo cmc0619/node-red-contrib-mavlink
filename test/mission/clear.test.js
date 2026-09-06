@@ -97,7 +97,25 @@ test('clear ignores an ack explicitly addressed to a different GCS on a shared l
   machine.cancel();
 });
 
-test('clear accepts an ack with no target fields (v1 / unaddressed) and one addressed to us', async () => {
+test('clear accepts an unaddressed ack (target 0/0) when the attribution gate is armed', async () => {
+  // 0 is the wire's "unaddressed" — the same contract ackAddressedTo applies
+  // to COMMAND_ACK — so a vehicle that names no station still settles us.
+  const stub = new StubConnection();
+  stub._sourceIds = { sysid: 255, compid: 190 };
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_CLEAR_ALL') {
+      deliver({
+        name: 'MISSION_ACK',
+        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE, target_system: 0, target_component: 0 },
+      });
+    }
+  });
+
+  const outcome = await new MissionClear(clearOpts(stub, { sourceIds: stub.resolveSourceIds() })).start();
+  assert.equal(outcome.result, 'succeeded');
+});
+
+test('clear accepts an ack addressed to this station', async () => {
   const stub = new StubConnection();
   stub._sourceIds = { sysid: 255, compid: 190 };
   stub.onSend((message, deliver) => {

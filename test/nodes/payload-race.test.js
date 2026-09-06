@@ -40,47 +40,47 @@ function makeElData(tag) {
 }
 
 function wrap(el) {
-  const w = {
+  const wrapper = {
     _el: el,
     length: 1,
     attr(name, value) {
       if (value === undefined) return el.attrs[name];
       el.attrs[name] = value;
-      return w;
+      return wrapper;
     },
-    addClass(c) { el.classes.add(c); return w; },
+    addClass(c) { el.classes.add(c); return wrapper; },
     val(v) {
       if (v === undefined) return el._val;
       el._val = v;
-      return w;
+      return wrapper;
     },
     text(t) {
       if (t === undefined) return el._text;
       el._text = t;
-      return w;
+      return wrapper;
     },
     append(child) {
-      const c = child && (child._el || child);
-      if (c && typeof c === 'object') el.children.push(c);
-      return w;
+      const data = child && (child._el || child);
+      if (data && typeof data === 'object') el.children.push(data);
+      return wrapper;
     },
-    empty() { el.children = []; return w; },
-    toggle() { return w; },
-    show: () => w, hide: () => w, css: () => w, prop: () => w, removeAttr: () => w,
+    empty() { el.children = []; return wrapper; },
+    toggle() { return wrapper; },
+    show: () => wrapper, hide: () => wrapper, css: () => wrapper, prop: () => wrapper, removeAttr: () => wrapper,
     is: () => false,
     on(ev, fn) {
       const key = ev.split('.')[0];
       (el.handlers[key] = el.handlers[key] || []).push(fn);
-      return w;
+      return wrapper;
     },
     trigger(ev) {
       (el.handlers[ev] || []).slice().forEach((fn) => fn.call(el));
-      return w;
+      return wrapper;
     },
-    each() { return w; },
+    each() { return wrapper; },
     find() { return { length: 0, each() { return this; } }; },
   };
-  return w;
+  return wrapper;
 }
 
 function makeHarness() {
@@ -101,7 +101,7 @@ function makeHarness() {
       const matches = [];
       (function walk(node) {
         (node.children || []).forEach((c) => {
-          if (c.classes && c.classes.has(cls)) matches.push(c);
+          if (c.classes?.has(cls)) matches.push(c);
           walk(c);
         });
       })(root2 || makeElData(''));
@@ -160,9 +160,9 @@ function makeHarness() {
     registered['mavlink-payload'].oneditprepare.call(node);
   }
 
-  /** The rendered field element for `key`, or undefined if not mounted. */
+  /** The rendered field element for `key`, or null if not mounted. */
   function field(key) {
-    let found;
+    let found = null;
     (function walk(node) {
       (node.children || []).forEach((c) => {
         if (c.attrs['data-field'] === key) found = c;
@@ -177,7 +177,7 @@ function makeHarness() {
     const keys = [];
     (function walk(node) {
       (node.children || []).forEach((c) => {
-        if (c.classes && c.classes.has('mav-payload-field')) keys.push(c.attrs['data-field']);
+        if (c.classes?.has('mav-payload-field')) keys.push(c.attrs['data-field']);
         walk(c);
       });
     })(registry.get('#payload-fields') || makeElData(''));
@@ -202,77 +202,77 @@ function fieldTips(fields) {
 }
 
 test('a stale field-tips response from a verb the operator already left does not repaint the fields (mavlink-audit-20260905 #13)', () => {
-  const h = makeHarness();
-  h.openDialog(payloadNode());
+  const harness = makeHarness();
+  harness.openDialog(payloadNode());
 
   // First load, for 'photo'.
-  h.$('#node-input-dialect').trigger('change');
-  const first = h.forUrl('/mavlink/payload/field-tips')[0];
+  harness.$('#node-input-dialect').trigger('change');
+  const first = harness.forUrl('/mavlink/payload/field-tips')[0];
   assert.ok(first, 'dialect change loads the field tips');
 
   // Operator moves to 'zoom' before the photo response lands.
-  h.$('#node-input-verb').val('zoom');
-  h.$('#node-input-verb').trigger('change');
-  const second = h.forUrl('/mavlink/payload/field-tips')[1];
+  harness.$('#node-input-verb').val('zoom');
+  harness.$('#node-input-verb').trigger('change');
+  const second = harness.forUrl('/mavlink/payload/field-tips')[1];
   assert.ok(second, 'verb change starts its own field-tips fetch');
 
   // zoom's (later, correct) response lands first...
   second.ok(fieldTips({ zoomLevel: { default: 0 } }));
-  assert.deepEqual(h.fieldKeys(), ['zoomLevel']);
+  assert.deepEqual(harness.fieldKeys(), ['zoomLevel']);
 
   // ...then photo's (earlier, now-stale) response arrives late.
   first.ok(fieldTips({ speed: { default: 0 } }));
-  assert.deepEqual(h.fieldKeys(), ['zoomLevel'],
+  assert.deepEqual(harness.fieldKeys(), ['zoomLevel'],
     'a response for an abandoned verb selection must not repaint the fields');
 });
 
 test('field-tips responses that resolve in request order still render normally', () => {
-  const h = makeHarness();
-  h.openDialog(payloadNode());
+  const harness = makeHarness();
+  harness.openDialog(payloadNode());
 
-  h.$('#node-input-dialect').trigger('change');
-  h.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
-  assert.deepEqual(h.fieldKeys(), ['speed']);
+  harness.$('#node-input-dialect').trigger('change');
+  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  assert.deepEqual(harness.fieldKeys(), ['speed']);
 
-  h.$('#node-input-verb').val('zoom');
-  h.$('#node-input-verb').trigger('change');
-  h.forUrl('/mavlink/payload/field-tips')[1].ok(fieldTips({ zoomLevel: { default: 0 } }));
-  assert.deepEqual(h.fieldKeys(), ['zoomLevel']);
+  harness.$('#node-input-verb').val('zoom');
+  harness.$('#node-input-verb').trigger('change');
+  harness.forUrl('/mavlink/payload/field-tips')[1].ok(fieldTips({ zoomLevel: { default: 0 } }));
+  assert.deepEqual(harness.fieldKeys(), ['zoomLevel']);
 });
 
 test('a value typed into a field survives an unrelated Vehicle Profile change on the same verb (mavlink-audit-20260905 #14)', () => {
-  const h = makeHarness();
-  h.openDialog(payloadNode());
+  const harness = makeHarness();
+  harness.openDialog(payloadNode());
 
-  h.$('#node-input-dialect').trigger('change');
-  h.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
-  assert.equal(h.field('speed').val(), 0);
+  harness.$('#node-input-dialect').trigger('change');
+  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  assert.equal(harness.field('speed').val(), 0);
 
   // The operator types into the rendered control.
-  h.field('speed').val(42);
+  harness.field('speed').val(42);
 
   // An unrelated control changes; it re-renders the same verb's fields
   // (dialect unchanged, so the field-tips response looks the same).
-  h.$('#node-input-vehicle').trigger('change');
-  const reload = h.forUrl('/mavlink/payload/field-tips')[1];
+  harness.$('#node-input-vehicle').trigger('change');
+  const reload = harness.forUrl('/mavlink/payload/field-tips')[1];
   assert.ok(reload, 'vehicle change reloads field tips');
   reload.ok(fieldTips({ speed: { default: 0 } }));
 
-  assert.equal(h.field('speed').val(), 42,
+  assert.equal(harness.field('speed').val(), 42,
     'the typed value must not be reverted to the dialog-open stash');
 });
 
 test('a value typed into a field survives an unrelated Dialect change on the same verb (mavlink-audit-20260905 #14)', () => {
-  const h = makeHarness();
-  h.openDialog(payloadNode());
+  const harness = makeHarness();
+  harness.openDialog(payloadNode());
 
-  h.$('#node-input-dialect').trigger('change');
-  h.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  harness.$('#node-input-dialect').trigger('change');
+  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
 
-  h.field('speed').val(7);
-  h.$('#node-input-dialect').trigger('change');
-  h.forUrl('/mavlink/payload/field-tips')[1].ok(fieldTips({ speed: { default: 0 } }));
+  harness.field('speed').val(7);
+  harness.$('#node-input-dialect').trigger('change');
+  harness.forUrl('/mavlink/payload/field-tips')[1].ok(fieldTips({ speed: { default: 0 } }));
 
-  assert.equal(h.field('speed').val(), 7,
+  assert.equal(harness.field('speed').val(), 7,
     'the typed value must not be reverted to the dialog-open stash');
 });
