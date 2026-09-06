@@ -8,8 +8,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const mav = require('node-mavlink');
 const { loadBundled } = require('../../lib/metadata/bundled');
 const { createWire } = require('../../lib/connection/wire');
+const { synthesizeWireClasses } = require('../../lib/connection/wire-classes');
 
 const EP_A = { address: '10.0.0.1', port: 14550 };
 const EP_B = { address: '10.0.0.2', port: 14551 };
@@ -301,4 +303,73 @@ test('a CRC-corrupt frame on a known msgid is counted; clean and UNKNOWN frames 
 
   assert.equal(minimal.decode(corrupt, EP_B).length, 0);
   assert.equal(minimal.crcFailureCount(), 2, 'endpoints share one Connection-wide count');
+});
+
+test('one endpoint sending bytes with no start marker cannot grow its buffer without bound', () => {
+  // node-mavlink's own splitter retains its entire buffer, unbounded, once no
+  // 0xFE/0xFD appears anywhere in it — a sender that never emits either byte
+  // (adversarial, or a misconfigured device sharing the port) would otherwise
+  // grow that one endpoint's retained bytes forever. The per-Connection
+  // decoder-count cap does not help: only one endpoint exists here.
+  //
+  // No internal accessor is exposed to read a splitter's retained byte count
+  // (this codebase tests black-box), so the mechanism itself is observed
+  // instead: every retention is one `Buffer.concat([old, chunk])` inside
+  // node-mavlink's splitter. Uncapped, each of the 100 calls below concats
+  // onto an ever-growing `old`, so the largest single concat approaches
+  // 100 x CHUNK. Capped, `old` is reset to empty before every call, so no
+  // concat ever exceeds one chunk.
+  const CHUNK = 100_000;
+  const CALLS = 100;
+  const originalConcat = Buffer.concat;
+  let maxConcatSize = 0;
+  Buffer.concat = (list, totalLength) => {
+    const result = originalConcat(list, totalLength);
+    if (result.length > maxConcatSize) maxConcatSize = result.length;
+    return result;
+  };
+  try {
+    const minimal = createWire({ bundle: loadBundled('minimal') });
+    const noStartMarker = Buffer.alloc(CHUNK, 0x41); // 'A' — never 0xFE or 0xFD
+    for (let i = 0; i < CALLS; i += 1) {
+      minimal.decode(noStartMarker, EP_A);
+    }
+  } finally {
+    Buffer.concat = originalConcat;
+  }
+  assert.ok(
+    maxConcatSize < CHUNK * 2,
+    `expected no concat past ~one chunk (${CHUNK}), the largest was ${maxConcatSize} ` +
+      `(uncapped retention would reach close to ${CHUNK * CALLS})`
+  );
+});
+
+test('a v2 frame with an unsupported incompatibility flag is discarded even with a valid CRC', () => {
+  // The wire spec requires silently discarding a packet whose incompat flags
+  // carry a bit this driver does not implement (only IFLAG_SIGNED, 0x01, is
+  // implemented) — an unrecognized bit means the wire format itself may
+  // differ in a way the CRC alone does not catch. Recompute the CRC after
+  // flipping the bit (the same way lib/connection/wire.js's own serialize()
+  // recomputes it for the zero-payload fix) so a stale, mismatched CRC is not
+  // what causes the rejection.
+  const minimal = createWire({ bundle: loadBundled('minimal') });
+  const full = heartbeatFrame(minimal);
+  assert.equal(minimal.decode(Buffer.from(full), EP_A).length, 1, 'the unmodified frame decodes');
+
+  const heartbeatMagic = synthesizeWireClasses(mav, loadBundled('minimal')).find(
+    (c) => c.MSG_NAME === 'HEARTBEAT'
+  ).MAGIC_NUMBER;
+  const corrupted = Buffer.from(full);
+  corrupted[2] |= 0x02; // an incompat bit no MAVLink 2 implementation here defines
+  corrupted.writeUInt16LE(
+    mav.x25crc(corrupted, 1, mav.MavLinkProtocol.CHECKSUM_LENGTH, heartbeatMagic),
+    corrupted.length - mav.MavLinkProtocol.CHECKSUM_LENGTH
+  );
+
+  assert.equal(minimal.decode(corrupted, EP_B).length, 0, 'the frame is discarded, not decoded');
+  assert.equal(
+    minimal.crcFailureCount(),
+    0,
+    'an unsupported incompat flag is a different verdict than corruption'
+  );
 });
