@@ -45,10 +45,14 @@
         value: '',
         validate(v, _opt) {
           if (RED.mavlink.isBlank(v)) return true;
+          // No early-out for an empty token: parseSysidList (lib/fanout)
+          // numbers every comma-split entry verbatim, so a stray/trailing
+          // comma ("1,2,") reads as sysid 0 — broadcast, not a vehicle — and
+          // formationTargets sorts it to slot 0, the anchor position itself
+          // (mavlink-audit-20260905 #17). A blank entry is the same typo as
+          // an out-of-range one and must red the same way.
           return String(v).split(',').every((part) => {
-            part = part.trim();
-            if (!part) return true;
-            const n = Number(part);
+            const n = Number(part.trim());
             return Number.isInteger(n) && n >= 1 && n <= 255;
           }) || 'each entry must be a SysID 1–255, comma-separated';
         },

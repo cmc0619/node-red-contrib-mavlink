@@ -32,6 +32,24 @@ test('spacing validator is the only guard: finite and > 0, blank red — with th
   assert.match(String(validate.call({}, 'abc')), /> 0/, 'non-numeric text reds');
 });
 
+test('sysids validator reds a blank entry from a stray comma, not just an out-of-range one (mavlink-audit-20260905 #17)', () => {
+  // parseSysidList (lib/fanout) numbers every comma-split entry verbatim, so
+  // an empty entry from a stray/trailing comma reads as sysid 0 on the wire
+  // — broadcast, not a vehicle — and formationTargets sorts it to slot 0,
+  // the anchor position itself. The editor is the only layer that can catch
+  // the typo before it becomes a live broadcast command.
+  const defaults = loadNodeDefaults('mavlink-formation');
+  const validate = defaults.sysids.validate;
+
+  assert.equal(validate.call({}, ''), true, 'blank means every online member (unchanged)');
+  assert.equal(validate.call({}, '1,2,3'), true);
+  assert.equal(validate.call({}, '1, 2, 3'), true, 'whitespace around a real entry still trims');
+  assert.match(String(validate.call({}, '1,2,')), /SysID 1–255/, 'a trailing comma must not silently become sysid 0');
+  assert.match(String(validate.call({}, '1,,2')), /SysID 1–255/, 'an embedded empty entry reds too');
+  assert.match(String(validate.call({}, ',1,2')), /SysID 1–255/, 'a leading comma reds too');
+  assert.match(String(validate.call({}, '1,256')), /SysID 1–255/, 'the existing range check still holds');
+});
+
 test('closed vocabularies red on membership: shape, anchorMode, delivery (§5 editor half)', () => {
   // The runtime dispatches these tokens with affirmative cases only, so a
   // hand-edited stray deploys a node that selects no behavior — the editor is
