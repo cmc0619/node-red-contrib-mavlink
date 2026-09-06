@@ -4,6 +4,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [0.6.1] "Cleaning house" - 2026-09-06
+
+### Removed
+
+- **Barrel index files and redundant re-exports.** Modules that only re-exported
+  definitions are removed; internal consumers require the owning modules directly.
+- **Dead runtime surface, phantom checks, and unused exports.** Swept dead
+  re-emit ladders, unused heartbeat fields, unread parameters, and unreachable
+  defensive guards across connection, signing, health, command, fanout, and
+  payload runtimes.
+- **Obsolete test-only runtime hooks.** Retired test-only surface from the production
+  runtime; tests inspect observable behavior through public APIs and events.
+
+### Changed
+
+- **Unified shared ack definitions.** Fan-out, Formation, Move, Command, and
+  Payload align on consistent `timeoutMs` and `maxRetries` properties.
+- **Command ack confirmation ownership.** Command acknowledgement and retry flows
+  are consolidated under a single owner (`AckWaiter`), with Move reporting failed
+  re-sends directly.
+- **Mission ack attribution and error handling.** Mission transfers properly
+  attribute incoming ACKs, accept broadcast replies, and fence transfer steps to
+  prevent unhandled rejections. Step timeouts are saved consistently as `timeoutMs`.
+- **Command LAND/RTL completion.** Prefers `MAV_LANDED_STATE` over altitude heuristics,
+  ensuring altitude fallback logic does not prematurely report an armed vehicle as landed.
+- **Wire and transport safeguards.** Endpoints enforce caps on unbounded pending
+  buffers and discard unsupported MAVLink v2 incompatibility flags. Stalled TCP socket
+  teardown is bounded rather than blocking indefinitely on `FIN`. System-scoped component 0
+  transmissions properly fan out to all components of that system.
+- **Dialect caching and metadata lookup.** Compiled-dialect bundle entries carry SHA-256
+  stamps derived from inputs shaping the bundle, and enum lookups read the compiled index directly.
+- **Editor dialog stability.** Fixed field-tips race conditions in the payload editor,
+  stabilized static mission type lists, and improved configuration-node reference validation.
+
 ## [0.6.0] "Pure" - 2026-09-02
 
 ### Removed
