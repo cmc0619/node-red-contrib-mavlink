@@ -150,11 +150,12 @@ test('TAKEOFF completion stays pending on an absolute frame until the AMSL targe
 const LAND_PARAMS = [0, 0, 0, 0, 0, 0, 0];
 
 test('LAND completion is not fooled by a low-hover altitude when EXTENDED_SYS_STATE says IN_AIR', () => {
-  // Armed, hovering close to home (400 mm — inside the old altitude
-  // threshold), but the vehicle's own landed detector says airborne.
+  // Hovering close to home (400 mm — inside the old altitude threshold), but
+  // the vehicle's own landed detector says airborne. No `armed` on purpose:
+  // the altitude fallback's armed gate would also answer "not landed" here,
+  // so leaving it out keeps this test pinned to the IN_AIR branch alone.
   const pt = new StubPeerTable();
   pt.setComponent(1, 1, {
-    armed: true,
     position: { relativeAlt: 400 },
     landed: { landedState: 2 }, // MAV_LANDED_STATE_IN_AIR
   });

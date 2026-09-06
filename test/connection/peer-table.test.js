@@ -66,7 +66,10 @@ test('endpointsForSystemBroadcast reaches every component of one system, and no 
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 100), EP2);
-  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 2, 1), EP1);
+  // System 2 on an endpoint neither of system 1's components uses: were it
+  // shared, an implementation that leaked system 2 but deduplicated endpoints
+  // would still return two and pass.
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 2, 1), { address: '10.0.0.6', port: 14552 });
 
   const forSysOne = table.endpointsForSystemBroadcast(1);
   assert.equal(forSysOne.length, 2, 'both of system 1\'s components, not system 2\'s');

@@ -149,3 +149,33 @@ test('a broadcast clear (target sysid 0) still matches a real vehicle\'s reply',
   const outcome = await new MissionClear(clearOpts(stub, { target: { sysid: 0, compid: 0 } })).start();
   assert.equal(outcome.result, 'succeeded');
 });
+
+test('a clear addressed to every system but one component (sysid 0, compid N) filters on the component only', async () => {
+  // Each axis is dropped from the subscription filter independently: a zero
+  // sysid stops filtering the reply's source system, while the nonzero compid
+  // still has to match — the editor allows exactly this pair on Clear.
+  const stub = new StubConnection();
+  const machine = new MissionClear(
+    clearOpts(stub, { target: { sysid: 0, compid: 190 }, timeoutMs: 10_000, maxRetries: 0 })
+  );
+  const settled = machine.start();
+
+  const wrongComponent = stub.inject({
+    name: 'MISSION_ACK',
+    fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE },
+    sysid: 7,
+    compid: 191,
+  });
+  assert.equal(wrongComponent, 0, 'the compid axis still filters');
+
+  const rightComponent = stub.inject({
+    name: 'MISSION_ACK',
+    fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE },
+    sysid: 7,
+    compid: 190,
+  });
+  assert.equal(rightComponent, 1, 'any system, matching component, is delivered');
+
+  const outcome = await settled;
+  assert.equal(outcome.result, 'succeeded');
+});
