@@ -144,6 +144,17 @@ test('localIdentity reds a Local Identity invalidated by its own required fields
     String(defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-broken', {})),
     /not properly configured/
   );
+  // The other two cases the suppressed platform check used to cover: a
+  // reference to a deleted node, and the picker's '_ADD_' placeholder, which
+  // `required` cannot see through because it is a non-empty string.
+  assert.match(
+    String(defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-gone', {})),
+    /no longer exists/
+  );
+  assert.match(
+    String(defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, '_ADD_', {})),
+    /required/
+  );
   // A genuinely valid identity, with no companion conflict, still passes.
   assert.equal(
     defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-gcs', {}),

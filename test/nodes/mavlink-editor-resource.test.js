@@ -308,9 +308,9 @@ test('buildTierDialectDefaults dialect is required on Build only', () => {
 });
 
 test('buildTierDialectDefaults vehicle is required only for Build + __vehicle', () => {
-  const { RED } = loadResource();
+  const { RED } = loadResource({}, { 'veh-1': { valid: true } });
   const { vehicle } = RED.mavlink.buildTierDialectDefaults();
-  assert.equal(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, ''), false);
+  assert.match(String(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, '')), /required/);
   assert.equal(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, 'veh-1'), true);
   assert.equal(vehicle.validate.call({ delivery: 'build', dialect: 'common' }, ''), true);
   assert.equal(vehicle.validate.call({ delivery: 'send', dialect: '__vehicle' }, ''), true);
@@ -328,6 +328,15 @@ test('buildTierDialectDefaults vehicle reds a Vehicle Profile invalidated by its
     /not properly configured/
   );
   assert.equal(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, 'veh-2'), true);
+  // The other two cases the suppressed platform check used to cover.
+  assert.match(
+    String(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, 'veh-gone')),
+    /no longer exists/
+  );
+  assert.match(
+    String(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, '_ADD_')),
+    /required/
+  );
   // Not on the wire tiers — an invalid profile there is not this field's rule.
   assert.equal(vehicle.validate.call({ delivery: 'send', dialect: '__vehicle' }, 'veh-1'), true);
 });

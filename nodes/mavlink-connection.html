@@ -167,8 +167,12 @@
           // restate it: a Local Identity invalidated by its own required
           // fields must not read as fine here just because one is selected
           // (mavlink-audit-20260905 #16).
-          const cfg = v ? RED.nodes.node(v) : null;
-          if (cfg && cfg.valid === false) return 'is not properly configured';
+          // '_ADD_' is the platform's "none" option until save rewrites it to
+          // '' — `required` sees a non-empty string and lets it through.
+          if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
+          const cfg = RED.nodes.node(v);
+          if (!cfg) return 'no longer exists — reselect an Identity';
+          if (cfg.valid === false) return 'is not properly configured';
           return companionBoundElsewhere(this, [v]);
         } },
       // Every bound identity must send as its own (sysid, compid). Sharing the
