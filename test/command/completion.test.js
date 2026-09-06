@@ -145,6 +145,65 @@ test('TAKEOFF completion stays pending on an absolute frame until the AMSL targe
   assert.equal(res.done, false);
 });
 
+// ── LAND/RTL completion: MAV_LANDED_STATE over altitude (mavlink-audit-20260905 #4) ──
+
+const LAND_PARAMS = [0, 0, 0, 0, 0, 0, 0];
+
+test('LAND completion is not fooled by a low-hover altitude when EXTENDED_SYS_STATE says IN_AIR', () => {
+  // Armed, hovering close to home (400 mm — inside the old altitude
+  // threshold), but the vehicle's own landed detector says airborne.
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, {
+    armed: true,
+    position: { relativeAlt: 400 },
+    landed: { landedState: 2 }, // MAV_LANDED_STATE_IN_AIR
+  });
+  const res = checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1);
+  assert.equal(res.done, false, 'reported airborne, not landed, despite the low altitude');
+});
+
+test('LAND completion recognizes ON_GROUND well above home altitude', () => {
+  // Disarmed, sitting on a pad 10 m above home elevation — an altitude
+  // threshold alone would call this "still flying" and time out.
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, {
+    armed: false,
+    position: { relativeAlt: 10_000 },
+    landed: { landedState: 1 }, // MAV_LANDED_STATE_ON_GROUND
+  });
+  const res = checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1);
+  assert.equal(res.done, true, 'the landed detector is authoritative over relative altitude');
+});
+
+test('LAND completion still reports pending while EXTENDED_SYS_STATE says LANDING', () => {
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, {
+    armed: true,
+    position: { relativeAlt: 100 },
+    landed: { landedState: 4 }, // MAV_LANDED_STATE_LANDING
+  });
+  const res = checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1);
+  assert.equal(res.done, false, 'still descending, not yet on the ground');
+});
+
+test('LAND completion falls back to relative altitude when landedState is UNDEFINED', () => {
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, {
+    armed: false,
+    position: { relativeAlt: 400 },
+    landed: { landedState: 0 }, // MAV_LANDED_STATE_UNDEFINED
+  });
+  const res = checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1);
+  assert.equal(res.done, true, 'no landed-state opinion — the pre-existing altitude threshold decides');
+});
+
+test('LAND completion falls back to relative altitude when EXTENDED_SYS_STATE was never received', () => {
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, { armed: false, position: { relativeAlt: 400 } }); // no `landed` at all
+  const res = checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1);
+  assert.equal(res.done, true, 'unchanged pre-existing behaviour for a firmware that never reports it');
+});
+
 // ── waitForCompletion cancel handle (accepted-risk M1) ───────────────────────
 
 /** Peer table that counts every poll's peer lookup and never satisfies. */
