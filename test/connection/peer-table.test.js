@@ -58,6 +58,31 @@ test('a GCS-range sysid (>= 250) is tracked but its endpoint is never learned', 
   assert.deepEqual(table.endpointsForBroadcast(1), [EP1]);
 });
 
+test('endpointsForSystemBroadcast reaches every component of one system, and no other', () => {
+  // target_component = 0 is MAV_COMP_ID_ALL scoped to the named system, not a
+  // literal component id — no real peer ever registers as compid 0
+  // (mavlink-audit-20260905 #6). This is endpointsForBroadcast's compid=0
+  // fan-out, narrowed to one already-known sysid instead of every peer.
+  const table = new PeerTable({ now: () => 0 });
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 100), EP2);
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 2, 1), EP1);
+
+  const forSysOne = table.endpointsForSystemBroadcast(1);
+  assert.equal(forSysOne.length, 2, 'both of system 1\'s components, not system 2\'s');
+  assert.ok(forSysOne.some((ep) => ep.address === EP1.address && ep.port === EP1.port));
+  assert.ok(forSysOne.some((ep) => ep.address === EP2.address && ep.port === EP2.port));
+
+  assert.deepEqual(table.endpointsForSystemBroadcast(3), [], 'an unheard system reaches nobody');
+});
+
+test('endpointsForSystemBroadcast dedupes two components sharing one endpoint', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 100), EP1);
+  assert.deepEqual(table.endpointsForSystemBroadcast(1), [EP1]);
+});
+
 test('table is keyed by sysid with components nested underneath', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
