@@ -14,6 +14,7 @@ const { signal } = new AbortController();
 const { BAND } = require('../../lib/connection/bands');
 const { streamLocks } = require('../../lib/delivery/lock');
 const { offsetLatLon } = require('../../lib/formation');
+const { paramValueToWire } = require('../../lib/codec/param-union');
 
 test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
   const peerTable = peerTableStub([
@@ -1251,6 +1252,47 @@ test('PARAM_SET echo confirm compares wire values — a clamped value does not c
   const clamped = await clampedRun;
   assert.equal(clamped.success, false);
   assert.equal(clamped.members[0].result, 'unconfirmed');
+});
+
+test('PARAM_SET echo confirm on a bytewise integer does not let two different NaN-band values collide (mavlink-audit-20260905 #5)', async () => {
+  // MAV_PARAM_TYPE_INT32 (6). Both patterns land in the float32 NaN band
+  // (exponent all-ones, mantissa nonzero) once bit-cast into the wire's
+  // float slot, but they are different int32 values — a vehicle reporting
+  // ECHO_INT back is not confirming that it stored SENT_INT.
+  const SENT_INT = 2143289344; // 0x7FC00000
+  const ECHO_INT = 2139095041; // 0x7F800001
+  const sentWire = paramValueToWire(SENT_INT, 6);
+  const echoWire = paramValueToWire(ECHO_INT, 6);
+  assert.ok(Number.isNaN(sentWire) && Number.isNaN(echoWire), 'both bit patterns read back as NaN floats');
+
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(5)]),
+    vehicle: { firmware: 'px4' }, // bytewise encoding
+    sends: [],
+    send(message, options) { this.sends.push({ message, options }); },
+    resolveSourceIds: () => null,
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+  };
+  const deliver = (decoded) => handlers.splice(0).forEach((h) => h(decoded));
+
+  const run = executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtParamSet({ fields: { param_value: sentWire, param_type: 6 } }),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 50,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  deliver({ sysid: 5, compid: 1, name: 'PARAM_VALUE', fields: { param_id: 'FOO', param_value: echoWire, param_type: 6 } });
+
+  const result = await run;
+  assert.equal(result.success, false,
+    'a genuinely different echoed integer must not confirm just because both bit patterns are NaN as float32');
+  assert.equal(result.members[0].result, 'unconfirmed');
 });
 
 test('confirm-mode retry resends the member\'s patched message with the confirmation counter', async (t) => {
