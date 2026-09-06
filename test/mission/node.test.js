@@ -323,6 +323,47 @@ test('download end-to-end: progress on output 1, success on both ports', async (
   assert.equal(terminal[1].count, 2);
 });
 
+test('the node passes the resolved source identity through, so a misaddressed ack does not settle it (mavlink-audit-20260905 #3)', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn._sourceIds = { sysid: 255, compid: 190 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_CLEAR_ALL') {
+      // Correctly sourced and typed, but addressed to a different GCS.
+      deliver({
+        name: 'MISSION_ACK',
+        fields: { type: 0, mission_type: 0, target_system: 254, target_component: 190 },
+      });
+    }
+  });
+
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const res = await runInput(node, { payload: {} });
+  const last = res.outputs.at(-1);
+  assert.notEqual(last[1].result, 'succeeded', 'a reply addressed to another station must not settle our transfer');
+});
+
+test('the node passes the resolved source identity through, and an ack addressed to us settles normally', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn._sourceIds = { sysid: 255, compid: 190 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_CLEAR_ALL') {
+      deliver({
+        name: 'MISSION_ACK',
+        fields: { type: 0, mission_type: 0, target_system: 255, target_component: 190 },
+      });
+    }
+  });
+
+  const Node = loadNode(conn);
+  const node = new Node({ operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'mission' });
+  const res = await runInput(node, { payload: {} });
+  const last = res.outputs.at(-1);
+  assert.equal(last[1].result, 'succeeded');
+});
+
 test('mission resolveTarget inherits Vehicle Profile target when config is empty', async () => {
   const conn = new StubConnection();
   conn.vehicle = { targetSystem: 42, targetComponent: 191, firmware: 'ardupilot' };

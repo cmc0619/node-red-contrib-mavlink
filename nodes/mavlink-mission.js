@@ -166,12 +166,13 @@ module.exports = function registerMavlinkMission(RED) {
         // chain would otherwise hold it until redeploy, every later op on this
         // target reporting "busy" over a transfer that never started.
         // Constructors are store-only; the subscription only opens in start().
+        const identityId = payload.identityId === undefined ? config.identity : payload.identityId;
         const machine = createMachine(operation, {
           send: (message) =>
             connNode.send(message, {
               band: BAND.BULK,
               target,
-              identityId: payload.identityId === undefined ? config.identity : payload.identityId,
+              identityId,
             }),
           subscribe: (filter, handler) => connNode.subscribe(filter, handler),
           target,
@@ -179,6 +180,10 @@ module.exports = function registerMavlinkMission(RED) {
           items: uploadItems,
           timeoutMs,
           maxRetries,
+          // Ack attribution (§9/§10): ignore a reply explicitly addressed to
+          // a different GCS on a shared link — the same gate the Command
+          // node's AckWaiter applies to COMMAND_ACK.
+          sourceIds: connNode.resolveSourceIds(identityId),
           onProgress: (update) => {
             send([
               null,

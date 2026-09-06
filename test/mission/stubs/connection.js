@@ -44,6 +44,19 @@ class StubConnection {
   }
 
   /**
+   * Mirrors the real Connection's ack-attribution accessor. `null` (the
+   * default, matching a disabled/unresolvable connection) means "no gate" —
+   * the transfer accepts any reply, same as before sourceIds existed. Tests
+   * exercising address-attribution set `stub._sourceIds` directly.
+   *
+   * @param {string} [_identityId]
+   * @returns {{sysid: number, compid: number}|null}
+   */
+  resolveSourceIds(_identityId) {
+    return this._sourceIds || null;
+  }
+
+  /**
    * @param {{name: string, fields: object}} message
    * @param {object} [options]
    */
