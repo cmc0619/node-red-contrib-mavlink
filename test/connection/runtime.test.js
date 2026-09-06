@@ -899,6 +899,47 @@ test('a broadcast with no peers still rides the configured remote', async () => 
   connection.close();
 });
 
+test('a target naming a real system and component 0 reaches every learned component of that system', async () => {
+  // Component 0 is MAV_COMP_ID_ALL scoped to the named system, not a literal
+  // compid — no real peer ever registers as compid 0, so before this fix the
+  // send fell through to an ordinary directed lookup for a component that
+  // could never exist, found no endpoint, and (with no configured remote on
+  // this listen-only harness) reached nobody (mavlink-audit-20260905 #6).
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+  hearFrom(socket, [[7, 40007, 1], [7, 40007, 154], [9, 40009, 1]]);
+
+  connection.send(
+    { name: 'COMMAND_LONG', fields: { target_system: 7, command: 400 } },
+    { band: BAND.CONTROL, target: { sysid: 7, compid: 0 } }
+  );
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.equal(sends.length, 1, 'system 7\'s two components share one endpoint, deduped');
+  assert.equal(sends[0].port, 40007, 'system 9 is not addressed');
+  assert.equal(JSON.parse(sends[0].buffer.toString()).fields.target_system, 7);
+  connection.close();
+});
+
+test('a system-scoped component-0 send with no learned peer still rides the configured remote', async () => {
+  const { connection, dg } = build();
+  await connection.start();
+  const socket = dg.sockets[0];
+
+  connection.send(
+    { name: 'COMMAND_LONG', fields: { target_system: 7, command: 400 } },
+    { band: BAND.CONTROL, target: { sysid: 7, compid: 0 } }
+  );
+  await delay(40);
+
+  const sends = commandDatagrams(socket);
+  assert.equal(sends.length, 1, 'exactly one send, to the transport default');
+  assert.equal(sends[0].port, 14555, 'the configured remotePort');
+  connection.close();
+});
+
 test('the queue keeps draining after a broadcast fans out', async () => {
   // Every destination reports before the item is done. Miscounting would leave
   // _draining stuck true and wedge the queue — heartbeats included.

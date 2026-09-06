@@ -113,7 +113,17 @@
       return values;
     }
 
+    // Field-tips request sequence, owned by the script, not the dialog
+    // (mavlink-audit-20260905 #13, same fence as mavlink-command's loadPresets):
+    // a response is applied only if it is the newest request since the newest
+    // open. Bumped on every open, so a request a closed dialog left in flight
+    // cannot paint its fields into the dialog now open through the shared
+    // #payload-fields selector; bumped on every call, so within one dialog the
+    // stale-response race cannot win either.
+    let fieldsSeq = 0;
+
     function preparePayload(node) {
+      fieldsSeq += 1;
       RED.mavlink.refreshIdentitySelect(node);
 
       // The saved values, used to paint the verb this node was saved on.
@@ -137,6 +147,16 @@
 
       function forgetValues() {
         Object.keys(stash).forEach((k) => { delete stash[k]; });
+      }
+
+      // Dialect/vehicle/connection/delivery re-render the SAME verb's fields
+      // (a new dialect can add units, a new tier can add/drop rows) without
+      // going through reselect(), so forgetValues() never runs for them. Without
+      // this, fieldInput repaints from the dialog-open stash and a value the
+      // operator just typed is silently reverted the moment one of those
+      // controls changes (mavlink-audit-20260905 #14).
+      function syncStash() {
+        Object.assign(stash, collectValues());
       }
 
       function notice(text) {
@@ -242,21 +262,33 @@
       function refreshFields() {
         const sel = selection();
         if (!sel.verb) {
+          fieldsSeq += 1;
           notice('Pick a verb.');
           return;
         }
         const query = RED.mavlink.currentCatalogQuery() || {};
         if (isBuild() && !(query.dialect || query.vehicle)) {
+          fieldsSeq += 1;
           notice('Pick a Dialect or Vehicle Profile to load this verb’s parameters.');
           return;
         }
         query.topic = sel.topic;
         query.verb = sel.verb;
         query.path = sel.path;
+        fieldsSeq += 1;
+        const seq = fieldsSeq;
+        // The previous selection's controls come down before the fetch, not
+        // after the response: a Done pressed while the new recipe's metadata
+        // is still in flight would otherwise scrape the old recipe's controls
+        // into `values` — and `mode` / `action` are shared keys whose enums
+        // differ per device (mavlink-audit-20260905 #13).
+        notice('Loading parameters…');
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, (data) => {
+          if (seq !== fieldsSeq) return;
           renderFields(data);
           applyCarrier(data);
         }).fail(() => {
+          if (seq !== fieldsSeq) return;
           notice('Could not load parameters for this verb.');
         });
       }
@@ -340,6 +372,7 @@
       });
       $('#node-input-delivery').on('change', () => {
         refreshVisibility();
+        syncStash();
         refreshFields();
         reloadCompIds();
       });
@@ -347,16 +380,19 @@
       $('#node-input-connection').on('change', () => {
         RED.mavlink.refreshIdentitySelect(node);
         refreshVisibility();
+        syncStash();
         refreshFields();
         reloadCompIds();
       });
       $('#node-input-vehicle').on('change', () => {
+        syncStash();
         refreshFields();
         reloadCompIds();
       });
       const $dialect = $('#node-input-dialect');
       $dialect.on('change', () => {
         refreshVisibility();
+        syncStash();
         refreshFields();
         reloadCompIds();
       });

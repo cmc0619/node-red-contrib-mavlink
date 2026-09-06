@@ -121,6 +121,43 @@ test('a stalled clock still yields strictly increasing outbound timestamps', () 
   assert.equal(b, a + 1); // +1 guarantees monotonicity even without clock movement
 });
 
+test('a verified peer ahead of local clock raises the outbound floor for every stream (mavlink-audit-20260905 #11)', () => {
+  // A companion computer with no RTC/NTP has no other way to learn its clock
+  // is behind real time. Once a signed, verified packet establishes that a
+  // peer's clock reads later than ours, our own outbound timestamps — even to
+  // a DIFFERENT, not-yet-met peer — must not keep reading as if that peer's
+  // clock never existed, or that new peer's own first-contact floor
+  // (its own now - one minute) can reject our very first packet to it.
+  const state = new SigningState({ now: () => NOW_MS });
+  const ahead = NOW_UNITS + 2 * ONE_MINUTE_UNITS;
+  const verdict = state.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead }));
+  assert.equal(verdict.accept, true);
+
+  const outbound = state.nextOutboundTimestamp(1, 1); // an unrelated identity/stream
+  assert.ok(
+    outbound >= ahead,
+    `expected the outbound floor to track the verified peer's clock (${ahead}), got ${outbound}`
+  );
+});
+
+test('an invalid or unsigned accept never raises the outbound floor', () => {
+  // Only a cryptographically verified packet is a time reference worth
+  // trusting — the same rule this module already applies to the per-stream
+  // inbound store (a forged packet must not raise any floor, §7 "On accept").
+  const state = new SigningState({ now: () => NOW_MS, acceptInvalid: true });
+  const ahead = NOW_UNITS + 2 * ONE_MINUTE_UNITS;
+
+  state.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead, signatureValid: false }));
+  const afterInvalid = state.nextOutboundTimestamp(1, 1);
+  assert.ok(afterInvalid < ahead, 'an invalid-but-admitted packet must not raise the floor');
+
+  state.acceptInbound(
+    frame({ sysid: 9, compid: 2, timestamp: ahead, signaturePresent: false, messageName: 'HEARTBEAT' })
+  );
+  const afterUnsigned = state.nextOutboundTimestamp(1, 2);
+  assert.ok(afterUnsigned < ahead, 'an unsigned packet must not raise the floor either');
+});
+
 test('the outbound sequence wraps 0..255', () => {
   const s = new SigningState();
   const seqs = [];

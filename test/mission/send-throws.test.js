@@ -85,3 +85,40 @@ test('a first send that throws settles the machine rather than leaving it armed'
   assert.equal(clock.pending(), 0, 'no timer left armed');
   assert.equal(stub.subscriberCount(), 0, 'subscription released');
 });
+
+test('the INT-to-legacy fallback send that throws aborts the transfer instead of escaping the timer (mavlink-audit-20260905 #2)', () => {
+  // A third throw site MissionDownload adds on top of the base class: once
+  // the first item's INT request burns its retry ceiling, _onStepExhausted
+  // sends the legacy MISSION_REQUEST fallback synchronously from the SAME
+  // timer callback, outside the try/catch that already guards the ordinary
+  // retry send two lines above it in transfer.js.
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+
+  stub.onSend((message, deliver) => {
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', fields: { count: 1, mission_type: 0 } });
+      return;
+    }
+    if (message.name === 'MISSION_REQUEST') {
+      // The fallback itself is the send that hits a dead/saturated link.
+      throw new Error('queue overflow on control band');
+    }
+    // MISSION_REQUEST_INT is never answered — a pre-INT vehicle, forcing
+    // retries to the ceiling and then the fallback.
+  });
+
+  const machine = downloadOver(stub, clock);
+  const settled = machine.start();
+
+  // Unfixed, the throw escapes _onTimeout into the timer callback, so flush()
+  // itself throws and the assertions below never run.
+  clock.flush();
+  return settled.then((outcome) => {
+    assert.equal(outcome.result, 'failed');
+    assert.equal(outcome.phase, 'aborted');
+    assert.match(outcome.reason, /send failed/);
+    assert.match(outcome.reason, /queue overflow/);
+    assert.equal(clock.pending(), 0, 'no timer left armed after the abort');
+  });
+});

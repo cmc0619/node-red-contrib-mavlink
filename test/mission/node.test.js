@@ -323,6 +323,64 @@ test('download end-to-end: progress on output 1, success on both ports', async (
   assert.equal(terminal[1].count, 2);
 });
 
+test('the node passes the resolved source identity through, so a misaddressed ack does not settle it (mavlink-audit-20260905 #3)', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn._sourceIds = { sysid: 255, compid: 190 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_CLEAR_ALL') {
+      // Correctly sourced and typed, but addressed to a different GCS.
+      deliver({
+        name: 'MISSION_ACK',
+        fields: { type: 0, mission_type: 0, target_system: 254, target_component: 190 },
+      });
+    }
+  });
+
+  const Node = loadNode(conn);
+  // Valid, short retry budget on purpose: the node reads `config.timeout` /
+  // `config.maxRetries` as Number(), so an omitted pair is NaN and the machine
+  // aborts on the spot — a "not succeeded" would then pass for the wrong
+  // reason. With a real budget the only route to an abort is the retry path
+  // running out because every ack was ignored.
+  const node = new Node({
+    operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'mission',
+    timeout: 20, maxRetries: 2,
+  });
+  const res = await runInput(node, { payload: {} });
+  const last = res.outputs.at(-1);
+  assert.equal(last[1].result, 'failed', 'a reply addressed to another station must not settle our transfer');
+  assert.equal(last[1].phase, 'aborted');
+  assert.match(String(last[1].reason), /stalled at clear-all after 2 retries/,
+    'it ran the whole retry budget — the foreign ack was ignored, not mis-handled');
+  assert.equal(conn.sent.filter((s) => s.message.name === 'MISSION_CLEAR_ALL').length, 3,
+    'initial send plus two re-sends');
+});
+
+test('the node passes the resolved source identity through, and an ack addressed to us settles normally', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn._sourceIds = { sysid: 255, compid: 190 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_CLEAR_ALL') {
+      deliver({
+        name: 'MISSION_ACK',
+        fields: { type: 0, mission_type: 0, target_system: 255, target_component: 190 },
+      });
+    }
+  });
+
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'mission',
+    timeout: 20, maxRetries: 2,
+  });
+  const res = await runInput(node, { payload: {} });
+  const last = res.outputs.at(-1);
+  assert.equal(last[1].result, 'succeeded');
+  assert.equal(conn.sent.length, 1, 'settled on the first ack — no re-send');
+});
+
 test('mission resolveTarget inherits Vehicle Profile target when config is empty', async () => {
   const conn = new StubConnection();
   conn.vehicle = { targetSystem: 42, targetComponent: 191, firmware: 'ardupilot' };

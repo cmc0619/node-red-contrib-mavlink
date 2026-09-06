@@ -133,6 +133,35 @@ test('a companion may be bound to only one Connection; GCS identities may be reu
   );
 });
 
+test('localIdentity reds a Local Identity invalidated by its own required fields (mavlink-audit-20260905 #16)', () => {
+  // Declaring `validate` at all suppresses Node-RED's own config-node
+  // reference check (connectionDefault, mavlink-editor.js), so an identity
+  // that is itself broken must be restated here — the same rule the
+  // Build-tier `vehicle` descriptor follows.
+  const nodes = { ...BOUND, 'id-broken': { name: 'Broken', role: 'gcs', valid: false } };
+  const defaults = loadNodeDefaults('mavlink-connection', nodes);
+  assert.match(
+    String(defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-broken', {})),
+    /not properly configured/
+  );
+  // The other two cases the suppressed platform check used to cover: a
+  // reference to a deleted node, and the picker's '_ADD_' placeholder, which
+  // `required` cannot see through because it is a non-empty string.
+  assert.match(
+    String(defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-gone', {})),
+    /no longer exists/
+  );
+  assert.match(
+    String(defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, '_ADD_', {})),
+    /required/
+  );
+  // A genuinely valid identity, with no companion conflict, still passes.
+  assert.equal(
+    defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-gcs', {}),
+    true
+  );
+});
+
 test('the Identity picker never offers a companion another Connection holds', () => {
   const nodes = {
     ...BOUND,

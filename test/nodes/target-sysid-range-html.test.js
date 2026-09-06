@@ -160,10 +160,16 @@ const vm = require('node:vm');
  * @param {object} saved  the node config `this` the validator reads
  * @returns {(v: *) => true|string}
  */
-function targetSystemValidator(file, saved) {
+function targetSystemValidator(file, saved, lookup = {}) {
   const html = fs.readFileSync(path.join(nodesDir, file), 'utf8');
   const context = {
-    RED: { mavlink: {}, validators: { number: () => () => true } },
+    RED: {
+      mavlink: {},
+      validators: { number: () => () => true },
+      // The inherited-target check walks Connection → Vehicle Profile through
+      // RED.nodes.node; an empty lookup is the "nothing bound yet" dialog.
+      nodes: { node: (id) => lookup[id] || null },
+    },
     // No dialog is open in a test, so every live read misses and liveOr falls
     // back to the saved value — the node-first half of the helper.
     $: () => ({ length: 0, val: () => undefined }),
@@ -207,6 +213,45 @@ test('mavlink-move.html: an explicit 0 stays valid on the unacked tiers (#260)',
     const validate = targetSystemValidator('mavlink-move.html', { delivery, action: 'steer' });
     assert.equal(validate(0), true, `broadcast is legal on ${delivery} — nothing awaits an ack`);
   }
+});
+
+// ── A blank target that *inherits* broadcast is the same pair as an explicit 0 ──
+//
+// The #260 regression above pins that blank never reds on its own. This pins
+// the other half (mavlink-audit-20260905 #15): blank is checked by what it
+// resolves to. A bound Vehicle Profile whose default target is 0 is legal, and
+// a Confirm-tier node inheriting it reaches the wire as broadcast — the exact
+// pair an explicit 0 is refused for. The dynamic msg.payload.target rung stays
+// the runtime's; only the static profile rung is the editor's to see.
+const PROFILE_0 = { c1: { vehicle: 'veh0' }, veh0: { defaultTargetSystem: 0 } };
+const PROFILE_1 = { c1: { vehicle: 'veh1' }, veh1: { defaultTargetSystem: 1 } };
+
+test('mavlink-command.html: a blank target inheriting a broadcast profile reds on Confirm; inheriting a real sysid passes (#15)', () => {
+  const saved = { delivery: 'confirm', connection: 'c1' };
+  assert.match(
+    String(targetSystemValidator('mavlink-command.html', saved, PROFILE_0)('')),
+    /inherits broadcast/,
+    'the effective target is 0 — the same pair an explicit 0 is refused for'
+  );
+  assert.equal(targetSystemValidator('mavlink-command.html', saved, PROFILE_1)(''), true,
+    'inheriting a real sysid is the common case and stays valid');
+  assert.equal(targetSystemValidator('mavlink-command.html', saved, {})(''), true,
+    'nothing bound yet: the Connection ring owns that, not this one');
+  assert.equal(targetSystemValidator('mavlink-command.html', { delivery: 'send', connection: 'c1' }, PROFILE_0)(''), true,
+    'broadcast is legal where no ack is awaited, inherited or not');
+});
+
+test('mavlink-param.html: on Build the inherited rung is the node\'s own Vehicle Profile, and only under __vehicle (#15)', () => {
+  const lookup = { veh0: { defaultTargetSystem: 0 } };
+  assert.match(
+    String(targetSystemValidator('mavlink-param.html', { delivery: 'build', dialect: '__vehicle', vehicle: 'veh0' }, lookup)('')),
+    /inherits broadcast/
+  );
+  assert.equal(
+    targetSystemValidator('mavlink-param.html', { delivery: 'build', dialect: 'common', vehicle: 'veh0' }, lookup)(''),
+    true,
+    'a concrete Build dialect has no profile rung, so the field inherits nothing'
+  );
 });
 
 test('mavlink-payload.html: targetSystem stays unconditional — its editor cannot know the ack mode (#260)', () => {
