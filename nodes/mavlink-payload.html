@@ -113,7 +113,17 @@
       return values;
     }
 
+    // Field-tips request sequence, owned by the script, not the dialog
+    // (mavlink-audit-20260905 #13, same fence as mavlink-command's loadPresets):
+    // a response is applied only if it is the newest request since the newest
+    // open. Bumped on every open, so a request a closed dialog left in flight
+    // cannot paint its fields into the dialog now open through the shared
+    // #payload-fields selector; bumped on every call, so within one dialog the
+    // stale-response race cannot win either.
+    let fieldsSeq = 0;
+
     function preparePayload(node) {
+      fieldsSeq += 1;
       RED.mavlink.refreshIdentitySelect(node);
 
       // The saved values, used to paint the verb this node was saved on.
@@ -249,13 +259,6 @@
         applyFrameRow(matters);
       }
 
-      // Every call owns its own request sequence (mavlink-audit-20260905 #13,
-      // same shape as loadCatalog's seq guard): a verb/dialect/vehicle/
-      // connection change can fire a second call before the first's response
-      // lands, and without a fence the stale one still wins the race and
-      // renders fields for a selection the operator already moved past.
-      let fieldsSeq = 0;
-
       function refreshFields() {
         const sel = selection();
         if (!sel.verb) {
@@ -274,6 +277,12 @@
         query.path = sel.path;
         fieldsSeq += 1;
         const seq = fieldsSeq;
+        // The previous selection's controls come down before the fetch, not
+        // after the response: a Done pressed while the new recipe's metadata
+        // is still in flight would otherwise scrape the old recipe's controls
+        // into `values` — and `mode` / `action` are shared keys whose enums
+        // differ per device (mavlink-audit-20260905 #13).
+        notice('Loading parameters…');
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, (data) => {
           if (seq !== fieldsSeq) return;
           renderFields(data);

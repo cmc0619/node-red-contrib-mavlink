@@ -186,7 +186,13 @@ function makeHarness() {
 
   const forUrl = (fragment) => requests.filter((r) => r.url.includes(fragment));
 
-  return { $, openDialog, forUrl, field, fieldKeys, requests };
+  /** Press Done: run oneditsave against `node` and return what it saved. */
+  function save(node) {
+    registered['mavlink-payload'].oneditsave.call(node);
+    return node.values;
+  }
+
+  return { $, openDialog, forUrl, field, fieldKeys, requests, save };
 }
 
 function payloadNode(over) {
@@ -275,4 +281,49 @@ test('a value typed into a field survives an unrelated Dialect change on the sam
 
   assert.equal(harness.field('speed').val(), 7,
     'the typed value must not be reverted to the dialog-open stash');
+});
+
+test('a closed dialog\'s late field-tips response cannot paint fields into the dialog now open (mavlink-audit-20260905 #13)', () => {
+  const harness = makeHarness();
+
+  // Dialog A opens and requests its fields, then closes before they arrive.
+  harness.openDialog(payloadNode({ id: 'pl-A' }));
+  harness.$('#node-input-dialect').trigger('change');
+  const fromA = harness.forUrl('/mavlink/payload/field-tips')[0];
+
+  // Dialog B (another Payload node) opens over a fresh form and requests its own.
+  harness.openDialog(payloadNode({ id: 'pl-B', verb: 'zoom' }));
+  harness.$('#node-input-dialect').trigger('change');
+  const fromB = harness.forUrl('/mavlink/payload/field-tips')[1];
+
+  // A's response lands after B opened. A per-dialog sequence cannot see B's
+  // open, so A's callback would render through the shared #payload-fields
+  // selector — into B's form.
+  fromA.ok(fieldTips({ speed: { default: 0 } }));
+  assert.deepEqual(harness.fieldKeys(), [], 'the closed dialog\'s fields must not land in the open one');
+
+  fromB.ok(fieldTips({ zoomLevel: { default: 0 } }));
+  assert.deepEqual(harness.fieldKeys(), ['zoomLevel'], 'the open dialog still gets its own');
+});
+
+test('Done pressed while a new recipe\'s metadata is in flight does not save the old recipe\'s controls (mavlink-audit-20260905 #13)', () => {
+  const harness = makeHarness();
+  const node = payloadNode();
+  harness.openDialog(node);
+
+  harness.$('#node-input-dialect').trigger('change');
+  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  harness.field('speed').val(42);
+
+  // Recipe changes; zoom's metadata is requested but has not arrived.
+  harness.$('#node-input-verb').val('zoom');
+  harness.$('#node-input-verb').trigger('change');
+  assert.equal(harness.forUrl('/mavlink/payload/field-tips').length, 2, 'the new recipe was requested');
+
+  // Done now. The photo controls must already be gone: `mode` / `action` are
+  // shared keys whose enums differ per device, so a scrape of the previous
+  // recipe's controls under the new verb is a wrong value, not a stale one.
+  const saved = harness.save(node);
+  assert.equal(Object.prototype.hasOwnProperty.call(saved, 'speed'), false,
+    'the previous recipe\'s control must not be saved under the new verb');
 });
