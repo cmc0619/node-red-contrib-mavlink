@@ -1801,19 +1801,21 @@
    * @returns {number|undefined}
    */
   function inheritedTargetSystem(self, tier) {
-    let vehicleId;
-    if (tier === 'build') {
-      const dialect = RED.mavlink.liveOr(self, '#node-input-dialect', self.dialect, '');
-      if (dialect !== '__vehicle') return undefined;
-      vehicleId = RED.mavlink.liveOr(self, '#node-input-vehicle', self.vehicle, '');
-    } else {
-      const connectionId = RED.mavlink.liveOr(self, '#node-input-connection', self.connection, '');
-      const connection = connectionId ? RED.nodes.node(connectionId) : null;
-      vehicleId = connection ? connection.vehicle : '';
-    }
+    const vehicleId = inheritedVehicleId(self, tier);
     const vehicle = vehicleId ? RED.nodes.node(vehicleId) : null;
     if (!vehicle || RED.mavlink.isBlank(vehicle.defaultTargetSystem)) return undefined;
     return Number(vehicle.defaultTargetSystem);
+  }
+
+  /** The Vehicle Profile id the target rung above reads from, '' when none. */
+  function inheritedVehicleId(self, tier) {
+    if (tier === 'build') {
+      const dialect = RED.mavlink.liveOr(self, '#node-input-dialect', self.dialect, '');
+      return dialect === '__vehicle' ? RED.mavlink.liveOr(self, '#node-input-vehicle', self.vehicle, '') : '';
+    }
+    const connectionId = RED.mavlink.liveOr(self, '#node-input-connection', self.connection, '');
+    const connection = connectionId ? RED.nodes.node(connectionId) : null;
+    return connection ? connection.vehicle : '';
   }
 
   /**
