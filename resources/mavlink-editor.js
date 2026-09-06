@@ -1886,8 +1886,17 @@
         // the blank it exists to catch.
         value: '',
         type: 'mavlink-vehicle',
-        validate(v) {
-          if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') return Boolean(v);
+        // Two-arg: declaring validate at all suppresses Node-RED's own
+        // config-node reference check (connectionDefault above restates the
+        // same thing for `connection`), so a Vehicle Profile invalidated by
+        // its own required fields must not read as fine here just because
+        // one is selected (mavlink-audit-20260905 #16).
+        validate(v, _opt) {
+          if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') {
+            if (!v) return false;
+            const cfg = RED.nodes.node(v);
+            if (cfg && cfg.valid === false) return 'is not properly configured';
+          }
           return true;
         },
       },

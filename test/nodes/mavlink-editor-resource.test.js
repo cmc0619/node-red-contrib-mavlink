@@ -316,6 +316,22 @@ test('buildTierDialectDefaults vehicle is required only for Build + __vehicle', 
   assert.equal(vehicle.validate.call({ delivery: 'send', dialect: '__vehicle' }, ''), true);
 });
 
+test('buildTierDialectDefaults vehicle reds a Vehicle Profile invalidated by its own required fields (mavlink-audit-20260905 #16)', () => {
+  // Declaring `validate` at all suppresses Node-RED's own config-node
+  // reference check (connectionDefault above restates the same thing for
+  // `connection`) — a selected-but-broken Vehicle Profile must not read as
+  // fine just because something is selected.
+  const { RED } = loadResource({}, { 'veh-1': { valid: false }, 'veh-2': { valid: true } });
+  const { vehicle } = RED.mavlink.buildTierDialectDefaults();
+  assert.match(
+    String(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, 'veh-1')),
+    /not properly configured/
+  );
+  assert.equal(vehicle.validate.call({ delivery: 'build', dialect: '__vehicle' }, 'veh-2'), true);
+  // Not on the wire tiers — an invalid profile there is not this field's rule.
+  assert.equal(vehicle.validate.call({ delivery: 'send', dialect: '__vehicle' }, 'veh-1'), true);
+});
+
 test('buildTierDialectDefaults withFirmware adds the Firmware XOR validator (§6)', () => {
   const { RED } = loadResource();
   const defaults = RED.mavlink.buildTierDialectDefaults({ withFirmware: true });

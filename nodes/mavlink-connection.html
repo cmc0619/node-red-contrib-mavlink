@@ -161,7 +161,16 @@
           const conn = editingConnection();
           return identity.id === conn.localIdentity || identityFree(conn, identity.id);
         },
-        validate(v, _opt) { return companionBoundElsewhere(this, [v]); } },
+        validate(v, _opt) {
+          // Declaring validate at all suppresses Node-RED's own config-node
+          // reference check (connectionDefault, mavlink-editor.js), so
+          // restate it: a Local Identity invalidated by its own required
+          // fields must not read as fine here just because one is selected
+          // (mavlink-audit-20260905 #16).
+          const cfg = v ? RED.nodes.node(v) : null;
+          if (cfg && cfg.valid === false) return 'is not properly configured';
+          return companionBoundElsewhere(this, [v]);
+        } },
       // Every bound identity must send as its own (sysid, compid). Sharing the
       // pair is a wire collision the driver cannot report: the Connection runs
       // one heartbeat scheduler per identity, and ack attribution matches a
