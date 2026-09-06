@@ -204,6 +204,30 @@ test('LAND completion falls back to relative altitude when EXTENDED_SYS_STATE wa
   assert.equal(res.done, true, 'unchanged pre-existing behaviour for a firmware that never reports it');
 });
 
+test('LAND altitude fallback does not call an armed vehicle landed because it is below home (mavlink-audit-20260905 #4, relay)', () => {
+  // No landed-state opinion, armed, flying over terrain 5 m below the takeoff
+  // point. Relative altitude reads under the threshold; the vehicle is airborne.
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, { armed: true, position: { relativeAlt: -5_000 } });
+  const res = checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1);
+  assert.equal(res.done, false, 'armed is not landed, whatever the altitude reads');
+  assert.match(res.detail, /armed/);
+});
+
+test('LAND altitude fallback: the same below-home reading with the vehicle disarmed is landed', () => {
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, { armed: false, position: { relativeAlt: -5_000 } });
+  assert.equal(checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1).done, true);
+});
+
+test('LAND altitude fallback: an unknown armed state does not block the altitude verdict', () => {
+  // No HEARTBEAT decoded yet for this component: the pre-existing altitude
+  // behaviour is unchanged rather than silently turning into "never lands".
+  const pt = new StubPeerTable();
+  pt.setComponent(1, 1, { position: { relativeAlt: 400 } });
+  assert.equal(checkCompletion(COMPLETION.LAND, LAND_PARAMS, pt, 1, 1).done, true);
+});
+
 // ── waitForCompletion cancel handle (accepted-risk M1) ───────────────────────
 
 /** Peer table that counts every poll's peer lookup and never satisfies. */
