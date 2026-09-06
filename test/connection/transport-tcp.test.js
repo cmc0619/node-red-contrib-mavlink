@@ -522,6 +522,75 @@ test('close ends tracked sockets, closes the listener, and removes clients on so
   assert.equal(remainingClient.destroyed, true);
 });
 
+test('close() on a live but stalled socket is bounded, not indefinite', async () => {
+  // A peer that never acks the FIN (paused, or gone without a reset) never
+  // fires end()'s callback or 'close' — Connection's own write watchdog is
+  // already disarmed by the time close() runs, so nothing else bounds this
+  // wait (mavlink-audit-20260905 #10). A bounded timer must force it.
+  const net = mockNet();
+  const timeouts = [];
+  const transport = new TcpTransport(
+    { remoteAddress: '127.0.0.1', remotePort: 5760 },
+    {
+      net: net.module,
+      setTimeout: (fn, ms) => {
+        const handle = { fn, ms, cleared: false, unref() {} };
+        timeouts.push(handle);
+        return handle;
+      },
+      clearTimeout: (handle) => {
+        if (handle) handle.cleared = true;
+      },
+    }
+  );
+  await transport.open();
+  transport.on('error', () => {});
+
+  const socket = net.clients[0];
+  socket.end = () => {}; // the stalled peer: no callback, no 'close', ever
+
+  let closed = false;
+  transport.close(() => {
+    closed = true;
+  });
+  assert.equal(closed, false, 'the stalled peer has not answered yet');
+  assert.equal(socket.destroyed, false);
+
+  const timer = timeouts.find((t) => !t.cleared);
+  assert.ok(timer, 'a bounded timer is armed for the live close');
+  timer.fn();
+
+  assert.equal(closed, true, 'the bound forces the callback');
+  assert.equal(socket.destroyed, true, 'the stalled socket is force-destroyed');
+});
+
+test('close() on a socket that answers before the bound clears the timer', async () => {
+  const net = mockNet();
+  const timeouts = [];
+  const transport = new TcpTransport(
+    { remoteAddress: '127.0.0.1', remotePort: 5760 },
+    {
+      net: net.module,
+      setTimeout: (fn, ms) => {
+        const handle = { fn, ms, cleared: false, unref() {} };
+        timeouts.push(handle);
+        return handle;
+      },
+      clearTimeout: (handle) => {
+        if (handle) handle.cleared = true;
+      },
+    }
+  );
+  await transport.open();
+  transport.on('error', () => {});
+
+  transport.close(() => {});
+  await tick();
+
+  assert.ok(timeouts.length > 0);
+  assert.ok(timeouts.every((t) => t.cleared), 'the ordinary close path clears its own timer');
+});
+
 test('client close after disconnect still invokes the close callback', async () => {
   const net = mockNet();
   const transport = new TcpTransport({ remoteAddress: '127.0.0.1', remotePort: 5760 }, { net: net.module });
