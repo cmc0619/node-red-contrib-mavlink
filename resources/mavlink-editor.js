@@ -1752,8 +1752,14 @@
    * at (§0), so the editor is where the pair is caught; it knows both fields
    * at deploy.
    *
-   * Blank inherits the profile target and is the common case, so it passes:
-   * `Number('')` is 0 and would otherwise red every unfilled box.
+   * Blank inherits the profile target and is the common case, so blank itself
+   * never reds (`Number('')` is 0, and an earlier cut that coerced it reddened
+   * every unfilled box). What blank *inherits* is checked instead: the static
+   * rung the runtime resolves to when the field is empty is the bound Vehicle
+   * Profile's default, and a profile whose default is 0 makes an inheriting
+   * node on an acked tier exactly the broadcast-confirm pair an explicit 0 is
+   * refused for (mavlink-audit-20260905 #15). The msg.payload.target rung is
+   * dynamic and stays the runtime's.
    *
    * @param {string[]} ackedTiers  tiers that wait for an acknowledgement
    * @param {string} [modeField='delivery']
@@ -1766,13 +1772,49 @@
     return function (v, opt) {
       const range = RED.mavlink.validateUint8(0).call(this, v, opt);
       if (range !== true) return range;
-      if (RED.mavlink.isBlank(v) || Number(v) !== 0) return true;
+      const blank = RED.mavlink.isBlank(v);
+      if (!blank && Number(v) !== 0) return true;
       const tier = RED.mavlink.liveOr(this, field, this[key], fallbackTier);
       if (ackedTiers.indexOf(tier) === -1) return true;
-      return 'broadcast (0) cannot be confirmed — one reply cannot answer for a fleet; '
-        + 'use Send, or mavlink-fanout broadcast for per-vehicle replies';
+      if (!blank) {
+        return 'broadcast (0) cannot be confirmed — one reply cannot answer for a fleet; '
+          + 'use Send, or mavlink-fanout broadcast for per-vehicle replies';
+      }
+      if (inheritedTargetSystem(this, tier) === 0) {
+        return 'inherits broadcast (0) from the bound Vehicle Profile — one reply cannot '
+          + 'answer for a fleet; set a sysid here, use Send, or change the profile default';
+      }
+      return true;
     };
   };
+
+  /**
+   * The static target sysid a blank field inherits, read the way the runtime
+   * resolves it (lib/addressing/resolve.js, rung 4): on Build, the node's own
+   * Vehicle Profile and only under the `__vehicle` escape; on the wire tiers,
+   * the selected Connection's bound Vehicle Profile. A companion identity
+   * derives its sysid from that same profile, so it needs no separate rung.
+   * Undefined when nothing resolves — the field's own required rings own that.
+   *
+   * @param {object} self  the node config under validation
+   * @param {string} tier
+   * @returns {number|undefined}
+   */
+  function inheritedTargetSystem(self, tier) {
+    let vehicleId;
+    if (tier === 'build') {
+      const dialect = RED.mavlink.liveOr(self, '#node-input-dialect', self.dialect, '');
+      if (dialect !== '__vehicle') return undefined;
+      vehicleId = RED.mavlink.liveOr(self, '#node-input-vehicle', self.vehicle, '');
+    } else {
+      const connectionId = RED.mavlink.liveOr(self, '#node-input-connection', self.connection, '');
+      const connection = connectionId ? RED.nodes.node(connectionId) : null;
+      vehicleId = connection ? connection.vehicle : '';
+    }
+    const vehicle = vehicleId ? RED.nodes.node(vehicleId) : null;
+    if (!vehicle || RED.mavlink.isBlank(vehicle.defaultTargetSystem)) return undefined;
+    return Number(vehicle.defaultTargetSystem);
+  }
 
   /**
    * Membership check for a closed-vocabulary select — a delivery tier, a
@@ -1893,9 +1935,12 @@
         // one is selected (mavlink-audit-20260905 #16).
         validate(v, _opt) {
           if (currentMode(this) === 'build' && currentDialect(this) === '__vehicle') {
-            if (!v) return false;
+            // '_ADD_' is the platform's "none" option until save rewrites it
+            // to '' — blank in every sense that matters here.
+            if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required with the Vehicle Profile dialect';
             const cfg = RED.nodes.node(v);
-            if (cfg && cfg.valid === false) return 'is not properly configured';
+            if (!cfg) return 'no longer exists — reselect a Vehicle Profile';
+            if (cfg.valid === false) return 'is not properly configured';
           }
           return true;
         },
