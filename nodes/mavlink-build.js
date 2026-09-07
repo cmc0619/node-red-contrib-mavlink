@@ -38,6 +38,7 @@ const {
   makeStatusRecord,
   shouldSuppress,
   applyActionStatus,
+  failInput,
 } = require('../lib/delivery');
 const { dialectForTier } = require('../lib/addressing/dialect');
 const { catalogMessagesFromBundle } = require('../lib/metadata/messages-list');
@@ -103,18 +104,7 @@ module.exports = function registerMavlinkBuild(RED) {
        * tail-return it.
        */
       function failRun(err, extra = {}) {
-        applyActionStatus(node, 'error', err.message);
-        emit([null, makeStatusRecord(node.type, {
-          result: 'failed',
-          detail: err.message,
-          message: messageName,
-          ...extra,
-        })]);
-        if (triggerMsg) {
-          done(new Error(`mavlink-build: ${err.message}`));
-        } else {
-          node.error(`mavlink-build: ${err.message}`, {});
-        }
+        failInput(node, emit, err, triggerMsg ? done : (e) => node.error(e.message, {}), { message: messageName, ...extra });
         return false;
       }
 
