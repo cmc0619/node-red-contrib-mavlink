@@ -21,7 +21,7 @@
 
     const payloadDefaults = {
       name: { value: '' },
-        identity: { value: '' },
+        identity: { value: '', type: 'mavlink-local-identity' },
         // The tiers the runtime dispatches (§5): a drifted tier matches no
         // case there and completes as a no-op, so the red ring is the only
         // thing that names the drift to the operator.
