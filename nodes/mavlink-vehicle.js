@@ -30,13 +30,6 @@ const XML_CATALOG_ROUTE = '/mavlink/xml-catalog';
 /** Admin endpoint base path for the compiled-dialect cache. */
 const DIALECT_CACHE_ROUTE = '/mavlink/dialect-cache';
 
-/** Whether the admin dialects route has been registered (once per process). */
-let _dialectsRouteRegistered = false;
-/** Whether the admin enums route has been registered (once per process). */
-let _enumsRouteRegistered = false;
-/** Whether the XML-catalog routes have been registered (once per process). */
-let _xmlCatalogRouteRegistered = false;
-
 /**
  * Resolve the XML-catalog cache directory under the Node-RED user dir
  * (`<userDir>/mavlink/xml`), falling back to the cwd when settings are absent.
@@ -70,19 +63,15 @@ function compiledCacheDir(RED) {
 module.exports = function registerMavlinkVehicle(RED) {
   /**
    * Register the admin HTTP endpoint that serves the bundled dialect list to
-   * editor dropdowns (§6 "Register with RED.auth.needsPermission"). Done once
-   * per process; subsequent node registrations are no-ops.
+   * editor dropdowns (§6 "Register with RED.auth.needsPermission").
    */
-  if (!_dialectsRouteRegistered) {
-    RED.httpAdmin.get(
-      DIALECTS_ROUTE,
-      RED.auth.needsPermission('mavlink.read'),
-      (_req, res) => {
-        res.json({ dialects: knownDialects() });
-      }
-    );
-    _dialectsRouteRegistered = true;
-  }
+  RED.httpAdmin.get(
+    DIALECTS_ROUTE,
+    RED.auth.needsPermission('mavlink.read'),
+    (_req, res) => {
+      res.json({ dialects: knownDialects() });
+    }
+  );
 
   /**
    * Register the shared enum catalog route used by editor dropdowns (§6).
@@ -90,105 +79,98 @@ module.exports = function registerMavlinkVehicle(RED) {
    * catalog: prefer a deployed profile's bundle, and never invent a bundled
    * dialect for a missing `?vehicle=`.
    */
-  if (!_enumsRouteRegistered) {
-    registerDialectCatalogRoute(RED, {
-      path: ENUMS_ROUTE,
-      fromBundle: (bundle, dialect, req) =>
-        catalogEnumsFromBundle(bundle, dialect, req.query.names),
-    });
-    _enumsRouteRegistered = true;
-  }
+  registerDialectCatalogRoute(RED, {
+    path: ENUMS_ROUTE,
+    fromBundle: (bundle, dialect, req) =>
+      catalogEnumsFromBundle(bundle, dialect, req.query.names),
+  });
 
   /**
    * Downloadable MAVLink XML dialect catalog (§4). Downloaded XML files are
    * managed *Custom* dialect paths, not a new runtime mode and not a
-   * replacement for bundled dialects. Registered once per process.
+   * replacement for bundled dialects.
    *
    * GET  /mavlink/xml-catalog          dialect library (name → seed + dated versions)
    * POST /mavlink/xml-catalog/update   download/refresh from an official source
    * GET  /mavlink/xml-catalog/compare  informational diff vs the seed dialect
    */
-  if (!_xmlCatalogRouteRegistered) {
-    setCompiledCacheDir(compiledCacheDir(RED));
+  setCompiledCacheDir(compiledCacheDir(RED));
 
-    const newCatalog = () => new XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
+  const newCatalog = () => new XmlCatalog({ baseDir: xmlCatalogBaseDir(RED) });
 
-    // GET list: needs read permission (§6). Never discloses the absolute base
-    // dir — only the dialect names and snapshot dates the Version pulldown offers.
-    RED.httpAdmin.get(
-      XML_CATALOG_ROUTE,
-      RED.auth.needsPermission('mavlink.read'),
-      (_req, res) => {
-        try {
-          const catalog = newCatalog();
-          const library = dialectLibrary(catalog);
-          res.json({ ok: true, dialects: library.dialects });
-        } catch (err) {
-          res.status(500).json({ ok: false, error: err.message, code: err.code });
-        }
+  // GET list: needs read permission (§6). Never discloses the absolute base
+  // dir — only the dialect names and snapshot dates the Version pulldown offers.
+  RED.httpAdmin.get(
+    XML_CATALOG_ROUTE,
+    RED.auth.needsPermission('mavlink.read'),
+    (_req, res) => {
+      try {
+        const catalog = newCatalog();
+        const library = dialectLibrary(catalog);
+        res.json({ ok: true, dialects: library.dialects });
+      } catch (err) {
+        res.status(500).json({ ok: false, error: err.message, code: err.code });
       }
-    );
+    }
+  );
 
-    // POST update: downloads (network + disk write), so it gates on the write
-    // scope — read-scoped users can list and compare, not mutate.
-    RED.httpAdmin.post(
-      `${XML_CATALOG_ROUTE}/update`,
-      RED.auth.needsPermission('mavlink.write'),
-      (req, res) => {
-        const body = req.body;
-        // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
-        // so a crafted value cannot inject extra path segments server-side.
-        if (body.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(String(body.repo))) {
-          res.status(400).json({ ok: false, error: "repo must look like 'owner/name'." });
-          return;
-        }
-        if (body.ref !== undefined && !/^[\w./-]+$/.test(String(body.ref))) {
-          res.status(400).json({ ok: false, error: 'ref contains unsupported characters.' });
-          return;
-        }
-        newCatalog()
-          .update({
-            repo: body.repo,
-            ref: body.ref,
-            files: body.files,
-          })
-          .then((manifest) => res.json({ ok: true, manifest }))
-          .catch((err) => res.status(500).json({ ok: false, error: err.message, code: err.code }));
+  // POST update: downloads (network + disk write), so it gates on the write
+  // scope — read-scoped users can list and compare, not mutate.
+  RED.httpAdmin.post(
+    `${XML_CATALOG_ROUTE}/update`,
+    RED.auth.needsPermission('mavlink.write'),
+    (req, res) => {
+      const body = req.body;
+      // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
+      // so a crafted value cannot inject extra path segments server-side.
+      if (body.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(String(body.repo))) {
+        res.status(400).json({ ok: false, error: "repo must look like 'owner/name'." });
+        return;
       }
-    );
-
-    // GET compare: informational diff of a downloaded XML vs the bundled dialect.
-    RED.httpAdmin.get(
-      `${XML_CATALOG_ROUTE}/compare`,
-      RED.auth.needsPermission('mavlink.read'),
-      (req, res) => {
-        try {
-          const result = newCatalog().compare({
-            file: req.query.file,
-            snapshot: req.query.snapshot,
-          });
-          res.json({ ok: true, comparison: result });
-        } catch (err) {
-          const status = err.code === 'XML_CATALOG_FILE_NOT_FOUND' ? 404 : 500;
-          res.status(status).json({ ok: false, error: err.message, code: err.code });
-        }
+      if (body.ref !== undefined && !/^[\w./-]+$/.test(String(body.ref))) {
+        res.status(400).json({ ok: false, error: 'ref contains unsupported characters.' });
+        return;
       }
-    );
+      newCatalog()
+        .update({
+          repo: body.repo,
+          ref: body.ref,
+          files: body.files,
+        })
+        .then((manifest) => res.json({ ok: true, manifest }))
+        .catch((err) => res.status(500).json({ ok: false, error: err.message, code: err.code }));
+    }
+  );
 
-    // POST rebuild: drop every compiled dialect so the next deploy recompiles
-    // from the current seed. Nothing invalidates the cache on its own — an
-    // upgraded seed must not silently change a deployed profile — so this is
-    // the only way an entry is replaced. Local and offline, unlike /update.
-    RED.httpAdmin.post(
-      `${DIALECT_CACHE_ROUTE}/rebuild`,
-      RED.auth.needsPermission('mavlink.write'),
-      (_req, res) => {
-        res.json({ ok: true, cleared: clearCompiledCache() });
+  // GET compare: informational diff of a downloaded XML vs the bundled dialect.
+  RED.httpAdmin.get(
+    `${XML_CATALOG_ROUTE}/compare`,
+    RED.auth.needsPermission('mavlink.read'),
+    (req, res) => {
+      try {
+        const result = newCatalog().compare({
+          file: req.query.file,
+          snapshot: req.query.snapshot,
+        });
+        res.json({ ok: true, comparison: result });
+      } catch (err) {
+        const status = err.code === 'XML_CATALOG_FILE_NOT_FOUND' ? 404 : 500;
+        res.status(status).json({ ok: false, error: err.message, code: err.code });
       }
-    );
+    }
+  );
 
-    _xmlCatalogRouteRegistered = true;
-  }
+  // POST rebuild: drop every compiled dialect so the next deploy recompiles
+  // from the current seed. Nothing invalidates the cache on its own — an
+  // upgraded seed must not silently change a deployed profile — so this is
+  // the only way an entry is replaced. Local and offline, unlike /update.
+  RED.httpAdmin.post(
+    `${DIALECT_CACHE_ROUTE}/rebuild`,
+    RED.auth.needsPermission('mavlink.write'),
+    (_req, res) => {
+      res.json({ ok: true, cleared: clearCompiledCache() });
+    }
+  );
 
   /**
    * @param {object} config  Node-RED node config from the editor
