@@ -349,7 +349,7 @@ module.exports = function registerMavlinkCommand(RED) {
           await confirmTier(reportAccepted);
           return;
         case 'complete':
-          await confirmTier(completionKey ? pollCompletion : reportAccepted);
+          await confirmTier(pollCompletion);
           return;
         default: break; // This space intentionally left blank (§5)
       }
@@ -465,9 +465,8 @@ module.exports = function registerMavlinkCommand(RED) {
       }
 
       /**
-       * Confirm tier, or Complete with no condition: an accepted ack is the
-       * whole result, and the waiter's own elapsed (first send to terminal
-       * ack) is the record's.
+       * Confirm tier: an accepted ack is the whole result, and the waiter's
+       * own elapsed (first send to terminal ack) is the record's.
        *
        * @param {object} ackOutcome
        */
