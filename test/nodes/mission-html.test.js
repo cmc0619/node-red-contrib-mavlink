@@ -18,7 +18,7 @@ const html = fs.readFileSync(
 test('mavlink-mission has identity default (vehicle comes from the shared helper)', () => {
   assert.match(
     html,
-    /identity:\s*\{\s*value:\s*''\s*\}/,
+    /identity:\s*\{\s*value:\s*'',\s*type:\s*'mavlink-local-identity'\s*\}/,
     'identity default exists with empty value'
   );
 });

@@ -281,7 +281,7 @@ test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
 test('identity default is declared (vehicle comes from the shared helper)', () => {
   assert.match(
     html,
-    /identity:\s*\{\s*value:\s*''\s*\}/,
+    /identity:\s*\{\s*value:\s*'',\s*type:\s*'mavlink-local-identity'\s*\}/,
     'identity default must exist'
   );
   // The vehicle (mavlink-vehicle) descriptor is contributed by
