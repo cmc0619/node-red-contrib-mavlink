@@ -19,8 +19,8 @@ const SERIAL_PATH = path.join(__dirname, '..', '..', 'lib', 'connection', 'trans
 /**
  * Register the Connection node against a RED double whose admin router only
  * records handlers, with `listSerialPorts` replaced by `lister`. The node
- * module and the serial transport are dropped from the require cache so each
- * case registers afresh — the route guard is once per process.
+ * module and the serial transport are dropped from the require cache so the
+ * lister swap below binds afresh for each case.
  *
  * @param {function(): Promise<object[]>} lister
  * @returns {function(object, object): void} the registered route handler
