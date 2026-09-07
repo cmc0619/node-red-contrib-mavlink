@@ -4,7 +4,7 @@
   // (§6 Firmware XOR); Param's mode field is `delivery`.
   const paramDefaults = {
     name: { value: '' },
-      identity: { value: '' },
+      identity: { value: '', type: 'mavlink-local-identity' },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
       // Without this, a drifted action falls through buildParamMessage's
       // switch to `return undefined` (§5) and the Build tier reports it as a
