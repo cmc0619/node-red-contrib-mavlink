@@ -28,30 +28,24 @@ const { capBadge } = require('../lib/delivery');
 /** Admin endpoint path listing host serial ports for the editor (§6). */
 const SERIAL_PORTS_ROUTE = '/mavlink/serial-ports';
 
-/** Whether the admin serial-ports route has been registered (once per process). */
-let _serialPortsRouteRegistered = false;
-
 module.exports = function registerMavlinkConnection(RED) {
   /**
    * Serial path suggestions for the editor (§6 "Register with
-   * RED.auth.needsPermission"), once per process like the dialects route. An
+   * RED.auth.needsPermission"). An
    * absent `serialport` answers `{ports: []}` with 200 — nothing to
    * enumerate is not a failure; a listing that genuinely fails answers 500
    * with its message.
    */
-  if (!_serialPortsRouteRegistered) {
-    RED.httpAdmin.get(
-      SERIAL_PORTS_ROUTE,
-      RED.auth.needsPermission('mavlink.read'),
-      (_req, res) => {
-        listSerialPorts().then(
-          (ports) => res.json({ ports }),
-          (err) => res.status(500).json({ ports: [], error: err.message })
-        );
-      }
-    );
-    _serialPortsRouteRegistered = true;
-  }
+  RED.httpAdmin.get(
+    SERIAL_PORTS_ROUTE,
+    RED.auth.needsPermission('mavlink.read'),
+    (_req, res) => {
+      listSerialPorts().then(
+        (ports) => res.json({ ports }),
+        (err) => res.status(500).json({ ports: [], error: err.message })
+      );
+    }
+  );
 
   /**
    * @param {object} config  Node-RED node config from the editor

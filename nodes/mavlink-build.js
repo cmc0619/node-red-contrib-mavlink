@@ -44,9 +44,6 @@ const { dialectForTier } = require('../lib/addressing/dialect');
 const { catalogMessagesFromBundle } = require('../lib/metadata/messages-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
 
-/** Module-scope guard — the constructor is recreated each factory call. */
-let messagesRouteRegistered = false;
-
 module.exports = function registerMavlinkBuild(RED) {
   /**
    * @param {object} config  Node-RED node config from the editor
@@ -195,16 +192,12 @@ module.exports = function registerMavlinkBuild(RED) {
   }
 
   /**
-   * Admin endpoint for the Build editor's message dropdown (§6). Registered
-   * once per process.
+   * Admin endpoint for the Build editor's message dropdown (§6).
    */
-  if (!messagesRouteRegistered) {
-    registerDialectCatalogRoute(RED, {
-      path: '/mavlink/build/messages',
-      fromBundle: catalogMessagesFromBundle,
-    });
-    messagesRouteRegistered = true;
-  }
+  registerDialectCatalogRoute(RED, {
+    path: '/mavlink/build/messages',
+    fromBundle: catalogMessagesFromBundle,
+  });
 
   RED.nodes.registerType('mavlink-build', MavlinkBuildNode);
 };
