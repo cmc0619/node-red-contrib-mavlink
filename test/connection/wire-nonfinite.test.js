@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata/bundled');
 const { createWire } = require('../../lib/connection/wire');
-const { buildCommandInt, buildCommandLong } = require('../../lib/command/carrier');
+const { buildCommandInt, buildCommandLong, resolveFrame } = require('../../lib/command/carrier');
 
 const wire = createWire({ bundle: loadBundled('common') });
 
@@ -116,7 +116,8 @@ test('a NaN float field still serializes — NaN floats are legal MAVLink', () =
 });
 
 test('COMMAND_INT: a garbage MAV_FRAME token refuses at pack', () => {
-  const message = buildCommandInt(192, 1, 1, [0, 0, 0, 0, 47.398, 8.545, 10], { frame: 'garbage' });
+  // Every caller resolves the frame first; the builder carries what it gets.
+  const message = buildCommandInt(192, 1, 1, [0, 0, 0, 0, 47.398, 8.545, 10], { frame: resolveFrame('garbage') });
   assert.ok(Number.isNaN(message.fields.frame), 'unresolved frame is NaN, not a guessed member');
   assert.throws(() => wire.serialize(message, ctx), /invalid packet/);
 });
