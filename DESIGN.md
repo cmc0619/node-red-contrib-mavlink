@@ -1155,6 +1155,22 @@ battery-swap case it was meant for. The lockout stays; the reasoning lives here 
 *Check:* `test/connection/runtime.test.js` "reconnect keeps inbound replay memory — a
 below-high-water frame is still refused"; `rg -n resetInbound lib` — no matches.
 
+**14.141 The editor validates; the runtime trusts the saved config; the driver massages nothing.** ✔ (owner ruling, 2026-09-01; recorded 2026-09-07)
+A typo in a dialog red-rings and cannot be saved. That ring is the entire protection. A value
+the ring would have refused is reachable only by hand-editing flow JSON, and it rides to its
+natural reading at runtime: no token skipping, no safe-direction fallback, no second
+deploy-time error path. The clause this supersedes, "falls back to the safe direction", spawned
+the same argument in three separate reviews and is settled the other way. Instance on #462:
+the Command node's Complete tier is offered by `deliveryOptions` only when the preset carries
+a completion key, so `completionKey ? pollCompletion : reportAccepted` was a runtime fallback
+for a config the dialog cannot produce; it went, and Sourcery and CodeRabbit both asked for it
+back in the same round. A hand-edited keyless Complete now waits on a condition nothing
+satisfies and times out naming the unknown key, which is loud. Do not restore a runtime skip
+because the natural reading is scary; the fix for a degenerate config string is fixing the
+string.
+*Check:* `rg -n "completionKey \? pollCompletion" nodes` — no matches; `deliveryOptions` in
+`nodes/mavlink-command.html` gates `complete` on `hasCompletion`.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
