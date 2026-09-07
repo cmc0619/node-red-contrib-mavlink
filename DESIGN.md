@@ -1138,6 +1138,23 @@ The codec's `assertFloatBitsSurvive` refusal was deleted in #428 and stays delet
 for values no shipped parameter produces is §0 noise. Codex raised it on #428; this is the answer.
 *Check:* `node -e "const b=Buffer.alloc(4);b.writeInt32LE(2139095041);const c=Buffer.alloc(4);c.writeFloatLE(b.readFloatLE(0));console.log(c.readInt32LE(0))"` prints `2143289345`; after #428, `rg -n assertFloatBitsSurvive lib` — no matches.
 
+**14.140 A redial keeps the inbound signing high-water; the reboot lockout it can cause is short and self-healing.** ✔ (owner ruling, 2026-09-07)
+An external review (D-iv) proposed clearing the per-stream inbound timestamp store on reconnect
+so a vehicle that rebooted with a restarted signing clock is not refused as `replay-or-out-of-order`
+for good. Declined, for two reasons that hold at the hobby threat model (a buddy with a radio,
+not a state). First, the proposed reset would not admit the one case that is actually permanent:
+a clock that restarts near the MAVLink epoch fails the first-contact floor (one minute behind
+local time) regardless of whether the store was cleared, so a reset buys nothing there. Second,
+the case it would help is already bounded: ArduPilot persists its signing timestamp and takes
+GPS time when it has it, so a rebooted vehicle re-enters as soon as its clock passes the old
+mark, at most the persistence lag, and every refused frame fires `rejected` with its reason
+meanwhile. Against that, clearing on redial hands anyone who can drop the link (free on UDP, and
+UDP is the hobby transport) a reset of the replay defence, after which a frame captured in the
+last minute lands. A reconnect also never fires on UDP, so a reset there would not even reach the
+battery-swap case it was meant for. The lockout stays; the reasoning lives here and in the test.
+*Check:* `test/connection/runtime.test.js` "reconnect keeps inbound replay memory — a
+below-high-water frame is still refused"; `rg -n resetInbound lib` — no matches.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
