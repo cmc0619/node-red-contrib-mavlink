@@ -780,9 +780,9 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 ### sitl/38 — Signing
 
 - **File:** `examples/sitl/38-signing.json` · **Tab:** `SITL 38 Signing`
-- **Story:** Sign-outbound + require-signed inbound with a passphrase credential, plus a
-  listen-only companion that is require-signed with sign-off. Bring-up / dry-run notes for
-  SITL signature verification (§7).
+- **Story:** Sign-outbound with a passphrase credential; the configured key verifies inbound
+  signatures and rejects unsigned traffic. Bring-up / dry-run notes for SITL signature
+  verification (§7).
 - **Nodes:** identity (+ signing credential), 2× `connection`, `in`, `state`, `command`,
   `debug`.
 - **Config/launch:** matching key on the SITL side; `restart: fleet`.

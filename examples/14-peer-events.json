@@ -43,7 +43,6 @@
     "localIdentity": "ex14-identity",
     "additionalIdentities": [],
     "signOutbound": false,
-    "requireSigned": false,
     "acceptInvalid": false,
     "linkId": 0,
     "staleMs": "5000",
