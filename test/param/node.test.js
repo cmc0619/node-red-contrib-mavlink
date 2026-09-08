@@ -636,15 +636,17 @@ function confirmSetNode(RED, conn, timeout) {
   });
 }
 
-test('confirm set re-sends PARAM_SET when its echo times out', async () => {
+test('confirm set re-sends PARAM_SET when its echo times out', { timeout: 1000 }, async () => {
   const conn = connStubFull();
   const node = confirmSetNode(redStub({ conn }), conn, 15);
 
   const outs = [];
   let doneErr;
-  node.emit('input', { payload: { paramId: 'FOO', value: 1 } },
-    (m) => outs.push(m), (err) => { doneErr = err; });
-  await sleep(100);
+  const finished = new Promise((resolve) => {
+    node.emit('input', { payload: { paramId: 'FOO', value: 1 } },
+      (m) => outs.push(m), (err) => { doneErr = err; resolve(); });
+  });
+  await finished;
 
   assert.equal(conn.sent.length, 4, 'the initial send is followed by the editor\'s three re-sends');
   assert.ok(conn.sent.every((s) => s.message.name === 'PARAM_SET'));
