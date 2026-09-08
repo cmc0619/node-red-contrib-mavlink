@@ -11,7 +11,7 @@
   // (§6 Firmware XOR); Mission's mode field is `delivery` (default confirm).
   const missionDefaults = {
     name: { value: '' },
-      identity: { value: '', type: 'mavlink-local-identity' },
+      identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
       delivery: { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'confirm']) },
       operation: { value: 'download', validate: RED.mavlink.oneOf(['download', 'upload', 'clear']) },
       missionType: { value: 'mission', validate: RED.mavlink.oneOf(['mission', 'fence', 'rally']) },

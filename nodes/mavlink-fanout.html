@@ -33,7 +33,7 @@
     defaults: {
       name: { value: '' },
       connection: RED.mavlink.connectionDefault(),
-      identity: { value: '', type: 'mavlink-local-identity' },
+      identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator(IDENTITY_ROLES) },
       selectionMode: {
         // 'list' — the delivery default is Build, and Build requires the list,
         // so a fresh node must not be born invalid behind a greyed dropdown.

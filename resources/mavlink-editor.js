@@ -1410,6 +1410,34 @@
   };
 
   /**
+   * Validator for a node's Identity override (§6). Blank inherits the
+   * Connection's Local Identity and is always valid, on every tier. A
+   * non-blank pick must name an existing Identity bound to the live
+   * Connection under the dialog's role filter. Node-RED skips its own
+   * config-reference check when a property carries a validator, so the
+   * existence check lives here too, and its blank check would otherwise
+   * ring a typed field that has no `required: false`. The native picker's
+   * Add and Edit buttons refill the select with every Identity of the type;
+   * this ring is what keeps an unbound pick from saving.
+   *
+   * @param {string[]} [rolesAllowed]  the same filter the dialog's select uses
+   * @returns {function(this: object, string, object): (true|string)}
+   */
+  RED.mavlink.identityOverrideValidator = function (rolesAllowed) {
+    return function validate(v, _opt) {
+      if (RED.mavlink.isBlank(v)) return true;
+      if (!RED.nodes.node(v)) return 'references a missing Identity';
+      const connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
+      // No Connection resolved: its own required ring owns that.
+      if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
+      if (!RED.mavlink.identityOptionsFor(connId, rolesAllowed).some((o) => o.id === v)) {
+        return 'is not bound to the selected Connection — bind it there or pick a bound Identity';
+      }
+      return true;
+    };
+  };
+
+  /**
    * The source (sysid, compid) a Local Identity would stamp on the wire.
    *
    * The companion role has no saved sysid — it is a component of the vehicle's
