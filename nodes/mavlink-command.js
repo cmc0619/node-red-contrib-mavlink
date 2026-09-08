@@ -487,12 +487,16 @@ module.exports = function registerMavlinkCommand(RED) {
        */
       async function pollCompletion(ackOutcome, myGen, completionFrame) {
         applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
+        // Component 0 addresses every component of the system; the one that
+        // acked is the one whose state settles completion. No peer advertises
+        // compid 0, so looking it up would never find a row.
+        const completionCompid = target.compid === 0 ? ackOutcome.compid : target.compid;
         const completionWait = waitForCompletion({
           completionKey,
           params: requestedParams,
           peerTable: connNode.peerTable,
           sysid: target.sysid,
-          compid: target.compid,
+          compid: completionCompid,
           frame: completionFrame,
           timeoutMs: completionTimeoutMs,
         });
