@@ -319,7 +319,7 @@
   // Move's mode field is `delivery` and it has no firmware selector.
   const moveDefaults = {
     name: { value: '' },
-      identity: { value: '', type: 'mavlink-local-identity' },
+      identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
       // The dialog only ever offers the tiers DELIVERY_OPTIONS lists for the
       // chosen action, so a Steer node cannot be *set* to confirm through the
       // UI. A hand-edited flow can hold one, and the runtime does not refuse

@@ -329,7 +329,7 @@
       // Other frames ride msg.mavFrame at runtime; a hand-edited config value
       // the dialog cannot save reds here.
       frame:             { value: '3', validate: RED.mavlink.oneOf(['0', '3', '10', '1']) },
-      identity:          { value: '', type: 'mavlink-local-identity' },
+      identity:          { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
       // A statically configured broadcast (0) on an ack-confirmed tier is a
       // cross-field static requirement, so it reds at deploy rather than on
       // the first message. The driver does not restate it — this is
