@@ -12,8 +12,8 @@
  *              friendly name; the form reshapes for the chosen preset.
  *   advanced — pick any MAV_CMD from the loaded dialect; all params exposed.
  *
- * Carrier (§9 "Coordinate frames"): the editor defaults to COMMAND_INT and
- * the operator can pick COMMAND_LONG instead. Positional params are always
+ * Carrier (§9 "Coordinate frames"): the editor defaults to COMMAND_LONG and
+ * the operator can pick COMMAND_INT explicitly. Positional params are always
  * entered in decimal degrees; the INT carrier scales them to
  * degE7 on the wire. The ack, whatever it says, is the result.
  *

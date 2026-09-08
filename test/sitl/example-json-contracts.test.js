@@ -56,7 +56,7 @@ test('every shipped mavlink node is editor-shaped: all declared keys, every vali
       const where = `${file}:${n.name || n.id}`;
       if (!types.has(n.type)) types.set(n.type, loadNodeType(n.type, lookup));
       const { defaults } = types.get(n.type);
-      const signs = n.type === 'mavlink-connection' && (n.signOutbound || n.requireSigned);
+      const signs = n.type === 'mavlink-connection' && n.signOutbound;
       const self = signs ? { ...n, credentials: { has_signingPassphrase: true } } : n;
       for (const [key, def] of Object.entries(defaults)) {
         if (!(key in n)) {

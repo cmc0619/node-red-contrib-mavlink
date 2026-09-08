@@ -38,6 +38,14 @@ test('Identity default declares type mavlink-local-identity', () => {
   );
 });
 
+test('inbound signing policy follows key presence and has no redundant checkbox', () => {
+  const defaults = loadNodeDefaults('mavlink-connection');
+  assert.equal('requireSigned' in defaults, false, 'inbound policy is derived from the credential');
+  assert.doesNotMatch(html, /node-config-input-requireSigned/, 'the redundant inbound checkbox is removed');
+  assert.match(html, /without a signing key[\s\S]*signed or unsigned[\s\S]*unverified/i);
+  assert.match(html, /with a signing key[\s\S]*unsigned[\s\S]*rejected/i);
+});
+
 test('additionalIdentities has an editor row (issue #94 — feature must be reachable)', () => {
   // The runtime consumes config.additionalIdentities and the shared editor
   // helper reads conn.additionalIdentities for send-as selects; without this

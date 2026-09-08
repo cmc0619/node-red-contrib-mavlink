@@ -309,6 +309,36 @@ test('a component that has only heartbeated snapshots null telemetry', () => {
   assert.equal(component.home, null);
 });
 
+test('snapshot copies each statustext row while preserving history order and trimming', () => {
+  const table = new PeerTable({ now: () => 0, statustextHistory: 2 });
+  const update = (severity, text) => table.update(
+    { name: 'STATUSTEXT', sysid: 1, compid: 1, fields: { severity, text } },
+    EP1
+  );
+  update(2, 'first');
+  update(3, 'second');
+  update(4, 'third');
+
+  const first = table.snapshot();
+  const another = table.snapshot();
+  const rows = first[0].components[0].statustext;
+  assert.deepEqual(rows, [
+    { severity: 3, text: 'second' },
+    { severity: 4, text: 'third' },
+  ]);
+
+  rows[0].severity = 99;
+  rows[0].text = 'edited downstream';
+  assert.deepEqual(another[0].components[0].statustext, [
+    { severity: 3, text: 'second' },
+    { severity: 4, text: 'third' },
+  ]);
+  assert.deepEqual(table.getComponent(1, 1).statustext, [
+    { severity: 3, text: 'second' },
+    { severity: 4, text: 'third' },
+  ]);
+});
+
 test('projected sentinels match the seed dialect invalid markers', () => {
   const { loadBundled } = require('../../lib/metadata/bundled');
   const { messages } = loadBundled('common');

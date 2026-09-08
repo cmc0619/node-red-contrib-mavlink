@@ -200,7 +200,6 @@ test('Connection pump marks each dequeued band immediately before transport send
       signing: {
         linkId: 0,
         signOutbound: false,
-        requireSigned: false,
         acceptInvalid: false,
         hasKey: false,
       },

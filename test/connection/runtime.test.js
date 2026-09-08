@@ -52,7 +52,7 @@ function build(configOverrides = {}, depOverrides = {}) {
     vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
     identities: [GCS],
     defaultIdentityId: 'gcs',
-    signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+    signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
     heartbeat: { intervalMs: 1000, staleMs: 5000, expireMs: 15000 },
     ...configOverrides,
   };
@@ -141,7 +141,7 @@ test('the send() dry run signs when the link signs, consuming no counter', async
   wire.serialize = (message, ctx) => { contexts.push(ctx); return serialize(message, ctx); };
   const key = Buffer.alloc(32, 7);
   const { connection } = build(
-    { signing: { linkId: 3, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: true, key } },
+    { signing: { linkId: 3, signOutbound: true, acceptInvalid: false, hasKey: true, key } },
     { wire }
   );
   await connection.start();
@@ -164,7 +164,7 @@ test('a sign-outbound link with no key refuses inside send(), through the real s
   const { createWire } = require('../../lib/connection/wire');
   const { loadBundled } = require('../../lib/metadata/bundled');
   const { connection, dg } = build(
-    { signing: { linkId: 0, signOutbound: true, requireSigned: false, acceptInvalid: false, hasKey: false, key: null } },
+    { signing: { linkId: 0, signOutbound: true, acceptInvalid: false, hasKey: false, key: null } },
     { wire: createWire({ bundle: loadBundled('minimal') }) }
   );
   await connection.start();
@@ -197,6 +197,63 @@ test('outbound sends drain one at a time in band order, using the socket callbac
   assert.equal(names.length, 3);
   assert.equal(names[0], 'BULK_ONE');
   assert.deepEqual(names.slice(1), ['EMERGENCY_STOP', 'CONTROL_ONE']);
+  connection.close();
+});
+
+test('a queued outbound envelope keeps its message and route after caller mutation', async () => {
+  const { EventEmitter } = require('node:events');
+  const writes = [];
+  const releases = [];
+  const transportFactory = () => {
+    const transport = new EventEmitter();
+    transport.mode = 'udp';
+    transport.open = async () => {};
+    transport.close = (done) => done?.();
+    transport.send = (buffer, endpoint, done) => {
+      writes.push({ buffer, endpoint });
+      releases.push(done);
+    };
+    return transport;
+  };
+  const { connection } = build({}, { transportFactory });
+  await connection.start();
+
+  for (const sysid of [1, 2]) {
+    connection.peerTable.update(
+      {
+        name: 'HEARTBEAT',
+        sysid,
+        compid: 1,
+        fields: { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 4 },
+      },
+      { address: '10.0.0.1', port: 14550 + sysid }
+    );
+  }
+
+  connection.send(
+    { name: 'FIRST', fields: {} },
+    { band: BAND.CONTROL, target: { sysid: 1, compid: 1 } }
+  );
+  const target = { sysid: 1, compid: 1 };
+  const message = { name: 'SECOND', fields: { target_system: 1, param1: 1 } };
+  connection.send(message, { band: BAND.CONTROL, target });
+  assert.equal(writes.length, 1, 'the second send waits behind the held first write');
+
+  target.sysid = 2;
+  message.fields.target_system = 2;
+  message.fields.param1 = 2;
+  releases[0]();
+
+  assert.equal(writes.length, 2, 'releasing the first write drains the queued send');
+  const sent = JSON.parse(writes[1].buffer.toString());
+  assert.equal(sent.fields.target_system, 1, 'the queued payload keeps its accepted target');
+  assert.equal(sent.fields.param1, 1, 'the queued payload keeps its accepted fields');
+  assert.deepEqual(
+    writes[1].endpoint,
+    { address: '10.0.0.1', port: 14551 },
+    'the queued route keeps its accepted endpoint'
+  );
+  releases[1]();
   connection.close();
 });
 
@@ -389,9 +446,9 @@ test('UDP transport does not enable SO_BROADCAST from config', async () => {
   connection.close();
 });
 
-test('require-signed drops an unsigned inbound frame and emits rejected', async () => {
+test('a configured key rejects every unsigned inbound frame', async () => {
   const { connection, dg } = build({
-    signing: { linkId: 0, requireSigned: true, signOutbound: false, acceptInvalid: false, hasKey: false },
+    signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: true },
   });
   await connection.start();
 
@@ -406,7 +463,13 @@ test('require-signed drops an unsigned inbound frame and emits rejected', async 
   );
 
   assert.equal(received.length, 0);
-  assert.deepEqual(rejected, ['unsigned-rejected-require-signed']);
+  dg.sockets[0].receive(
+    frameBuffer({ name: 'RADIO_STATUS', sysid: 1, compid: 1, fields: {} }),
+    { address: '10.0.0.5', port: 14550 }
+  );
+
+  assert.equal(received.length, 0);
+  assert.deepEqual(rejected, ['unsigned-rejected-key-configured', 'unsigned-rejected-key-configured']);
   connection.close();
 });
 
@@ -438,23 +501,35 @@ test('an UNKNOWN_<id> frame dispatches but records no endpoint (crcVerified gati
   connection.close();
 });
 
-test('an allowlisted unsigned frame under require-signed dispatches untrusted and records no endpoint', async () => {
-  const { connection, dg } = build({
-    signing: { linkId: 0, requireSigned: true, signOutbound: false, acceptInvalid: false, hasKey: false },
-  });
+test('keyless signed traffic stays unverified but settles ACKs and learns its endpoint', async () => {
+  const { createWire } = require('../../lib/connection/wire');
+  const { loadBundled } = require('../../lib/metadata/bundled');
+  const signingKey = Buffer.alloc(32, 7);
+  const wire = createWire({ bundle: loadBundled('common') });
+  const { connection, dg } = build(
+    { signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false } },
+    { wire }
+  );
   await connection.start();
 
   const received = [];
-  connection.subscribe(null, (m) => received.push(m));
+  connection.subscribe({ message: 'COMMAND_ACK', trustedOnly: true }, (m) => received.push(m));
+  const packet = wire.serialize(
+    { name: 'COMMAND_ACK', fields: { command: 400, result: 0 } },
+    { sysid: 7, compid: 1, seq: 0, sign: true, linkId: 0, key: signingKey, timestamp: 123456 }
+  );
   dg.sockets[0].receive(
-    frameBuffer({ name: 'RADIO_STATUS', sysid: 7, compid: 1, fields: {} }),
+    packet,
     { address: '10.0.0.5', port: 14550 }
   );
 
-  assert.equal(received.length, 1, 'the allowlisted frame still dispatches');
-  assert.equal(received[0].trusted, false, 'flagged untrusted (§7)');
-  assert.equal(connection.peerTable.endpointFor(7, 1), null, 'an untrusted frame teaches the table nothing');
-  assert.deepEqual(connection.peerTable.endpointsForBroadcast(1), []);
+  assert.equal(received.length, 1, 'a keyless signed ACK reaches trusted-only subscribers');
+  assert.equal(received[0].trusted, undefined, 'without a key the signed frame is unverified, not explicitly untrusted');
+  assert.deepEqual(
+    connection.peerTable.endpointFor(7, 1),
+    { address: '10.0.0.5', port: 14550 },
+    'keyless signed traffic learns endpoints like ordinary unsigned traffic'
+  );
   connection.close();
 });
 
@@ -1363,7 +1438,7 @@ function reconnectBuild({
       vehicle: { targetSystem: 1, targetComponent: 1, autopilot: 3 },
       identities: [GCS],
       defaultIdentityId: 'gcs',
-      signing: signing || { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+      signing: signing || { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
       heartbeat: { intervalMs: 1000, staleMs: 5000, expireMs: 15000 },
     },
     {
@@ -1703,7 +1778,7 @@ test('reconnect keeps inbound replay memory — a below-high-water frame is stil
   // a peer whose clock jumped backwards during the outage stays refused until
   // its timestamps pass the old mark, which is the safer of the two failures.
   const { connection, transports, redials } = reconnectBuild({
-    signing: { linkId: 0, signOutbound: false, requireSigned: true, acceptInvalid: false, hasKey: true },
+    signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: true },
   });
   await connection.start();
 

@@ -215,7 +215,6 @@
           'signingKeyHex', 'has_signingKeyHex')) return true;
         return 'requires a signing passphrase or raw key';
       } },
-      requireSigned: { value: false },
       acceptInvalid: { value: false },
       // The signature block carries the link id as one byte on the wire.
       linkId: { value: 0, validate(v, _opt) {
@@ -502,17 +501,12 @@
 
   <div class="form-row">
     <label><i class="fa fa-lock"></i> Signing</label>
-    <span>Off by default — all combinations are legal.</span>
+    <span>Without a signing key, signed or unsigned inbound traffic is accepted as unverified. With a signing key, inbound signatures are verified and unsigned traffic is rejected.</span>
   </div>
   <div class="form-row">
     <label for="node-config-input-signOutbound">&nbsp;</label>
     <input type="checkbox" id="node-config-input-signOutbound" style="display:inline-block; width:auto; vertical-align:top;" />
     <span>Sign outbound (requires a passphrase, or the connection fails closed)</span>
-  </div>
-  <div class="form-row">
-    <label for="node-config-input-requireSigned">&nbsp;</label>
-    <input type="checkbox" id="node-config-input-requireSigned" style="display:inline-block; width:auto; vertical-align:top;" />
-    <span>Require signed inbound (RADIO_STATUS still accepted unsigned)</span>
   </div>
   <div class="form-row">
     <label for="node-config-input-acceptInvalid">&nbsp;</label>
@@ -612,10 +606,14 @@
   relied upon.</p>
 
   <h3>Signing</h3>
-  <p>Optional and off by default. <i>Sign outbound</i> and <i>require signed
-  inbound</i> are independent; <i>accept invalid signatures</i> is a recovery
-  override whose traffic is untrusted and advisory only. The passphrase is
-  stored in Node-RED encrypted credentials, never in exported flow JSON.</p>
+  <p>Outbound signing is optional. Without a signing key, both signed and
+  unsigned inbound traffic is accepted as unverified; signatures are not
+  checked and do not advance replay state. With a signing key, inbound
+  signatures are verified and unsigned traffic is rejected, including
+  <code>RADIO_STATUS</code>. <i>Accept invalid signatures</i> is a separate
+  recovery override whose admitted traffic is untrusted and advisory only. The
+  passphrase is stored in Node-RED encrypted credentials, never in exported
+  flow JSON.</p>
 
   <h3>Disable</h3>
   <p>Disabling constructs no runtime at all — no listening or timers — since

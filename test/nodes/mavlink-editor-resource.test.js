@@ -769,6 +769,24 @@ test('hasIdentityChoice is false for an unset or unknown Connection', () => {
   assert.equal(RED.mavlink.hasIdentityChoice('conn-missing'), false);
 });
 
+test('identityOverrideValidator rejects invalid identities and preserves other reference outcomes', () => {
+  const { RED } = loadResource({}, {
+    conn: { localIdentity: 'id-valid', additionalIdentities: ['id-invalid', 'id-unknown-valid'] },
+    'id-valid': { name: 'Valid', role: 'gcs', valid: true },
+    'id-invalid': { name: 'Broken', role: 'gcs', valid: false },
+    'id-unknown-valid': { name: 'Pending', role: 'gcs' },
+  });
+  const validate = RED.mavlink.identityOverrideValidator(['gcs']);
+  const node = { connection: 'conn' };
+
+  assert.equal(validate.call(node, '', {}), true, 'blank inherits the Connection identity');
+  assert.match(String(validate.call(node, '_ADD_', {})), /references a missing Identity/);
+  assert.match(String(validate.call(node, 'id-missing', {})), /references a missing Identity/);
+  assert.match(String(validate.call(node, 'id-invalid', {})), /is not properly configured/);
+  assert.equal(validate.call(node, 'id-valid', {}), true);
+  assert.equal(validate.call(node, 'id-unknown-valid', {}), true);
+});
+
 // ── identityWireIds + duplicateBoundIdentity ─────────────────────────────────
 
 // Two stations and one companion on one link. 'id-second' is the accident this
