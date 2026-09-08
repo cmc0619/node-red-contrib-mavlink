@@ -307,10 +307,10 @@ function record(node, operation, missionTypeKey, target, fields) {
  * @param {number} missionType
  * @param {{sysid: number, compid: number}} target
  * @param {object[]} items
- * @param {*} [seq]  current mission sequence for Set Current
+ * @param {*} [currentSeq]  current mission sequence for Set Current
  * @returns {{operation: string, missionType: number, target: object, messages: object[]}}
  */
-function buildPlan(operation, missionType, target, items, seq) {
+function buildPlan(operation, missionType, target, items, currentSeq) {
   let messages;
   switch (operation) {
     case OPERATION.DOWNLOAD:
@@ -326,7 +326,7 @@ function buildPlan(operation, missionType, target, items, seq) {
       ];
       break;
     case OPERATION.SET_CURRENT:
-      messages = [buildSetCurrent(target, seq)];
+      messages = [buildSetCurrent(target, currentSeq)];
       break;
     default: break; // This space intentionally left blank (§5)
   }

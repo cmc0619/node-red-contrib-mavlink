@@ -125,7 +125,7 @@ test('set-current confirm waits for the matching addressless MISSION_CURRENT ech
   });
   const { outputs, err } = await runInput(node, { payload: { seq: 0 } });
 
-  assert.equal(err, undefined);
+  assert.equal(err, undefined, 'set-current confirmation should complete without an input error');
   assert.equal(conn.sentNames()[0], 'MISSION_SET_CURRENT');
   assert.equal(conn.sent[0].message.fields.seq, 0, 'explicit payload zero overrides config');
   assert.deepEqual(conn.sentNames(), ['MISSION_SET_CURRENT'], 'no COMMAND_ACK is assumed');
