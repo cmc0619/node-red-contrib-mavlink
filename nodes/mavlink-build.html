@@ -238,7 +238,10 @@
             });
             return $comp;
           }
-          if (spec.enum && enums[spec.enum] && enums[spec.enum].length) {
+          // An enum-typed array (ESC_INFO.failure_flags, TRAJECTORY_REPRESENTATION_WAYPOINTS.command)
+          // is still an array on the wire: the array editor owns it, and the
+          // enum names ride in its title.
+          if (spec.enum && enums[spec.enum] && enums[spec.enum].length && !spec.arrayLength) {
             const entries = enums[spec.enum];
             const falseTrue = RED.mavlink.isFalseTrueEnum(entries);
             if (falseTrue) {
