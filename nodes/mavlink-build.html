@@ -411,6 +411,7 @@
             // COMMAND_INT location lives in x/y/z — hide those raw slots too.
             lastBuildCommandId = undefined;
             (msg.fields || []).forEach((spec) => {
+              if (spec.constValue !== undefined) return;
               if (isCommandParamSlot(spec.name) || spec.name === 'command') return;
               if (msg.name === 'COMMAND_INT' && (spec.name === 'x' || spec.name === 'y' || spec.name === 'z')) return;
               container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
@@ -455,6 +456,7 @@
             return;
           }
           fields.forEach((spec) => {
+            if (spec.constValue !== undefined) return;
             container.append(formRow(fieldLabel(spec), fieldInput(spec, catalog.enums || {})));
           });
         }

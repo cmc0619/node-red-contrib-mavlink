@@ -3,7 +3,7 @@
   // Family reservation for configured items. The editor is the only
   // protector: fence vertices cannot be saved as a mission, a configured []
   // cannot be saved as an upload, and broadcast cannot be saved on
-  // download/upload. Payload items ride.
+  // download/upload/set-current. Payload values ride.
   const MISSION_FENCE_COMMANDS = [5000, 5001, 5002, 5003, 5004, 5005];
   const MISSION_RALLY_COMMAND = 5100;
 
@@ -13,11 +13,22 @@
     name: { value: '' },
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
       delivery: { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'confirm']) },
-      operation: { value: 'download', validate: RED.mavlink.oneOf(['download', 'upload', 'clear']) },
-      missionType: { value: 'mission', validate: RED.mavlink.oneOf(['mission', 'fence', 'rally']) },
+      operation: { value: 'download', validate: RED.mavlink.oneOf(['download', 'upload', 'clear', 'set-current']) },
+      missionType: {
+        value: 'mission',
+        validate(v, opt) {
+          const member = RED.mavlink.oneOf(['mission', 'fence', 'rally']).call(this, v, opt);
+          if (member !== true) return member;
+          const op = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download');
+          if (op === 'set-current' && v !== 'mission') {
+            return 'Set Current only supports the mission plan type';
+          }
+          return true;
+        },
+      },
       // A statically configured broadcast (0) can never run a transfer:
-      // download and upload are refused for sysid 0 on every tier (§9 — no
-      // vehicle answers as sysid 0), so the pair reds at deploy rather than
+      // download, upload, and set-current are refused for sysid 0 on every
+      // tier (§9 — no vehicle answers as sysid 0), so the pair reds at deploy rather than
       // on the first message. Clear stays broadcast-legal, and blank passes
       // (it inherits the profile default). Two args so the reason renders.
       targetSystem: {
@@ -82,6 +93,13 @@
           return true;
         },
       },
+      seq: {
+        value: 0,
+        validate(v, opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download') !== 'set-current') return true;
+          return RED.mavlink.validateIntRange(0, 65535).call(this, v, opt);
+        },
+      },
       timeoutMs: { ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire).timeoutMs, value: '1500' },
       maxRetries: { ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire).maxRetries, value: '5' },
     ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
@@ -109,6 +127,7 @@
       function refreshRows() {
         const op = $op.val();
         $('.mavlink-mission-items').toggle(op === 'upload');
+        $('.mavlink-mission-seq').toggle(op === 'set-current');
       }
 
       /* ── Visibility: role × tier matrix (DESIGN.md §6) ───────── */
@@ -189,21 +208,23 @@
   <div class="form-row" id="row-mission-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value=""></option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity"></select></div>
-  <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"><option value="download">Download</option><option value="upload">Upload</option><option value="clear">Clear</option></select></div>
+  <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"><option value="download">Download</option><option value="upload">Upload</option><option value="clear">Clear</option><option value="set-current">Set current</option></select></div>
   <div class="form-row"><label for="node-input-missionType">Type</label><select id="node-input-missionType"><option value="mission">Mission (0)</option><option value="fence">Fence (1)</option><option value="rally">Rally (2)</option></select></div>
   <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
   <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row mavlink-mission-items"><label for="node-input-items" style="vertical-align:top;">Items (JSON)</label><textarea id="node-input-items" rows="8" style="width:70%; font-family:monospace; resize:vertical;" placeholder="non-empty JSON array, or set msg.payload.items"></textarea></div>
+  <div class="form-row mavlink-mission-seq" id="row-mission-seq"><label for="node-input-seq">Current sequence</label><input type="number" id="node-input-seq" min="0" max="65535" step="1" placeholder="0"></div>
   <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Step timeout (ms)</label><input type="number" id="node-input-timeoutMs" min="1" placeholder="1500"></div>
   <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" placeholder="5"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-mission">
-  <p>Downloads, uploads, or clears a mission, fence, or rally plan over the MAVLink mission protocol — the one exchange the vehicle drives.</p>
-  <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
+  <p>Downloads, uploads, clears, or selects the current item of a mission plan over the MAVLink mission protocol — the one exchange the vehicle drives. Set Current does not apply to fence or rally plans.</p>
+  <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code> or matching <code>MISSION_CURRENT</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
   <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type is not gated by firmware: a vehicle that does not carry fence or rally refuses the transfer itself, and the refusal rides to output 1.</p>
   <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>. An explicit empty array sends <code>MISSION_COUNT</code> 0 (the wire erase). A message that omits <code>items</code> over blank config does not invent an empty list. Use <b>Clear</b> to erase a plan on purpose.</p>
   <p><b>Clear</b> erases the selected plan on the vehicle. Selecting the Clear operation is the confirmation — any input triggers it.</p>
+  <p><b>Set current</b> sends <code>MISSION_SET_CURRENT</code> for the selected mission sequence from <code>seq</code> or <code>msg.payload.seq</code>. The vehicle confirms by broadcasting <code>MISSION_CURRENT</code>; the mission sequence must match. Whether selection starts or resumes execution depends on the vehicle's current mode. The protocol provides no reset or jump-count semantics, and this node does not report mission progress.</p>
   <p>Set <code>msg.payload === false</code> to suppress. Status records are plain objects on output 1; they are not refused if wired into another action input — chain control is silence on output 0.</p>
 </script>

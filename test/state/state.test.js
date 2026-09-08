@@ -4,6 +4,7 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const { PeerTable } = require('../../lib/connection/peer-table');
 const { snapshotPeers, createStateFeed } = require('../../lib/state');
 
 test('snapshotPeers returns a filtered deep-copy snapshot from the peer table', () => {
@@ -32,6 +33,49 @@ test('snapshotPeers preserves NaN values from peer state', () => {
   const snap = snapshotPeers(table);
 
   assert.equal(Number.isNaN(snap[0].components[0].heading), true);
+});
+
+test('snapshotPeers projects AUTOPILOT_VERSION into standard semver and opaque IDs', () => {
+  const table = new PeerTable({ now: () => 0 });
+  const customVersion = [0x00, 0x01, 0x0f, 0x80, 0xaa, 0xbb, 0xcc, 0xdd];
+  table.update(
+    {
+      name: 'AUTOPILOT_VERSION',
+      sysid: 1,
+      compid: 1,
+      fields: {
+        capabilities: 0x100000000n,
+        flight_sw_version: 0x07040280,
+        board_version: 0x12345678,
+        flight_custom_version: customVersion,
+        vendor_id: 0x1234,
+        product_id: 0x5678,
+      },
+    },
+    { address: '10.0.0.5', port: 14550 }
+  );
+
+  const snap = snapshotPeers(table);
+  assert.deepEqual(snap[0].components[0].autopilotVersion, {
+    flightSwVersion: 0x07040280,
+    boardVersion: 0x12345678,
+    capabilities: '4294967296',
+    softwareVersion: { major: 7, minor: 4, patch: 2, releaseType: 128 },
+    flightCustomVersion: '00010f80aabbccdd',
+    vendorId: 0x1234,
+    productId: 0x5678,
+  });
+  assert.deepEqual(table.getComponent(1, 1).autopilotVersion, {
+    flightSwVersion: 0x07040280,
+    boardVersion: 0x12345678,
+    capabilities: 0x100000000n,
+    flightCustomVersion: customVersion,
+    vendorId: 0x1234,
+    productId: 0x5678,
+  });
+  assert.doesNotThrow(() => JSON.stringify(snap));
+  assert.equal('vendorName' in snap[0].components[0].autopilotVersion, false);
+  assert.equal('productName' in snap[0].components[0].autopilotVersion, false);
 });
 
 test('State feed emits transition records and live statustext records', () => {

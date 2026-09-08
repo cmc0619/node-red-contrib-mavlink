@@ -80,6 +80,11 @@ module.exports = function registerMavlinkBuild(RED) {
     const bigIntFields = messageMeta.fields
       .filter((f) => f.type === 'uint64_t' || f.type === 'int64_t')
       .map((f) => f.name);
+    const generatedFields = Object.fromEntries(
+      messageMeta.fields
+        .filter((f) => f.constValue !== undefined)
+        .map((f) => [f.name, f.constValue])
+    );
 
     /**
      * Core action: merge fields and emit based on the tier.
@@ -107,7 +112,7 @@ module.exports = function registerMavlinkBuild(RED) {
 
       // Merge config defaults with any per-message overrides from the trigger.
       const overrides = triggerMsg ? triggerMsg.payload : {};
-      const fields = { ...configFields, ...overrides };
+      const fields = { ...configFields, ...overrides, ...generatedFields };
       try {
         for (const name of bigIntFields) {
           if (typeof fields[name] === 'string') fields[name] = BigInt(fields[name]);

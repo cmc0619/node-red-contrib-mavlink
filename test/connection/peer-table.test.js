@@ -95,6 +95,53 @@ test('table is keyed by sysid with components nested underneath', () => {
   assert.ok(table.getComponent(1, 154));
 });
 
+test('MISSION_CURRENT is tracked and projected with zero values preserved', () => {
+  const table = new PeerTable({ now: () => 100 });
+  table.update({
+    name: 'MISSION_CURRENT',
+    sysid: 1,
+    compid: 1,
+    fields: {
+      seq: 0,
+      total: 0,
+      mission_state: 0,
+      mission_mode: 0,
+      mission_id: 0,
+      fence_id: 0,
+      rally_points_id: 0,
+    },
+  }, EP1, 100);
+
+  const snapshot = table.snapshot();
+  assert.deepEqual(snapshot[0].components[0].missionCurrent, {
+    seq: 0,
+    total: 0,
+    missionState: 0,
+    missionMode: 0,
+    missionId: 0,
+    fenceId: 0,
+    rallyPointsId: 0,
+  });
+  assert.equal(snapshot[0].components[0].sections.missionCurrent, 0);
+});
+
+test('MISSION_CURRENT projection is detached from the live component', () => {
+  const table = new PeerTable({ now: () => 0 });
+  table.update({
+    name: 'MISSION_CURRENT',
+    sysid: 1,
+    compid: 1,
+    fields: { seq: 0, total: 0 },
+  }, EP1, 0);
+
+  const snapshot = table.snapshot();
+  snapshot[0].components[0].missionCurrent.seq = 99;
+  snapshot[0].components[0].missionCurrent.total = 99;
+
+  assert.deepEqual(table.snapshot()[0].components[0].missionCurrent, { seq: 0, total: 0 });
+  assert.deepEqual(table.getComponent(1, 1).missionCurrent, { seq: 0, total: 0 });
+});
+
 test('armed reads false when the safety-armed bit is clear', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 1 }), EP1);

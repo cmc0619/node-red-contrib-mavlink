@@ -198,6 +198,38 @@ test('mavlink-mission target sysid: a configured broadcast reds for download/upl
   assert.match(String(targetComponent.validate.call({ id: 'm1' }, '300', {})), /between 0 and 255/);
 });
 
+test('mavlink-mission exposes set-current with a uint16 sequence field', () => {
+  const { operation, seq } = loadNodeDefaults('mavlink-mission');
+  assert.equal(operation.validate('set-current', {}), true);
+  assert.equal(seq.value, 0, 'sequence zero is a valid default');
+  const verdict = (v) => seq.validate.call({ operation: 'set-current' }, v, {});
+  assert.equal(verdict(0), true);
+  assert.equal(verdict(65535), true);
+  assert.match(String(verdict(1.5)), /integer between 0 and 65535/);
+  assert.match(String(verdict(65536)), /integer between 0 and 65535/);
+  assert.match(html, /<option value="set-current">Set current<\/option>/);
+  assert.match(html, /id="row-mission-seq"/);
+  assert.match(html, /id="node-input-seq"[^>]*min="0"[^>]*max="65535"[^>]*step="1"/);
+});
+
+test('mavlink-mission set-current is restricted to the mission plan type', () => {
+  const { missionType } = loadNodeDefaults('mavlink-mission');
+  const verdict = (operation, value) => missionType.validate.call(
+    { id: 'm1', operation, missionType: value }, value, {}
+  );
+
+  assert.equal(verdict('set-current', 'mission'), true);
+  assert.match(String(verdict('set-current', 'fence')), /only supports the mission plan/);
+  assert.match(String(verdict('set-current', 'rally')), /only supports the mission plan/);
+  assert.equal(verdict('download', 'fence'), true);
+  assert.equal(verdict('upload', 'rally'), true);
+});
+
+test('mavlink-mission refreshRows shows sequence only for set-current', () => {
+  assert.match(html, /\.mavlink-mission-seq.*toggle\(op === 'set-current'\)/);
+  assert.match(html, /\.mavlink-mission-items.*toggle\(op === 'upload'\)/);
+});
+
 test('mavlink-mission has no clear-confirmation control (owner ruling, 2026-08-13)', () => {
   // Selecting the Clear operation IS the confirmation. The checkbox and the
   // msg.confirmed escape were removed together — a control resurrected here

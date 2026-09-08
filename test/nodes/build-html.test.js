@@ -113,6 +113,11 @@ test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT',
   assert.match(html, /oneditsave/);
 });
 
+test('Build does not render generated constant fields', () => {
+  const renderer = sliceBetween('function refreshFieldForm', '// Type a message by name or id');
+  assert.match(renderer, /if \(spec\.constValue !== undefined\) return;/);
+});
+
 test('Build target_component is a MAV_COMPONENT pulldown, not a bare number (§6)', () => {
   assert.match(
     html,

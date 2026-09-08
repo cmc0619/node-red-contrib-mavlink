@@ -27,6 +27,71 @@ test('wire registry follows the bundle include chain — minimal has HEARTBEAT, 
   );
 });
 
+test('common HEARTBEAT supplies its dialect version when omitted or overridden', () => {
+  const wire = createWire({ bundle: loadBundled('common') });
+  const baseFields = {
+    type: 6,
+    autopilot: 8,
+    base_mode: 0,
+    custom_mode: 0,
+    system_status: 0,
+  };
+
+  const omitted = wire.serialize(
+    { name: 'HEARTBEAT', fields: baseFields },
+    { sysid: 1, compid: 1, seq: 0 }
+  );
+  const wrong = wire.serialize(
+    { name: 'HEARTBEAT', fields: { ...baseFields, mavlink_version: 1 } },
+    { sysid: 1, compid: 1, seq: 1 }
+  );
+
+  assert.equal(wire.decode(omitted)[0].fields.mavlink_version, 3);
+  assert.equal(wire.decode(wrong)[0].fields.mavlink_version, 3);
+  assert.equal(wire.decode(wrong)[0].fields.type, 6);
+});
+
+const VERSIONED_XML = (version) => `<?xml version="1.0"?>
+<mavlink>
+  <version>${version}</version>
+  <messages>
+    <message id="60002" name="VERSIONED_STATUS">
+      <field type="uint8_t" name="value">Value.</field>
+      <field type="uint8_t_mavlink_version" name="mavlink_version">Version.</field>
+    </message>
+  </messages>
+</mavlink>`;
+
+const versionedBundle = (version) => compileXml(
+  { 'versioned.xml': VERSIONED_XML(version) },
+  'versioned.xml'
+);
+
+test('custom dialect constants fill outbound version without changing ordinary uint8 fields', () => {
+  const receiver = createWire({ bundle: versionedBundle(7) });
+  const sender = createWire({ bundle: versionedBundle(4) });
+
+  const omitted = receiver.serialize(
+    { name: 'VERSIONED_STATUS', fields: { value: 9 } },
+    { sysid: 1, compid: 1, seq: 0 }
+  );
+  const wrong = receiver.serialize(
+    { name: 'VERSIONED_STATUS', fields: { value: 10, mavlink_version: 1 } },
+    { sysid: 1, compid: 1, seq: 1 }
+  );
+  const inbound = sender.serialize(
+    { name: 'VERSIONED_STATUS', fields: { value: 11 } },
+    { sysid: 1, compid: 1, seq: 2 }
+  );
+
+  assert.equal(receiver.decode(omitted)[0].fields.value, 9);
+  assert.equal(receiver.decode(omitted)[0].fields.mavlink_version, 7);
+  assert.equal(receiver.decode(wrong)[0].fields.value, 10);
+  assert.equal(receiver.decode(wrong)[0].fields.mavlink_version, 7);
+  assert.equal(receiver.decode(inbound)[0].fields.value, 11);
+  assert.equal(receiver.decode(inbound)[0].fields.mavlink_version, 4);
+});
+
 test('icarous wire carries only icarous messages — not the forced MSC spine', () => {
   const bundle = loadBundled('icarous');
   assert.deepEqual(bundle.files, ['icarous.xml']);

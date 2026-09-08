@@ -84,6 +84,10 @@ test('HEARTBEAT and MAV_AUTOPILOT resolve when loading common — they live in m
       (e) => e.name === 'MAV_AUTOPILOT_ARDUPILOTMEGA' && e.value === 3
     )
   );
+  assert.equal(
+    bundle.messages.HEARTBEAT.fields.find((f) => f.name === 'mavlink_version').constValue,
+    3
+  );
   assert.deepEqual(bundle.files, ['minimal.xml', 'standard.xml', 'common.xml']);
 });
 
@@ -161,9 +165,15 @@ test('a compiled dialect is cached on disk', () => {
   setCompiledCacheDir(dir);
   clearCompiledCache();
   try {
+    // The old cache name may contain metadata compiled before generated
+    // constants were represented. It must be ignored rather than silently
+    // hiding the new field shape.
+    const oldFile = path.join(dir, 'icarous@seed.json');
+    fs.writeFileSync(oldFile, JSON.stringify({ stale: true }));
     const bundle = loadBundled('icarous');
-    const file = path.join(dir, 'icarous@seed.json');
+    const file = path.join(dir, 'icarous@seed-v2.json');
     assert.ok(fs.existsSync(file), 'compiling writes a cache entry');
+    assert.deepEqual(JSON.parse(fs.readFileSync(oldFile, 'utf8')), { stale: true });
 
     // The cache is a JSON round-trip: attributes the XML never had are absent
     // keys on disk, undefined in the compiled bundle.
@@ -173,6 +183,7 @@ test('a compiled dialect is cached on disk', () => {
     // invalidates it — only clearCompiledCache() removes an entry.
     clearCompiledCache();
     assert.ok(!fs.existsSync(file));
+    assert.ok(!fs.existsSync(oldFile));
   } finally {
     setCompiledCacheDir(null);
     clearCompiledCache();

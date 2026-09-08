@@ -116,6 +116,7 @@ test('enum bitmask flag and value notations: decimal, hex, power, beyond-safe-in
 
 test('field type/arrayLength split, mavlink_version normalization, extension marker, attrs', () => {
   const entry = XML(
+    '<version>7</version>' +
     '<enums><enum name="MAV_TYPE" bitmask="false"><entry value="0" name="MAV_TYPE_GENERIC"/></enum></enums>' +
     '<messages><message id="0" name="HEARTBEAT">' +
       '<description>hb</description>' +
@@ -137,10 +138,26 @@ test('field type/arrayLength split, mavlink_version normalization, extension mar
   assert.equal(f.label.arrayLength, 10);
   assert.equal(f.label.units, 'm');
   assert.equal(f.mavlink_version.type, 'uint8_t');
+  assert.equal(f.mavlink_version.special, 'mavlink_version');
+  assert.equal(f.mavlink_version.constValue, 7);
   assert.equal(f.custom_mode.extension, false);
   assert.equal(f.ext_field.extension, true);
   assert.equal(f.ext_field.invalid, 'NaN');
   assert.equal(bundle.messages.HEARTBEAT.description, 'hb');
+});
+
+test('mavlink version constant follows the XML file declaring the marker field', () => {
+  const base = XML(
+    '<version>7</version>' +
+    '<messages><message id="60000" name="VERSIONED">' +
+      '<field type="uint8_t_mavlink_version" name="mavlink_version">v</field>' +
+    '</message></messages>'
+  );
+  const entry = XML('<version>9</version><include>base.xml</include>');
+
+  const bundle = compileXml({ 'base.xml': base, 'entry.xml': entry }, 'entry.xml');
+
+  assert.equal(bundle.messages.VERSIONED.fields[0].constValue, 7);
 });
 
 test('commands derive from MAV_CMD with params, labels, ranges, and location flags', () => {

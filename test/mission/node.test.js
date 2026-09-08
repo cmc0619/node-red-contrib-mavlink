@@ -75,6 +75,65 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
+test('set-current Build emits its address and sequence without mission_type', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'custom',
+    missionType: 'mission',
+    targetSystem: 42,
+    targetComponent: 1,
+    seq: 0,
+  });
+  const { outputs } = await runInput(node, { payload: {} });
+
+  const plan = outputs[0][0].payload;
+  assert.equal(plan.operation, 'set-current');
+  assert.deepEqual(plan.messages, [{
+    name: 'MISSION_SET_CURRENT',
+    fields: { target_system: 42, target_component: 1, seq: 0 },
+  }]);
+  assert.equal(conn.sent.length, 0, 'Build sends nothing');
+});
+
+test('set-current confirm waits for the matching addressless MISSION_CURRENT echo', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_SET_CURRENT') {
+      deliver({
+        name: 'MISSION_CURRENT',
+        sysid: 42,
+        compid: 1,
+        fields: { seq: 0, total: 0, mission_state: 0, mission_mode: 0 },
+      });
+    }
+  });
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    seq: 5,
+    timeoutMs: 20,
+    maxRetries: 1,
+  });
+  const { outputs, err } = await runInput(node, { payload: { seq: 0 } });
+
+  assert.equal(err, undefined);
+  assert.equal(conn.sentNames()[0], 'MISSION_SET_CURRENT');
+  assert.equal(conn.sent[0].message.fields.seq, 0, 'explicit payload zero overrides config');
+  assert.deepEqual(conn.sentNames(), ['MISSION_SET_CURRENT'], 'no COMMAND_ACK is assumed');
+  const terminal = outputs.at(-1);
+  assert.equal(terminal[1].result, 'succeeded');
+  assert.equal(terminal[1].seq, 0);
+});
+
 test('Build tier plans nothing for a missing operation instead of planning an upload', async () => {
   // A catch-all `else` treated every unknown operation as upload, so a node
   // with no operation answered Build with a zero-item MISSION_COUNT plan. The
