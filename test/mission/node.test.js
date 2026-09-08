@@ -660,6 +660,48 @@ test('a busy lock refuses a second same-type transfer on the node', async () => 
   first.emit('close', () => {});
 });
 
+test('set-current uses the mission lock despite a non-mission payload label', async (t) => {
+  const conn = new StubConnection();
+  conn.onSend(() => {});
+  const Node = loadNode(conn);
+
+  const first = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    targetSystem: 42,
+    targetComponent: 1,
+    seq: 3,
+    timeoutMs: 20,
+    maxRetries: 1,
+    id: 'set-current-fence',
+  });
+  const second = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    targetSystem: 42,
+    targetComponent: 1,
+    seq: 4,
+    timeoutMs: 20,
+    maxRetries: 1,
+    id: 'set-current-mission',
+  });
+
+  t.after(() => first.emit('close', () => {}));
+  first.emit('input', { payload: { missionType: 'fence' } }, () => {}, () => {});
+  const { outputs } = await runInput(second, { payload: { missionType: 'mission' } });
+
+  assert.equal(outputs.at(-1)[1].phase, 'locked',
+    'mission-labelled Set Current cannot bypass a fence-labelled Set Current');
+  assert.equal(conn.sent.length, 1, 'the second Set Current never reaches the wire');
+  assert.equal(conn.sent[0].message.fields.seq, 3, 'the first request keeps its configured sequence');
+  assert.equal(Object.hasOwn(conn.sent[0].message.fields, 'mission_type'), false,
+    'Set Current keeps mission_type out of its payload');
+});
+
 test('mission companion identity: target derived from airframe sysid, compid pinned to 1', async () => {
   const conn = new StubConnection();
   conn.vehicle = { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' };

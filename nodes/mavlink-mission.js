@@ -66,9 +66,9 @@ module.exports = function registerMavlinkMission(RED) {
 
     /**
      * In-flight machines keyed by the same lock key as {@link locks}
-     * (`connection::sysid.compid::missionType`). Different types on one node
-     * may run concurrently; only a later message for the *same* key cancels
-     * its predecessor.
+     * (`connection::sysid.compid::missionType`). Different item-transfer types
+     * on one node may run concurrently; Set Current always uses mission scope
+     * 0 because its MAVLink message has no mission_type field.
      *
      * @type {Map<string, {cancel: Function}>}
      */
@@ -115,6 +115,18 @@ module.exports = function registerMavlinkMission(RED) {
       // and no refusal here: a key that names no member forwards unchanged
       // (missionTypeValue §5) — never absent-decoded-as-0 at the vehicle.
       const missionType = missionTypeValue(missionTypeKey);
+
+      // Set Current selects the mission plan, so it shares the mission lock
+      // even when a stale or payload-supplied label says fence or rally. The
+      // label and machine value remain as supplied; this chooses lock scope
+      // only and does not rewrite the protocol payload.
+      let lockMissionType = missionType;
+      switch (operation) {
+        case OPERATION.SET_CURRENT:
+          lockMissionType = 0;
+          break;
+        default: break; // This space intentionally left blank (§5)
+      }
 
       // Only Set Current reads seq. Presence fallback preserves an explicit
       // payload zero; the editor owns the uint16 integer ring and the wire
@@ -201,7 +213,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
 
         // ── Lock per (connection, target, mission_type) (§9). ─────────────────
-        const release = locks.acquire(connNode.id, target, missionType);
+        const release = locks.acquire(connNode.id, target, lockMissionType);
         if (!release) {
           const rec = record(node, operation, missionTypeKey, target, {
             result: 'failed',
@@ -216,7 +228,7 @@ module.exports = function registerMavlinkMission(RED) {
 
         // Key the in-flight handle the same way as the lock so a fence upload
         // does not cancel an in-flight mission download on this node (§9).
-        const lockKey = locks.key(connNode.id, target, missionType);
+        const lockKey = locks.key(connNode.id, target, lockMissionType);
 
         applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
 

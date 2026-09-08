@@ -207,6 +207,13 @@ test('mavlink-mission exposes set-current with a uint16 sequence field', () => {
   assert.equal(verdict(65535), true);
   assert.match(String(verdict(1.5)), /integer between 0 and 65535/);
   assert.match(String(verdict(65536)), /integer between 0 and 65535/);
+  for (const operationName of ['download', 'upload', 'clear']) {
+    assert.equal(
+      seq.validate.call({ operation: operationName }, 65536, {}),
+      true,
+      `${operationName} does not read the unused sequence field`
+    );
+  }
   assert.match(html, /<option value="set-current">Set current<\/option>/);
   assert.match(html, /id="row-mission-seq"/);
   assert.match(html, /id="node-input-seq"[^>]*min="0"[^>]*max="65535"[^>]*step="1"/);
