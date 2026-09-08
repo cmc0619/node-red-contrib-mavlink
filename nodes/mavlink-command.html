@@ -262,7 +262,7 @@
    */
   /** Whether the COMMAND_INT carrier is selected — the int32 param5/6 path. */
   function intCarrierSelected(owner) {
-    return RED.mavlink.liveOr(owner, '#node-input-sendAs', owner.sendAs, 'int') === 'int';
+    return RED.mavlink.liveOr(owner, '#node-input-sendAs', owner.sendAs, 'long') === 'int';
   }
 
   function localFrameSelected(owner) {
@@ -323,7 +323,7 @@
         },
       },
       delivery:          { value: 'confirm', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'complete']) },
-      sendAs:            { value: 'int', validate: RED.mavlink.oneOf(['int', 'long']) },
+      sendAs:            { value: 'long', validate: RED.mavlink.oneOf(['long', 'int']) },
       // Closed vocabulary: the frame select's own options. Relative alt (3) is
       // the editor default — saved explicitly; the driver does not invent it.
       // Other frames ride msg.mavFrame at runtime; a hand-edited config value
@@ -1071,8 +1071,8 @@
          the word collided with Move's former protocol selector. -->
     <label for="node-input-sendAs" style="width:120px">Send as</label>
     <select id="node-input-sendAs" style="width:280px">
-      <option value="int">COMMAND_INT (positional; degE7 on the wire)</option>
       <option value="long">COMMAND_LONG (float params)</option>
+      <option value="int">COMMAND_INT (positional; degE7 on the wire)</option>
     </select>
   </div>
 
@@ -1151,18 +1151,18 @@
 
   <h3>Send as</h3>
   <p>
-    <b>Send as</b> defaults to COMMAND_INT; choose COMMAND_LONG only when needed.
+    <b>Send as</b> defaults to COMMAND_LONG. Choose COMMAND_INT explicitly for
+    positional commands when integer coordinate precision or a MAV_FRAME is needed.
     Positional parameters (latitude / longitude) are always entered in
     <b>decimal degrees</b>; the choice only changes how they travel:
   </p>
   <ul>
-    <li><b>COMMAND_INT</b> — spec-preferred for positional commands: lat/lon are
-        scaled to <code>degE7</code> integers (no float precision loss) and the
-        coordinate <b>Frame</b> is explicit. Use this unless the vehicle only
-        speaks COMMAND_LONG.</li>
-    <li><b>COMMAND_LONG</b> — legacy float params; frame interpretation is
-        implementation-dependent, and lat/lon lose precision (~1&nbsp;m) as
-        float32.</li>
+    <li><b>COMMAND_LONG</b> — the default carrier with all seven params as
+        float values. Use it when param5/6 are float parameters or no explicit
+        coordinate frame is needed.</li>
+    <li><b>COMMAND_INT</b> — the explicit positional carrier: lat/lon are scaled
+        to <code>degE7</code> integers and the coordinate <b>Frame</b> is present
+        on the wire.</li>
   </ul>
   <p>
     A vehicle that wants the other message acks

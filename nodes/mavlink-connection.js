@@ -128,7 +128,7 @@ module.exports = function registerMavlinkConnection(RED) {
 
     // Built before the identity claims — a signing misconfig throws with
     // nothing to release yet — and kept: the rejected/status wiring below
-    // needs hasKey and acceptInvalid.
+    // needs acceptInvalid and the key-presence flag used by inbound signing.
     const signing = buildSigning(config, node.credentials);
 
     const identities = identityIds.map((id) => {
@@ -260,13 +260,10 @@ function buildTransportConfig(config) {
 /**
  * Assemble the signing config for the runtime. The passphrase lives only in
  * Node-RED encrypted credentials; the key is derived from it via node-mavlink's
- * primitive whenever a passphrase is present (§7). Sign-outbound and
- * require-signed stay independent switches that control *policy* — outbound
- * signing and whether unsigned inbound is rejected — not whether the key
- * exists to verify with: gating derivation on those checkboxes left a
- * passphrase-only connection with no key at all, so every signed inbound
- * frame failed verification silently. Sign-outbound with no passphrase still
- * fails the connection closed in the runtime.
+ * primitive whenever a passphrase is present (§7). Sign-outbound remains an
+ * independent outbound switch; key presence selects the inbound verification
+ * regime. Sign-outbound with no passphrase still fails the connection closed in
+ * the runtime.
  *
  * @param {object} config
  * @param {object} credentials  the node's credentials object (Node-RED always assigns one)
@@ -279,7 +276,6 @@ function buildSigning(config, credentials) {
   const signing = {
     linkId: Number(config.linkId),
     signOutbound: Boolean(config.signOutbound),
-    requireSigned: Boolean(config.requireSigned),
     acceptInvalid: Boolean(config.acceptInvalid),
     hasKey: Boolean(passphrase || keyHex),
     key: null,
@@ -301,14 +297,12 @@ function buildSigning(config, credentials) {
 
 /**
  * Consume the runtime's 'rejected' event. Rejection is the
- * fail-closed policy working as designed; dropping traffic *silently* is not —
- * a signing vehicle pointed at a key-less connection would otherwise read as
- * total silence, with no hint that the recovery override even exists. One warn
- * plus badge per consecutive same-reason streak (the mavlink-move advisory
+ * fail-closed policy working as designed; dropping traffic *silently* is not.
+ * One warn plus badge per consecutive same-reason streak (the mavlink-move advisory
  * dedup pattern); redeploy resets naturally — new node instance.
  *
  * @param {object} node
- * @param {{hasKey: boolean, acceptInvalid: boolean}} signing  buildSigning result
+ * @param {{acceptInvalid: boolean}} signing  buildSigning result
  * @returns {(event: {reason: string}) => void}
  */
 function makeRejectedHandler(node, signing) {
@@ -316,7 +310,7 @@ function makeRejectedHandler(node, signing) {
   return ({ reason }) => {
     if (reason === lastReason) return;
     lastReason = reason;
-    const surface = rejectedSurface(reason, signing.hasKey);
+    const surface = rejectedSurface(reason);
     node.warn(surface.log);
     // The conspicuous UNTRUSTED badge (applyStatus) outranks per-reason drop
     // badges while the recovery override is on; the warn still lands.
@@ -329,25 +323,17 @@ function makeRejectedHandler(node, signing) {
 /**
  * Operator-facing text for an inbound rejection verdict — reasons from
  * lib/connection/signing.js. The log names the exact cause; the badge is a
- * §6-capped short form. The no-key case is called out by name: with no key
- * every signed frame verifies false, so "invalid signature" alone would point
- * the operator at the vehicle instead of at this connection's missing key.
+ * §6-capped short form.
  *
  * @param {string} reason  verdict reason tag
- * @param {boolean} hasKey  whether a verification key is configured
  * @returns {{log: string, badge: string}}
  */
-function rejectedSurface(reason, hasKey) {
+function rejectedSurface(reason) {
   if (reason === 'invalid-signature') {
-    return hasKey
-      ? { log: 'dropping signed traffic — signature verification failed', badge: 'drop: invalid signature' }
-      : {
-          log: 'dropping signed traffic — no key configured (set a signing passphrase or raw key on this connection)',
-          badge: 'drop: no signing key',
-        };
+    return { log: 'dropping signed traffic — signature verification failed', badge: 'drop: invalid signature' };
   }
-  if (reason === 'unsigned-rejected-require-signed') {
-    return { log: 'dropping unsigned traffic — require signed inbound is on', badge: 'drop: unsigned inbound' };
+  if (reason === 'unsigned-rejected-key-configured') {
+    return { log: 'dropping unsigned traffic — a signing key is configured', badge: 'drop: unsigned inbound' };
   }
   if (reason === 'replay-or-out-of-order') {
     return { log: 'dropping signed traffic — replayed or out-of-order timestamp', badge: 'drop: replayed frame' };

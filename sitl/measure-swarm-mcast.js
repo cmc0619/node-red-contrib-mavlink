@@ -96,7 +96,6 @@ function makeConn(transport, vehicleSysid) {
       signing: {
         linkId: 0,
         signOutbound: false,
-        requireSigned: false,
         acceptInvalid: false,
         hasKey: false,
       },
@@ -191,7 +190,7 @@ async function measureLoopback(results) {
     }],
     defaultIdentityId: 'listener',
     boundIdentityIds: ['listener'],
-    signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+    signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
     heartbeat: { staleMs: 5000, expireMs: 15000 },
   }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
 
@@ -209,7 +208,7 @@ async function measureLoopback(results) {
     }],
     defaultIdentityId: 'talker',
     boundIdentityIds: ['talker'],
-    signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+    signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
     heartbeat: { staleMs: 5000, expireMs: 15000 },
   }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
 

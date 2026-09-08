@@ -103,7 +103,7 @@ function makeConn({ bindPort, remotePort, sysid, firmware, autopilot, dialect })
       defaultIdentityId: 'gcs',
       boundIdentityIds: ['gcs'],
       signing: {
-        linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false,
+        linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false,
       },
       heartbeat: { staleMs: 5000, expireMs: 15000 },
     },

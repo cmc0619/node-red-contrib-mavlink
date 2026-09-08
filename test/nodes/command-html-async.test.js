@@ -224,7 +224,7 @@ function makeHarness() {
     seedSelect('#node-input-advancedCommand', []);
     seedSelect('#node-input-dialect', []);
     seedSelect('#node-input-identity', [''], '');
-    seedSelect('#node-input-sendAs', ['int', 'long'], 'int');
+    seedSelect('#node-input-sendAs', ['long', 'int'], 'long');
     registered['mavlink-command'].oneditprepare.call(node);
   }
 

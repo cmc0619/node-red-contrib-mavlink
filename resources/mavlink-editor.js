@@ -1426,7 +1426,9 @@
   RED.mavlink.identityOverrideValidator = function (rolesAllowed) {
     return function validate(v, _opt) {
       if (RED.mavlink.isBlank(v)) return true;
-      if (!RED.nodes.node(v)) return 'references a missing Identity';
+      const identity = RED.nodes.node(v);
+      if (!identity) return 'references a missing Identity';
+      if (identity.valid === false) return 'is not properly configured';
       const connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
       // No Connection resolved: its own required ring owns that.
       if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;

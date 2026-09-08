@@ -440,15 +440,19 @@ test('command help documents status fields at message root, not under payload', 
   );
 });
 
-test('sendAs defaults to the first valid option with no blank prompt', () => {
+test('sendAs defaults to COMMAND_LONG first with no blank prompt', () => {
   assert.match(html, /id="node-input-sendAs"/, 'send-as select must bind to the sendAs property');
   assert.doesNotMatch(html, /id="node-input-carrier"/, 'retired carrier control must not be rendered');
   assert.match(
     html,
-    /sendAs:\s*\{ value: 'int',/,
-    'new command nodes default to COMMAND_INT'
+    /sendAs:\s*\{ value: 'long',/,
+    'new command nodes default to COMMAND_LONG'
   );
   assert.doesNotMatch(html, /select carrier/i, 'send-as select has no meaningless blank prompt');
+  assert.ok(
+    html.indexOf('<option value="long">') < html.indexOf('<option value="int">'),
+    'COMMAND_LONG is the first selectable carrier'
+  );
   assert.match(
     html,
     /<option value="int">/,
@@ -720,7 +724,7 @@ test('mavlink-command: a form that rendered nothing falls back to the saved para
   ])), /needs a latitude and longitude/, 'a rendered form with blank coordinates reds');
 });
 
-test('mavlink-command: a NaN centre cannot ride COMMAND_INT', () => {
+test('mavlink-command: a NaN centre is accepted by default LONG and rejected for explicit INT', () => {
   // DO_ORBIT documents NaN in param5/6 as "orbit where I am", and int32 has no
   // NaN — `longToIntFields` refuses the pair at build. Both halves are editor
   // fields, so the operator meets it at deploy rather than on the first
@@ -730,8 +734,8 @@ test('mavlink-command: a NaN centre cannot ride COMMAND_INT', () => {
     {id: 'c1', mode: 'preset', preset: 'orbit', ...over }, JSON.stringify(blob), {}
   );
 
-  assert.match(String(verdict({}, {})), /COMMAND_INT cannot carry/,
-    'int is the default carrier, so a blank centre reds out of the box');
+  assert.equal(verdict({}, {}), true,
+    'COMMAND_LONG is the default carrier, so a blank centre remains expressible');
   assert.match(String(verdict({ sendAs: 'int' }, { 5: 47.4 })), /COMMAND_INT cannot carry/, 'half a centre too');
   assert.equal(verdict({ sendAs: 'long' }, {}), true, 'the LONG carrier can express NaN');
   assert.equal(verdict({ sendAs: 'int' }, { 5: 47.4, 6: 8.5 }), true, 'a placed centre is finite');

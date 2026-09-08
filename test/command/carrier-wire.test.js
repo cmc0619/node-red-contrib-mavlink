@@ -152,6 +152,23 @@ test('a wrong-carrier ack is the result: one send, reported on output 1 as-is', 
   assert.equal(sent[1].detail, null, 'the ack rides out unchanged');
 });
 
+test('INT-first: COMMAND_LONG_ONLY is the result with no automatic carrier swap', async () => {
+  const { node, conn, warnings } = deploy(
+    [MAV_RESULT.COMMAND_LONG_ONLY],
+    { sendAs: 'int' }
+  );
+
+  const sent = await runInput(node, { payload: { 5: 47.1, 6: -122.5, 7: 100 } });
+
+  assert.equal(conn.sent.length, 1, 'the configured carrier is sent once; nothing is resent');
+  assert.equal(conn.sent[0].message.name, 'COMMAND_INT');
+  assert.equal(warnings.length, 0);
+  assert.equal(sent[0], null, 'output 0 stays silent on a rejection');
+  assert.equal(sent[1].result, 'command_long_only');
+  assert.equal(sent[1].resultCode, MAV_RESULT.COMMAND_LONG_ONLY);
+  assert.equal(sent[1].detail, null, 'the ack rides out unchanged');
+});
+
 test('INT-first: configured carrier int sends COMMAND_INT with degrees scaled to degE7', async () => {
   const { node, conn, warnings } = deploy([MAV_RESULT.ACCEPTED], { sendAs: 'int' });
 

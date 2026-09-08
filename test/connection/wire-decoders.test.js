@@ -244,8 +244,8 @@ test('a msgid the bound dialect does not carry surfaces as UNKNOWN_<id>, not sil
 test('a signed UNKNOWN_<id> frame carries its signature verdict like any other', () => {
   // The signature block is framing, not payload semantics — it verifies
   // without the message definition, so an unknown id is exactly as signable
-  // as a known one. If the verdict did not ride, requireSigned would read a
-  // properly signed unknown frame as unsigned and drop it (CodeRabbit #344).
+  // as a known one. If the verdict did not ride, a keyed Connection would
+  // read a properly signed unknown frame as unsigned and drop it.
   const minimal = createWire({ bundle: loadBundled('minimal'), key: SIGNING_KEY });
   const common = createWire({ bundle: loadBundled('common') });
   const signed = common.serialize(

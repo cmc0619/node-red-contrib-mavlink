@@ -29,7 +29,7 @@ function frame(overrides) {
 }
 
 test('first contact accepts a valid, recent signature and sets the floor', () => {
-  const s = new SigningState({ now: () => NOW_MS });
+  const s = new SigningState({ hasKey: true, now: () => NOW_MS });
   const v = s.acceptInbound(frame({}));
   assert.equal(v.accept, true);
   assert.equal(v.trusted, true);
@@ -37,14 +37,14 @@ test('first contact accepts a valid, recent signature and sets the floor', () =>
 });
 
 test('first contact rejects a timestamp more than a minute behind local time', () => {
-  const s = new SigningState({ now: () => NOW_MS });
+  const s = new SigningState({ hasKey: true, now: () => NOW_MS });
   const v = s.acceptInbound(frame({ timestamp: NOW_UNITS - ONE_MINUTE_UNITS - 1 }));
   assert.equal(v.accept, false);
   assert.equal(v.reason, 'first-contact-too-old');
 });
 
 test('an out-of-order (non-increasing) timestamp is rejected', () => {
-  const s = new SigningState({ now: () => NOW_MS });
+  const s = new SigningState({ hasKey: true, now: () => NOW_MS });
   s.acceptInbound(frame({ timestamp: NOW_UNITS }));
   const v = s.acceptInbound(frame({ timestamp: NOW_UNITS })); // equal → not greater
   assert.equal(v.accept, false);
@@ -57,7 +57,7 @@ test('a lagging but monotonic established stream stays accepted — the floor is
   // behind it. Monotonicity alone governs the established stream: a captured
   // packet can never exceed the last accepted timestamp, so the floor would
   // have guarded nothing and locked the real peer out (§7 signing, #264).
-  const s = new SigningState({ now: () => NOW_MS });
+  const s = new SigningState({ hasKey: true, now: () => NOW_MS });
   s.acceptInbound(frame({ timestamp: NOW_UNITS }));
   const later = NOW_MS + 20 * 60 * 1000;
   const v = s.acceptInbound(frame({ timestamp: NOW_UNITS + 1 }), later);
@@ -67,7 +67,7 @@ test('a lagging but monotonic established stream stays accepted — the floor is
 });
 
 test('the store never advances from a packet admitted by accept-invalid', () => {
-  const s = new SigningState({ acceptInvalid: true, now: () => NOW_MS });
+  const s = new SigningState({ hasKey: true, acceptInvalid: true, now: () => NOW_MS });
   s.acceptInbound(frame({ timestamp: NOW_UNITS })); // valid, sets floor
   const v = s.acceptInbound(
     frame({ timestamp: NOW_UNITS + 1000, signatureValid: false }) // higher, but forged
@@ -78,24 +78,24 @@ test('the store never advances from a packet admitted by accept-invalid', () => 
 });
 
 test('an invalid signature is rejected outright when accept-invalid is off', () => {
-  const s = new SigningState({ now: () => NOW_MS });
+  const s = new SigningState({ hasKey: true, now: () => NOW_MS });
   const v = s.acceptInbound(frame({ signatureValid: false }));
   assert.equal(v.accept, false);
   assert.equal(v.reason, 'invalid-signature');
 });
 
-test('require-signed drops unsigned frames but keeps the RADIO_STATUS allowlist', () => {
-  const s = new SigningState({ requireSigned: true, now: () => NOW_MS });
+test('a configured key rejects every unsigned frame, including RADIO_STATUS', () => {
+  const s = new SigningState({ hasKey: true, now: () => NOW_MS });
   const dropped = s.acceptInbound(frame({ signaturePresent: false, messageName: 'ATTITUDE' }));
   assert.equal(dropped.accept, false);
-  assert.equal(dropped.reason, 'unsigned-rejected-require-signed');
+  assert.equal(dropped.reason, 'unsigned-rejected-key-configured');
 
-  const allowed = s.acceptInbound(frame({ signaturePresent: false, messageName: 'RADIO_STATUS' }));
-  assert.equal(allowed.accept, true);
-  assert.equal(allowed.trusted, false); // allowlisted, never trusted
+  const radioStatus = s.acceptInbound(frame({ signaturePresent: false, messageName: 'RADIO_STATUS' }));
+  assert.equal(radioStatus.accept, false);
+  assert.equal(radioStatus.reason, 'unsigned-rejected-key-configured');
 });
 
-test('unsigned frames carry no trust mark when require-signed is off (§7 trust ruling #264)', () => {
+test('keyless unsigned frames carry no trust mark (§7 trust ruling #264)', () => {
   // `false` is the explicit untrusted mark that bars a frame from settling
   // transactions; a plain unsigned link has no signing regime to judge
   // against, so the verdict stays unmarked and trusted-only gates pass it.
@@ -103,6 +103,30 @@ test('unsigned frames carry no trust mark when require-signed is off (§7 trust 
   const v = s.acceptInbound(frame({ signaturePresent: false }));
   assert.equal(v.accept, true);
   assert.equal(v.trusted, undefined);
+});
+
+test('keyless signed frames are accepted as unverified and never advance signing time', () => {
+  const state = new SigningState({ hasKey: false, now: () => NOW_MS });
+  const ahead = NOW_UNITS + 2 * ONE_MINUTE_UNITS;
+
+  const first = state.acceptInbound(frame({ timestamp: ahead, signatureValid: false }));
+  assert.equal(first.accept, true);
+  assert.equal(first.trusted, undefined);
+  assert.equal(first.reason, 'signed-accepted-without-key');
+
+  const duplicate = state.acceptInbound(frame({ timestamp: ahead, signatureValid: false }));
+  assert.equal(duplicate.accept, true);
+  assert.equal(duplicate.trusted, undefined);
+  assert.equal(duplicate.reason, 'signed-accepted-without-key');
+
+  const future = state.acceptInbound(
+    frame({ timestamp: ahead + ONE_MINUTE_UNITS, signatureValid: false })
+  );
+  assert.equal(future.accept, true);
+  assert.equal(future.trusted, undefined);
+
+  const outbound = state.nextOutboundTimestamp(1, 1);
+  assert.ok(outbound < ahead, 'unverified signed traffic must not raise the outbound floor');
 });
 
 test('outbound timestamps are strictly increasing per stream', () => {
@@ -128,7 +152,7 @@ test('a verified peer ahead of local clock raises the outbound floor for every s
   // a DIFFERENT, not-yet-met peer — must not keep reading as if that peer's
   // clock never existed, or that new peer's own first-contact floor
   // (its own now - one minute) can reject our very first packet to it.
-  const state = new SigningState({ now: () => NOW_MS });
+  const state = new SigningState({ hasKey: true, now: () => NOW_MS });
   const ahead = NOW_UNITS + 2 * ONE_MINUTE_UNITS;
   const verdict = state.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead }));
   assert.equal(verdict.accept, true);
@@ -144,7 +168,7 @@ test('an invalid or unsigned accept never raises the outbound floor', () => {
   // Only a cryptographically verified packet is a time reference worth
   // trusting — the same rule this module already applies to the per-stream
   // inbound store (a forged packet must not raise any floor, §7 "On accept").
-  const state = new SigningState({ now: () => NOW_MS, acceptInvalid: true });
+  const state = new SigningState({ hasKey: true, now: () => NOW_MS, acceptInvalid: true });
   const ahead = NOW_UNITS + 2 * ONE_MINUTE_UNITS;
 
   state.acceptInbound(frame({ sysid: 9, compid: 1, timestamp: ahead, signatureValid: false }));

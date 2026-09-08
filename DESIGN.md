@@ -514,10 +514,10 @@ profile. Hidden is not honored.
 
 **14.74 The default COMMAND_INT frame is 3, and a wrong frame has no safety net.** ✔ 📖
 ArduPilot checks a COMMAND_INT takeoff frame with strict equality against
-`MAV_FRAME_GLOBAL_RELATIVE_ALT` (3) and answers DENIED (4) otherwise — which no carrier
-swap retries (only ack codes 7/8 arm it). ArduPilot's own LONG→INT upconvert fills in
-frame 3, so the default gives the same answer. PX4 accepts either, which is why
-PX4-first validation never caught it.
+`MAV_FRAME_GLOBAL_RELATIVE_ALT` (3) and answers DENIED (4) otherwise. A wrong-carrier
+ACK is reported as the result; no automatic carrier swap retries it. ArduPilot's own
+LONG→INT upconvert fills in frame 3, so the default gives the same answer. PX4 accepts
+either, which is why PX4-first validation never caught it.
 *Check:* `node --test test/command/carrier.test.js` — pinned to the literal 3.
 
 **14.75 Blank preset coordinates are refused per preset, because the dialect cannot tell you.** ✔ 🧪
@@ -1215,6 +1215,17 @@ sends; that is policy in the driver (§0, §3), and it could only serialize, nev
 the wire gives it nothing to attribute with. Same shape as the identity-collision ruling above:
 the editor and the operator own it. The Command help text says so.
 *Check:* `rg -n "cannot be told apart" nodes/mavlink-command.html`.
+
+**14.146 Inbound signing follows verification-key presence.** ✔ 📖 (pymavlink parity, owner ruling, 2026-09-08)
+With no signing key, both signed and unsigned frames are accepted as unverified
+(`trusted` is `undefined`); signed timestamps do not enter replay or high-water
+state. With a key, inbound signatures are mandatory and must verify. Unsigned
+frames, including `RADIO_STATUS`, are always rejected; `acceptInvalid` may admit
+an invalid signed frame as explicitly untrusted. `signOutbound` remains independent.
+This matches pymavlink's decoder, which only runs its signature-validation block
+when `secret_key` is configured.
+*Check:* `test/connection/signing.test.js`; `test/connection/runtime.test.js`;
+[pymavlink `mavgen_python.py` signature validation](https://github.com/ArduPilot/pymavlink/blob/master/generator/mavgen_python.py#L941-L966).
 
 ## Removed from the old §14, and why
 

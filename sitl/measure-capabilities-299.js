@@ -90,7 +90,6 @@ function makeConn({ bindPort, remotePort, sysid, firmware, autopilot }) {
       signing: {
         linkId: 0,
         signOutbound: false,
-        requireSigned: false,
         acceptInvalid: false,
         hasKey: false,
       },

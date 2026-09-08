@@ -17,16 +17,19 @@ const assert = require('node:assert/strict');
 
 const { StubPeerTable } = require('./stubs/connection');
 const { loadBundled } = require('../../lib/metadata/bundled');
+const { loadNodeDefaults } = require('../nodes/html-assert');
 
 const COMMON_BUNDLE = loadBundled('common');
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test('Build tier: output 0 carries the COMMAND_LONG and output 1 a top-level status record', async () => {
+test('Build tier: the editor default carries COMMAND_LONG and a top-level status record', async () => {
+  const { sendAs } = loadNodeDefaults('mavlink-command');
+  assert.equal(sendAs.value, 'long', 'the editor default is the carrier used by a new node');
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({ params: '{}', sendAs: 'long', mode: 'preset', preset: 'arm', delivery: 'build' });
+  const node = new Node({ params: '{}', sendAs: sendAs.value, mode: 'preset', preset: 'arm', delivery: 'build' });
 
   let sent;
   node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
