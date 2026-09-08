@@ -1171,6 +1171,51 @@ string.
 *Check:* `rg -n "completionKey \? pollCompletion" nodes` — no matches; `deliveryOptions` in
 `nodes/mavlink-command.html` gates `complete` on `hasCompletion`.
 
+**14.142 One decode call drains the whole datagram.** ✔ (measured 2026-09-08, #465 finding 5)
+The splitter was piped into the parser, two object-mode Transform streams with the default
+16-object high-water mark each. A pipe stalls at the parser's mark and resumes on a later tick,
+after `decode()` has returned, so every frame past the 31st of one datagram sat in the splitter
+until the next datagram arrived. Measured on a fresh wire with N identical HEARTBEATs in one
+buffer: 15→15, 16→16, 31→31, 32→31, 40→31, 64→31, and an immediate second decode of an empty
+buffer yielded 0. Thirty-one is the sum of the two marks less one. The streams are no longer
+piped: `decode()` moves each split frame into the parser by hand and reads the parser dry,
+synchronously, so a frame is still returned with its datagram's endpoint in scope. After:
+200→200; a partial frame still buffers across calls.
+*Check:* `node -e` with `createWire({bundle}).decode(Buffer.concat(64 heartbeats))` returns 64.
+
+**14.143 Ownership crosses the two asynchronous boundaries by copy, never by reference.** ✔ (owner ruling, 2026-09-08, #465 findings 3 and 6)
+Outbound: the queue takes a `deepCopy` of the message at enqueue. Out sends the same `msg` on
+its continuation output that it handed to the Connection, and the pump serializes the envelope
+later, after the transport's write callback; under backpressure a Function node editing
+`msg.payload` in between changed what left the wire (an ARM entered with `param1` 1 serialized
+as 0). The inbound path already copied per subscriber (`clone.js`). Inbound to flows: the
+State feed emits `projectComponent(component)`, the same projection `snapshot()` lists, never
+the table's live component, whose `endpoints` Map is the return route and whose `armed` and
+`flightMode` are rewritten by every heartbeat. `deepCopy` is not the tool for that side: it
+walks `Object.keys`, and a Map copies to `{}`.
+*Check:* `rg -n "deepCopy\(message\)" lib/connection/runtime.js`; `rg -n projectComponent lib/state/index.js lib/connection/peer-table.js`.
+
+**14.144 A component-0 target completes on the component that acked.** ✔ (owner ruling, 2026-09-08, #465 finding 7)
+`MAV_COMP_ID_ALL` (0) is an offered entry in the Command dialog's target-component select, so
+a Complete-tier command to sysid/0 is a buildable flow. No peer ever registers a component 0;
+the completion poll looked one up and reported `timeout: peer not in table` while the vehicle
+was armed at 1/1 and had acked from there. The responder's sysid and compid now ride the
+`AckResult` beside `confirmedBy`, and when the outbound target was component 0 the completion
+poll reads the responder's component. The ack-timeout state check has no responder and keeps
+the target. The wire destination is unchanged and no broadcast refusal was added.
+*Check:* `rg -n "completionCompid" nodes/mavlink-command.js`; `test/command/completion.test.js`.
+
+**14.145 Two waits on one command to one target cannot be told apart, and nothing runs at runtime about it.** ✔ (owner ruling, 2026-09-08, #465 finding 4)
+COMMAND_ACK carries `command`, `result`, `progress`, `result_param2` and the target ids,
+nothing from the request. Two Confirm-tier nodes issuing the same MAV_CMD to the same target
+from the same identity (REQUEST_MESSAGE for two different message ids is the natural case)
+both see every ack on the connection's one subscription and both settle on whichever lands
+first. The audit proposed a shared in-flight registry that serializes or refuses conflicting
+sends; that is policy in the driver (§0, §3), and it could only serialize, never attribute, since
+the wire gives it nothing to attribute with. Same shape as the identity-collision ruling above:
+the editor and the operator own it. The Command help text says so.
+*Check:* `rg -n "cannot be told apart" nodes/mavlink-command.html`.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
