@@ -19,25 +19,17 @@
     }
 
     /**
-     * A choice of Identity exists only when the Connection carries more than
-     * one. A single-identity Connection has exactly one — its Local Identity —
-     * so the editor hides the field (see oneditprepare) and oneditsave stores
-     * blank — the runtime then asserts the Connection's Local Identity.
-     * Whatever leftover is still stored here is ignored by the validator, so
-     * it must never ring, even for a stale saved value from before the field
-     * was hidden. That is the first branch: with the Connection resolved to a
-     * single identity, pass.
-     *
-     * When the Connection does carry additionals, a bound pick is required. The
-     * field is then a connection-scoped select that only offers bound
-     * identities and auto-picks one, so the ring is unreachable through the
-     * dialog — this validator survives solely as the hand-edited-flow backstop
-     * for the promoted silent-false-success case (a lease on an unbound id no
-     * scheduler heartbeats). command/fanout, whose unbound pick is not that
-     * class, carry no identity validator. The connection is read live through
-     * liveOr so the check is scoped to this node's own open dialog.
+     * Health's Identity is the shared override (§6) with one stricter rule:
+     * a Connection that carries a choice of identities requires a pick. A
+     * single-identity Connection hides the field (see oneditprepare) and
+     * oneditsave stores blank, so whatever is stored never rings there; the
+     * runtime asserts the Connection's Local Identity. With a pick present,
+     * the shared validator owns existence and binding. The connection is read
+     * live through liveOr so the check is scoped to this node's own open
+     * dialog.
      */
-    function boundIdentityValidator(v, _opt) {
+    const overrideValidator = RED.mavlink.identityOverrideValidator();
+    function boundIdentityValidator(v, opt) {
       const connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
       // No Connection resolved yet — its own required ring owns that.
       if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
@@ -45,11 +37,7 @@
       if (isSingleIdentity(connId)) return true;
       // Multi-identity: a bound identity must be chosen.
       if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
-      if (!RED.nodes.node(v)) return 'references a missing Identity';
-      if (!RED.mavlink.identityOptionsFor(connId).some((o) => o.id === v)) {
-        return 'is not bound to the selected Connection — bind it there or pick a bound Identity';
-      }
-      return true;
+      return overrideValidator.call(this, v, opt);
     }
 
     RED.nodes.registerType('mavlink-health', {
