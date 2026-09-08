@@ -44,7 +44,7 @@ test('mavlink-param target sysid/compid default to empty (inherit profile) not 1
 test('mavlink-param has identity default (vehicle comes from the shared helper)', () => {
   assert.match(
     html,
-    /identity:\s*\{\s*value:\s*'',\s*type:\s*'mavlink-local-identity'\s*\}/,
+    /identity:\s*\{\s*value:\s*'',\s*type:\s*'mavlink-local-identity',\s*validate:\s*RED\.mavlink\.identityOverrideValidator\(/,
     'identity default exists with empty value'
   );
 });

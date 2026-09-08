@@ -92,7 +92,7 @@ test('admin catalog fetches go through the shared loaders (httpAdminRoot-safe)',
 test('identity defaults to empty string and refreshIdentitySelect uses gcs+custom filter (§6)', () => {
   assert.match(
     html,
-    /identity:\s*\{\s*value:\s*'',\s*type:\s*'mavlink-local-identity'\s*\}/,
+    /identity:\s*\{\s*value:\s*'',\s*type:\s*'mavlink-local-identity',\s*validate:\s*RED\.mavlink\.identityOverrideValidator\(/,
     'identity property defaults to empty string'
   );
   // One spelling of the filter: the select fill and the row's visibility test
