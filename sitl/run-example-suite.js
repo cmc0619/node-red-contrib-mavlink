@@ -1309,7 +1309,7 @@ function runApControlScript(body, timeoutMs = 20000, opts = {}) {
         vehicle: { targetSystem: ${targetSystem}, targetComponent: 1, bundle, firmware: 'ardupilot', autopilot: 3 },
         identities: [{ id: 'gcs', sysid: 255, compid: 190, heartbeat: { type: 6, autopilot: 8, systemStatus: 4, baseMode: 0, customMode: 0, mavlinkVersion: 3 }, heartbeatIntervalMs: 500 }],
         defaultIdentityId: 'gcs', boundIdentityIds: ['gcs'],
-        signing: { linkId: 0, signOutbound: false, requireSigned: false, acceptInvalid: false, hasKey: false },
+        signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
         heartbeat: { staleMs: 5000, expireMs: 15000 },
       }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
       await conn.start();
@@ -1339,7 +1339,7 @@ function runApControlScript(body, timeoutMs = 20000, opts = {}) {
 
 /**
  * Attach signingPassphrase credentials for every Connection that enables
- * signOutbound or requireSigned. Node-RED's Admin API accepts a top-level
+ * signOutbound. Node-RED's Admin API accepts a top-level
  * `credentials` map on POST /flows (flow JSON never embeds the secret).
  *
  * @param {object[]} flows
@@ -1350,7 +1350,7 @@ function signingCredentialsForFlows(flows) {
   const credentials = {};
   for (const n of flows) {
     if (!n || n.type !== 'mavlink-connection') continue;
-    if (n.signOutbound || n.requireSigned) {
+    if (n.signOutbound) {
       credentials[n.id] = { signingPassphrase: SITL_SIGNING_PASSPHRASE };
     }
   }
