@@ -113,6 +113,21 @@ test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT',
   assert.match(html, /oneditsave/);
 });
 
+test('Build does not render generated constant fields', () => {
+  const commandRenderer = sliceBetween('if (COMMAND_MESSAGES[msg.name]) {', 'const cmdSel =');
+  assert.match(
+    commandRenderer,
+    /if \(spec\.constValue !== undefined\) return;/,
+    'COMMAND_LONG/INT fields omit generated constants'
+  );
+  const messageRenderer = sliceBetween('const fields = msg.fields || [];', '// Type a message by name or id');
+  assert.match(
+    messageRenderer,
+    /if \(spec\.constValue !== undefined\) return;/,
+    'ordinary message fields omit generated constants'
+  );
+});
+
 test('Build target_component is a MAV_COMPONENT pulldown, not a bare number (§6)', () => {
   assert.match(
     html,

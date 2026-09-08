@@ -4,9 +4,9 @@
  * mavlink-mission — palette node (DESIGN.md §3, §9 "Mission protocol",
  * §12 step 7).
  *
- * Runs one of three state machines over the mission item-transfer protocol —
- * download, upload, or clear — for one of three plan types — mission, fence,
- * or rally. All protocol logic lives in `lib/mission`; this node is the thin
+ * Runs one of four state machines over the MAVLink mission service — download,
+ * upload, clear, or set-current — for one of three plan types — mission,
+ * fence, or rally. All protocol logic lives in `lib/mission`; this node is the thin
  * wrapper (§2): read config, resolve the connection/target, run the machine,
  * and shape the two-output chain (§9).
  *
@@ -16,7 +16,8 @@
  * Delivery tiers (§9 "Delivery tiers"):
  *   build   — construct the protocol plan (the messages that would be sent) and
  *             emit it on output 0; send nothing. Always available.
- *   confirm — run the machine to its `MISSION_ACK` and report the outcome.
+ *   confirm — run the machine to its `MISSION_ACK` or `MISSION_CURRENT` and
+ *             report the outcome.
  *             Available when a connection is configured.
  *
  * Guards (§9 "What triggers an action node"):
@@ -35,6 +36,7 @@ const {
   buildRequestList,
   buildCount,
   buildClearAll,
+  buildSetCurrent,
   buildItemInt,
 } = require('../lib/mission/items');
 const { createMachine, locks } = require('../lib/mission');
@@ -64,9 +66,9 @@ module.exports = function registerMavlinkMission(RED) {
 
     /**
      * In-flight machines keyed by the same lock key as {@link locks}
-     * (`connection::sysid.compid::missionType`). Different types on one node
-     * may run concurrently; only a later message for the *same* key cancels
-     * its predecessor.
+     * (`connection::sysid.compid::missionType`). Different item-transfer types
+     * on one node may run concurrently; Set Current always uses mission scope
+     * 0 because its MAVLink message has no mission_type field.
      *
      * @type {Map<string, {cancel: Function}>}
      */
@@ -114,6 +116,23 @@ module.exports = function registerMavlinkMission(RED) {
       // (missionTypeValue §5) — never absent-decoded-as-0 at the vehicle.
       const missionType = missionTypeValue(missionTypeKey);
 
+      // Set Current selects the mission plan, so it shares the mission lock
+      // even when a stale or payload-supplied label says fence or rally. The
+      // label and machine value remain as supplied; this chooses lock scope
+      // only and does not rewrite the protocol payload.
+      let lockMissionType = missionType;
+      switch (operation) {
+        case OPERATION.SET_CURRENT:
+          lockMissionType = 0;
+          break;
+        default: break; // This space intentionally left blank (§5)
+      }
+
+      // Only Set Current reads seq. Presence fallback preserves an explicit
+      // payload zero; the editor owns the uint16 integer ring and the wire
+      // codec remains the final validator for trusted payload values.
+      const seq = payload.seq === undefined ? config.seq : payload.seq;
+
       // The editor owns the defaults and the number rings.
       const timeoutMs = Number(config.timeoutMs);
       const maxRetries = Number(config.maxRetries);
@@ -145,7 +164,7 @@ module.exports = function registerMavlinkMission(RED) {
 
       /** Emit the protocol plan on output 0 and send nothing. */
       function buildTier() {
-      const plan = buildPlan(operation, missionType, target, uploadItems);
+      const plan = buildPlan(operation, missionType, target, uploadItems, seq);
       applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
       send([
         { payload: plan },
@@ -178,6 +197,7 @@ module.exports = function registerMavlinkMission(RED) {
           target,
           missionType,
           items: uploadItems,
+          seq,
           timeoutMs,
           maxRetries,
           // Ack attribution (§9/§10): ignore a reply explicitly addressed to
@@ -193,7 +213,7 @@ module.exports = function registerMavlinkMission(RED) {
         });
 
         // ── Lock per (connection, target, mission_type) (§9). ─────────────────
-        const release = locks.acquire(connNode.id, target, missionType);
+        const release = locks.acquire(connNode.id, target, lockMissionType);
         if (!release) {
           const rec = record(node, operation, missionTypeKey, target, {
             result: 'failed',
@@ -208,7 +228,7 @@ module.exports = function registerMavlinkMission(RED) {
 
         // Key the in-flight handle the same way as the lock so a fence upload
         // does not cancel an in-flight mission download on this node (§9).
-        const lockKey = locks.key(connNode.id, target, missionType);
+        const lockKey = locks.key(connNode.id, target, lockMissionType);
 
         applyActionStatus(node, 'sending', `${operation} ${missionTypeKey}\u2026`);
 
@@ -299,9 +319,10 @@ function record(node, operation, missionTypeKey, target, fields) {
  * @param {number} missionType
  * @param {{sysid: number, compid: number}} target
  * @param {object[]} items
+ * @param {*} [currentSeq]  current mission sequence for Set Current
  * @returns {{operation: string, missionType: number, target: object, messages: object[]}}
  */
-function buildPlan(operation, missionType, target, items) {
+function buildPlan(operation, missionType, target, items, currentSeq) {
   let messages;
   switch (operation) {
     case OPERATION.DOWNLOAD:
@@ -315,6 +336,9 @@ function buildPlan(operation, missionType, target, items) {
         buildCount(target, items.length, missionType),
         ...items.map((item, seq) => buildItemInt(item, target, seq, missionType)),
       ];
+      break;
+    case OPERATION.SET_CURRENT:
+      messages = [buildSetCurrent(target, currentSeq)];
       break;
     default: break; // This space intentionally left blank (§5)
   }
@@ -334,6 +358,7 @@ function successBadge(operation, missionTypeKey, outcome) {
     case OPERATION.DOWNLOAD: return `${missionTypeKey} \u2193 ${outcome.count} items`;
     case OPERATION.UPLOAD: return `${missionTypeKey} \u2191 ${outcome.count} items`;
     case OPERATION.CLEAR: return `${missionTypeKey} cleared`;
+    case OPERATION.SET_CURRENT: return `${missionTypeKey} current ${outcome.seq}`;
     default: break; // This space intentionally left blank (§5)
   }
   return undefined; // nothing matched: no behavior selected (§5)

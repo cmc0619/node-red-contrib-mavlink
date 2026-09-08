@@ -1375,6 +1375,31 @@ test('mavlink-build Build tier: plain dialect config loads bundled dialect witho
   assert.equal(out1.result, 'built');
 });
 
+test('mavlink-build Build tier fills a dialect constant and ignores an override', () => {
+  const RED = makeRED();
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance();
+  Constructor.call(node, {
+    dialect: 'common',
+    messageName: 'HEARTBEAT',
+    tier: 'build',
+    fields: JSON.stringify({
+      type: 6,
+      autopilot: 8,
+      base_mode: 0,
+      custom_mode: 0,
+      system_status: 0,
+      mavlink_version: 1,
+    }),
+  });
+
+  node._input({ payload: { mavlink_version: 1 } });
+
+  const [out0] = node._sends[0];
+  assert.equal(out0.payload.message.fields.mavlink_version, 3);
+});
+
 test('mavlink-build wire tier: custom-dialect connection profile resolves via getDialect(), not the bundled registry', () => {
   const RED = makeRED();
   // A custom XML profile: its dialect *name* is not in the bundled registry,

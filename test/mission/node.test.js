@@ -75,6 +75,65 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(outputs[0][1].result, 'succeeded');
 });
 
+test('set-current Build emits its address and sequence without mission_type', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'build',
+    dialect: 'common',
+    firmware: 'custom',
+    missionType: 'mission',
+    targetSystem: 42,
+    targetComponent: 1,
+    seq: 0,
+  });
+  const { outputs } = await runInput(node, { payload: {} });
+
+  const plan = outputs[0][0].payload;
+  assert.equal(plan.operation, 'set-current');
+  assert.deepEqual(plan.messages, [{
+    name: 'MISSION_SET_CURRENT',
+    fields: { target_system: 42, target_component: 1, seq: 0 },
+  }]);
+  assert.equal(conn.sent.length, 0, 'Build sends nothing');
+});
+
+test('set-current confirm waits for the matching addressless MISSION_CURRENT echo', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_SET_CURRENT') {
+      deliver({
+        name: 'MISSION_CURRENT',
+        sysid: 42,
+        compid: 1,
+        fields: { seq: 0, total: 0, mission_state: 0, mission_mode: 0 },
+      });
+    }
+  });
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    seq: 5,
+    timeoutMs: 20,
+    maxRetries: 1,
+  });
+  const { outputs, err } = await runInput(node, { payload: { seq: 0 } });
+
+  assert.equal(err, undefined, 'set-current confirmation should complete without an input error');
+  assert.equal(conn.sentNames()[0], 'MISSION_SET_CURRENT');
+  assert.equal(conn.sent[0].message.fields.seq, 0, 'explicit payload zero overrides config');
+  assert.deepEqual(conn.sentNames(), ['MISSION_SET_CURRENT'], 'no COMMAND_ACK is assumed');
+  const terminal = outputs.at(-1);
+  assert.equal(terminal[1].result, 'succeeded');
+  assert.equal(terminal[1].seq, 0);
+});
+
 test('Build tier plans nothing for a missing operation instead of planning an upload', async () => {
   // A catch-all `else` treated every unknown operation as upload, so a node
   // with no operation answered Build with a zero-item MISSION_COUNT plan. The
@@ -599,6 +658,48 @@ test('a busy lock refuses a second same-type transfer on the node', async () => 
 
   // Clean up the held lock so the shared registry does not leak into other tests.
   first.emit('close', () => {});
+});
+
+test('set-current uses the mission lock despite a non-mission payload label', async (t) => {
+  const conn = new StubConnection();
+  conn.onSend(() => {});
+  const Node = loadNode(conn);
+
+  const first = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    targetSystem: 42,
+    targetComponent: 1,
+    seq: 3,
+    timeoutMs: 20,
+    maxRetries: 1,
+    id: 'set-current-fence',
+  });
+  const second = new Node({
+    operation: 'set-current',
+    connection: 'conn',
+    delivery: 'confirm',
+    missionType: 'mission',
+    targetSystem: 42,
+    targetComponent: 1,
+    seq: 4,
+    timeoutMs: 20,
+    maxRetries: 1,
+    id: 'set-current-mission',
+  });
+
+  t.after(() => first.emit('close', () => {}));
+  first.emit('input', { payload: { missionType: 'fence' } }, () => {}, () => {});
+  const { outputs } = await runInput(second, { payload: { missionType: 'mission' } });
+
+  assert.equal(outputs.at(-1)[1].phase, 'locked',
+    'mission-labelled Set Current cannot bypass a fence-labelled Set Current');
+  assert.equal(conn.sent.length, 1, 'the second Set Current never reaches the wire');
+  assert.equal(conn.sent[0].message.fields.seq, 3, 'the first request keeps its configured sequence');
+  assert.equal(Object.hasOwn(conn.sent[0].message.fields, 'mission_type'), false,
+    'Set Current keeps mission_type out of its payload');
 });
 
 test('mission companion identity: target derived from airframe sysid, compid pinned to 1', async () => {
