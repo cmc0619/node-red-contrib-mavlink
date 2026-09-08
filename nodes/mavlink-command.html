@@ -1217,7 +1217,7 @@
         <em>Dialect</em>, or choose <em>from Vehicle Profile…</em> to use a custom XML dialect
         and that profile's default target. Identity and connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
-    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED.
+    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED. Two nodes waiting on the same command to the same target from the same identity cannot be told apart: COMMAND_ACK carries the command id and the result, nothing from the request, so the first ack settles both.
         While the vehicle answers IN_PROGRESS the status badge shows the
         progress it reports.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
