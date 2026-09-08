@@ -947,10 +947,10 @@
   <code>PARAM_SET</code> on silence up to <b>Max retries</b> times (3 by
   default), each attempt waiting the configured timeout; the attempts made are
   reported in the terminal status record. On a read it waits for the <code>PARAM_VALUE</code> reply and emits
-  it. <i>Request list and collect</i> keeps the timeout as the overall bound
-  and, when the stream goes quiet inside it, re-requests the missing indexes by
-  <code>PARAM_REQUEST_READ</code> a bounded number of times; a vehicle
-  advertising zero parameters completes as an empty list.</p>
+  it. <i>Request list and collect</i> sends one <code>PARAM_REQUEST_LIST</code> and
+  collects <code>PARAM_VALUE</code> frames until every advertised index arrives
+  within the configured timeout; a missing index ends in a list timeout. A
+  vehicle advertising zero parameters completes as an empty list.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
   <p><b>Param id</b> searches shipped parameter definitions — type any part of a

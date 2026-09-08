@@ -462,8 +462,9 @@ function requestFrom(config, payload, { target, profile, capabilities }) {
     action: valueFrom(payload, config, 'action'),
     target,
     paramId: valueFrom(payload, config, 'paramId'),
-    // paramIndex 0 is a valid index; keep it rather than letting `||` drop it to
-    // the library's -1 default. Absent (undefined) is left for the library.
+    // The editor's -1 default is the name-addressed sentinel. A supplied 0 is a
+    // valid index; an absent value remains undefined and reaches
+    // buildParamMessage as NaN so the serializer reports the malformed request.
     paramIndex: valueFrom(payload, config, 'paramIndex'),
     value: valueFrom(payload, config, 'value'),
     // No REAL32 fallback: an absent type resolves to nothing, never to a

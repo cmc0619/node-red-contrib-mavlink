@@ -37,6 +37,29 @@ test('a signed frame carries ctx.timestamp on the wire, not node-mavlink’s own
   assert.equal(decoded.timestamp, ctxTimestamp);
 });
 
+test('a pre-2015 host clock still produces a signable epoch timestamp', () => {
+  const wire = createWire({ bundle: loadBundled('minimal'), key: KEY });
+  const beforeEpoch = Date.UTC(2014, 11, 31, 23, 59, 59, 999);
+  const signing = new SigningState({
+    signOutbound: true,
+    hasKey: true,
+    linkId: 0,
+    now: () => beforeEpoch,
+  });
+  const timestamp = signing.nextOutboundTimestamp(1, 1);
+
+  assert.equal(timestamp, 0);
+  const frame = wire.serialize(
+    { name: 'HEARTBEAT', fields: heartbeatFields() },
+    { sysid: 1, compid: 1, seq: 0, sign: true, linkId: 0, key: KEY, timestamp }
+  );
+
+  const [decoded] = wire.decode(frame);
+  assert.equal(decoded.signaturePresent, true);
+  assert.equal(decoded.signatureValid, true);
+  assert.equal(decoded.timestamp, 0);
+});
+
 test('signing state’s per-stream timestamps land on the wire and stay monotonic', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), key: KEY });
   const signing = new SigningState({ signOutbound: true, hasKey: true, linkId: 0 });
