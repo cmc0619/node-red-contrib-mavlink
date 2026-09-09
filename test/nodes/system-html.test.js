@@ -26,7 +26,7 @@ test('mavlink-system editor registers closed service and operation selectors', (
 test('mavlink-system conditionally validates log id, FTP path, and parameter encoding', () => {
   const defaults = loadNodeDefaults('mavlink-system', {
     connection: { vehicle: 'vehicle' },
-    vehicle: { firmware: 'px4' },
+    vehicle: { firmware: 'custom' },
   });
   assert.equal(defaults.logId.validate.call({ service: 'logs', operation: 'list' }, 'not-an-id', {}), true);
   assert.equal(defaults.logId.validate.call({ service: 'logs', operation: 'download' }, 7, {}), true);
@@ -38,7 +38,7 @@ test('mavlink-system conditionally validates log id, FTP path, and parameter enc
   assert.equal(defaults.path.validate.call({ service: 'logs' }, 'a'.repeat(300), {}), true);
   assert.equal(defaults.paramEncoding.validate.call({ service: 'logs' }, 'invalid', {}), true);
   assert.equal(defaults.paramEncoding.validate.call({ service: 'parameters', connection: 'connection' }, 'auto', {}), true);
-  assert.match(String(defaults.paramEncoding.validate.call({ service: 'parameters' }, 'auto', {})), /Connection profile/);
+  assert.equal(defaults.paramEncoding.validate.call({ service: 'parameters' }, 'auto', {}), true);
   assert.equal(defaults.paramEncoding.validate.call({ service: 'parameters' }, 'bytewise', {}), true);
   assert.match(String(defaults.paramEncoding.validate.call({ service: 'parameters' }, 'invalid', {})), /one of/);
 });

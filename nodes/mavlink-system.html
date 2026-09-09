@@ -73,16 +73,7 @@
         validate(v, opt) {
           const service = RED.mavlink.liveOr(this, '#node-input-service', this.service, 'logs');
           if (service !== 'parameters') return true;
-          const member = RED.mavlink.oneOf(['auto', 'bytewise', 'c-cast']).call(this, v, opt);
-          if (member !== true || v !== 'auto') return member;
-          const catalogTarget = RED.mavlink.resolveCatalogTarget({ source: this, isBuild: false });
-          switch (catalogTarget.firmware) {
-            case 'px4':
-            case 'ardupilot':
-              return true;
-            default:
-              return 'Auto requires a Connection profile with PX4 or ArduPilot firmware';
-          }
+          return RED.mavlink.oneOf(['auto', 'bytewise', 'c-cast']).call(this, v, opt);
         },
       },
       targetSystem: {
@@ -178,6 +169,6 @@
   <p><b>Logs</b> lists onboard logs or downloads one selected log with the MAVLink log transfer protocol. The list returns the complete <code>LOG_ENTRY</code> collection; each advertised <code>size</code> is informational.</p>
   <p><b>Download log</b> selects the ID from the Log id field or <code>msg.payload.id</code>. Output 0 is a Buffer in <code>msg.payload</code> with the selected ID in <code>msg.logId</code>; connect a Node-RED File node when the bytes should be saved. The transfer follows <code>LOG_DATA</code> offsets, retries only missing ranges, and ends on a short data packet or zero-count EOF. Supply <code>msg.payload.size</code> as an exact byte length to complete without an EOF packet; all bytes through that boundary must arrive. For PX4, list first and pass the selected entry as <code>{id, size}</code>. Omit <code>size</code> when the advertised length is approximate (for example ArduPilot); completion then follows the peer's short or zero-count EOF. Cancellation sends <code>LOG_REQUEST_END</code>.</p>
   <p><b>Files</b> uses MAVLink FTP. List and download read the path from <code>msg.payload.path</code> or the configured Path. Upload takes a Buffer directly from <code>msg.payload</code> and reads its path from <code>msg.path</code> or the configured Path. The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP <code>CREATE_FILE</code> may truncate an existing remote file.</p>
-  <p><b>Parameters</b> backup requests the parameter-only table and returns an array of <code>{paramId, paramType, value}</code> records. Pass that array directly as <code>msg.payload</code> to Restore; it also survives JSON or File-node round trips. Non-finite values are represented as the strings <code>"Infinity"</code>, <code>"-Infinity"</code>, and <code>"NaN"</code>. Restore sends records sequentially and reports the confirmed count on partial failure; there is no rollback of earlier writes. Auto encoding uses peer capabilities and the Connection profile firmware; choose Bytewise or C cast to override it.</p>
+  <p><b>Parameters</b> backup requests the parameter-only table and returns an array of <code>{paramId, paramType, value}</code> records. Pass that array directly as <code>msg.payload</code> to Restore; it also survives JSON or File-node round trips. Non-finite values and negative zero are represented as the strings <code>"Infinity"</code>, <code>"-Infinity"</code>, <code>"NaN"</code>, and <code>"-0"</code>. Restore sends records sequentially and reports the confirmed count on partial failure; there is no rollback of earlier writes. Auto encoding uses peer capabilities and the Connection profile firmware; choose Bytewise or C cast to override it.</p>
   <p>All services use the selected Connection, Identity, target sysid/compid, timeout, and retry settings. Set <code>msg.payload === false</code> to suppress an operation. A node close cancels its active transfer. Status records omit large list, download, and parameter payloads.</p>
 </script>
