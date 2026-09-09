@@ -300,6 +300,29 @@ test('download cancel sends LOG_REQUEST_END and never a mission or command ack',
   assert.equal(clock.pending(), 0);
 });
 
+test('download settles and cleans up when inbound progress handling throws', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend(() => {});
+  const machine = new LogDownload(machineOptions(stub, clock, {
+    id: 7,
+    onProgress(update) {
+      if (update.phase === 'data') throw new Error('progress callback failed');
+    },
+  }));
+  const done = machine.start();
+
+  assert.doesNotThrow(() => stub.inject(data(7, 0, 'valid log data')));
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'aborted');
+  assert.match(outcome.reason, /progress callback failed/);
+  assert.equal(stub.sentNames().at(-1), 'LOG_REQUEST_END');
+  assert.equal(stub.subscriberCount(), 0);
+  assert.equal(clock.pending(), 0);
+});
+
 test('PX4 directory retries a lost zero ID without counting duplicates', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
