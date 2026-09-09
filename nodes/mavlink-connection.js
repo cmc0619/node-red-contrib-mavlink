@@ -378,6 +378,16 @@ function rejectedSurface(reason) {
   return { log: `dropping signed traffic — ${reason}`, badge: `drop: ${reason}` };
 }
 
+/** @type {Object<string, {fill: string, shape: string, text: string}>} */
+const STATUS_BADGES = {
+  [STATE.CONNECTED]: { fill: 'green', shape: 'dot', text: 'connected' },
+  [STATE.CONNECTING]: { fill: 'yellow', shape: 'ring', text: 'connecting' },
+  [STATE.RECONNECTING]: { fill: 'yellow', shape: 'ring', text: 'reconnecting' },
+  [STATE.IDLE]: { fill: 'grey', shape: 'ring', text: 'idle' },
+  [STATE.CLOSED]: { fill: 'grey', shape: 'ring', text: 'closed' },
+  [STATE.ERROR]: { fill: 'red', shape: 'ring', text: 'error' },
+};
+
 /**
  * Map a runtime state to a §6 config-node status badge. Config nodes report a
  * state machine: green dot connected, yellow ring connecting, grey ring
@@ -400,13 +410,3 @@ function applyStatus(node, state, untrusted) {
   const badge = STATUS_BADGES[state];
   node.status({ fill: badge.fill, shape: badge.shape, text: capBadge(badge.text) });
 }
-
-/** @type {Object<string, {fill: string, shape: string, text: string}>} */
-const STATUS_BADGES = {
-  [STATE.CONNECTED]: { fill: 'green', shape: 'dot', text: 'connected' },
-  [STATE.CONNECTING]: { fill: 'yellow', shape: 'ring', text: 'connecting' },
-  [STATE.RECONNECTING]: { fill: 'yellow', shape: 'ring', text: 'reconnecting' },
-  [STATE.IDLE]: { fill: 'grey', shape: 'ring', text: 'idle' },
-  [STATE.CLOSED]: { fill: 'grey', shape: 'ring', text: 'closed' },
-  [STATE.ERROR]: { fill: 'red', shape: 'ring', text: 'error' },
-};
