@@ -48,6 +48,7 @@ function registerMavlinkLog(RED) {
         config,
         payload,
         connectionNode: connAtDeploy,
+        compidFromConfig: true,
       });
 
       const machine = createMachine(operation, {
@@ -59,6 +60,7 @@ function registerMavlinkLog(RED) {
         subscribe: (filter, handler) => connNode.subscribe(filter, handler),
         target,
         id,
+        size: payload.size,
         timeoutMs: Number(config.timeoutMs),
         maxRetries: Number(config.maxRetries),
         onProgress: (update) => send([

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 
 const { StubConnection } = require('../mission/stubs/connection');
 
-function loadNode(conn) {
+function loadNode(conn, identity) {
   const RED = {
     nodes: {
       types: {},
@@ -21,7 +21,7 @@ function loadNode(conn) {
         node.warn = () => {};
       },
       registerType(name, ctor) { this.types[name] = ctor; },
-      getNode(id) { return id === 'conn' ? conn : undefined; },
+      getNode(id) { return id === 'conn' ? conn : identity; },
     },
   };
   require('../../nodes/mavlink-log')(RED);
@@ -42,6 +42,25 @@ const BASE = {
   timeoutMs: 20,
   maxRetries: 1,
 };
+
+test('companion log download honors the selected component and exact byte length', async () => {
+  const conn = new StubConnection();
+  conn.onSend((message, deliver) => {
+    if (message.name === 'LOG_REQUEST_DATA') {
+      deliver({ name: 'LOG_DATA', sysid: 42, compid: 191,
+        fields: { id: 7, ofs: 0, count: 90, data: Buffer.alloc(90, 5) } });
+    }
+  });
+  const Node = loadNode(conn, {
+    derivesSysidFromVehicle: true, getIdentity: () => ({ sysid: 42 }),
+  });
+  const node = new Node({ ...BASE, operation: 'download', logId: 7,
+    identity: 'companion', targetComponent: 191, maxRetries: 0 });
+  const { outputs } = await runInput(node, { payload: { size: 90 } });
+  assert.equal(conn.sent[0].message.fields.target_component, 191);
+  assert.equal(outputs.at(-1)[1].result, 'succeeded');
+  assert.deepEqual(outputs.at(-1)[0].payload, Buffer.alloc(90, 5));
+});
 
 test('list confirm returns entries on continue and status on output 1', async () => {
   const conn = new StubConnection();
