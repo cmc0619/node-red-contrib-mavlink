@@ -213,8 +213,8 @@ test('backup preserves signed zero and nonfinite REAL32 values through JSON and 
 
     const restoreStub = new StubConnection();
     const restoreClock = new FakeTimers();
-    let sentWireValue;
-    let echoedWireValue;
+    let sentWireValue = null;
+    let echoedWireValue = null;
     restoreStub.onSend((message, deliver) => {
       if (message.name === 'PARAM_SET') {
         const actual = serializeSetAndEcho(wire, message);
