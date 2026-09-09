@@ -250,6 +250,8 @@ test('files download returns a Buffer and upload accepts msg.path plus a Buffer 
       deliver(ftpReply(message, OPCODE.ACK, Buffer.from('abc'), { session: 5 }));
     } else if (request.opcode === OPCODE.READ_FILE && request.offset === 3) {
       deliver(ftpReply(message, OPCODE.NAK, Buffer.from([NAK_ERROR.EOF]), { session: 5 }));
+    } else if (request.opcode === OPCODE.TERMINATE_SESSION) {
+      deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 5 }));
     }
   });
   const Node = loadNode(downloadConn);
@@ -266,6 +268,8 @@ test('files download returns a Buffer and upload accepts msg.path plus a Buffer 
     if (request.opcode === OPCODE.CREATE_FILE) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 6 }));
     } else if (request.opcode === OPCODE.WRITE_FILE) {
+      deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 6 }));
+    } else if (request.opcode === OPCODE.TERMINATE_SESSION) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 6 }));
     }
   });

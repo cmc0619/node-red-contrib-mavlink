@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createMachine, OPERATION } = require('../../lib/ftp');
-const { decodePayload } = require('../../lib/ftp/items');
+const { decodePayload, NAK_ERROR } = require('../../lib/ftp/items');
 const { StubConnection, FakeTimers, fakeDeps } = require('../mission/stubs/connection');
 
 const TARGET = { sysid: 42, compid: 1 };
@@ -126,6 +126,8 @@ test('download reads sequential chunks, accepts EOF, and terminates the session'
       deliver(reply(message, 128, { session: 7, data: Buffer.from('de') }));
     } else if (request.opcode === 5 && request.offset === 5) {
       deliver(nack(message, 6, { session: 7 }));
+    } else if (request.opcode === 1) {
+      deliver(reply(message, 128, { session: 7 }));
     }
   });
 
@@ -143,6 +145,124 @@ test('download reads sequential chunks, accepts EOF, and terminates the session'
   const requests = stub.sent.map(({ message }) => decodePayload(message.fields.payload));
   assert.deepEqual(requests.map((request) => request.opcode), [4, 5, 5, 5, 1]);
   assert.equal(requests[4].session, 7);
+});
+
+test('download accepts authoritative EOF after the file shrinks', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === 4) {
+      deliver(reply(message, 128, {
+        session: 8,
+        size: 4,
+        data: Buffer.from([8, 0, 0, 0]),
+      }));
+    } else if (request.opcode === 5 && request.offset === 0) {
+      deliver(reply(message, 128, { session: 8, data: Buffer.from('abc') }));
+    } else if (request.opcode === 5 && request.offset === 3) {
+      deliver(nack(message, 6, { session: 8 }));
+    } else if (request.opcode === 1) {
+      deliver(reply(message, 128, { session: 8 }));
+    }
+  });
+
+  const outcome = await createMachine(OPERATION.DOWNLOAD, machineOptions(stub, clock, {
+    path: '/shrunk.bin',
+  })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(outcome.data, Buffer.from('abc'));
+});
+
+test('download reports termination timeout instead of false success when cleanup is dropped', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  let terminateRequests = 0;
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === 4) {
+      deliver(reply(message, 128, {
+        session: 7,
+        size: 4,
+        data: Buffer.from([4, 0, 0, 0]),
+      }));
+    } else if (request.opcode === 5 && request.offset === 0) {
+      deliver(reply(message, 128, { session: 7, data: Buffer.from('done') }));
+    } else if (request.opcode === 5 && request.offset === 4) {
+      deliver(nack(message, 6, { session: 7 }));
+    } else if (request.opcode === 1) {
+      terminateRequests += 1;
+    }
+  });
+
+  const done = createMachine(OPERATION.DOWNLOAD, machineOptions(stub, clock, {
+    path: '/dropped-termination', maxRetries: 1,
+  })).start();
+  clock.flush();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'cleanup');
+  assert.match(outcome.reason, /timed out/);
+  assert.equal(terminateRequests, 2);
+});
+
+test('download reports a termination NAK as cleanup failure', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === 4) {
+      deliver(reply(message, 128, {
+        session: 10,
+        size: 4,
+        data: Buffer.from([4, 0, 0, 0]),
+      }));
+    } else if (request.opcode === 5 && request.offset === 0) {
+      deliver(reply(message, 128, { session: 10, data: Buffer.from('done') }));
+    } else if (request.opcode === 5 && request.offset === 4) {
+      deliver(nack(message, NAK_ERROR.EOF, { session: 10 }));
+    } else if (request.opcode === 1) {
+      deliver(nack(message, NAK_ERROR.INVALID_SESSION, { session: 10 }));
+    }
+  });
+
+  const outcome = await createMachine(OPERATION.DOWNLOAD, machineOptions(stub, clock, {
+    path: '/naked-termination',
+  })).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'cleanup');
+  assert.equal(outcome.protocol.errorCode, NAK_ERROR.INVALID_SESSION);
+});
+
+test('cleanup failure does not replace the primary transfer failure', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === 4) {
+      deliver(reply(message, 128, {
+        session: 11,
+        size: 4,
+        data: Buffer.from([4, 0, 0, 0]),
+      }));
+    } else if (request.opcode === 5) {
+      deliver(nack(message, NAK_ERROR.FILE_NOT_FOUND, { session: 11 }));
+    } else if (request.opcode === 1) {
+      deliver(nack(message, NAK_ERROR.INVALID_SESSION, { session: 11 }));
+    }
+  });
+
+  const outcome = await createMachine(OPERATION.DOWNLOAD, machineOptions(stub, clock, {
+    path: '/primary-failure',
+  })).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'ack');
+  assert.equal(outcome.protocol.errorCode, NAK_ERROR.FILE_NOT_FOUND);
+  assert.match(outcome.cleanupError, /invalid session/);
 });
 
 test('upload writes bounded chunks and reports bytes after cleanup', async () => {
@@ -164,6 +284,8 @@ test('upload writes bounded chunks and reports bytes after cleanup', async () =>
         size: 4,
         data: ack,
       }));
+    } else if (request.opcode === 1) {
+      deliver(reply(message, 128, { session: 9 }));
     }
   });
 
@@ -187,6 +309,7 @@ test('upload accepts the specification zero-sized write acknowledgement', async 
     const request = decodePayload(message.fields.payload);
     if (request.opcode === 6) deliver(reply(message, 128, { session: 0 }));
     if (request.opcode === 7) deliver(reply(message, 128, { session: 0, size: 0 }));
+    if (request.opcode === 1) deliver(reply(message, 128, { session: 0 }));
   });
 
   const outcome = await createMachine(OPERATION.UPLOAD, machineOptions(stub, clock, {
@@ -223,6 +346,8 @@ test('retries preserve sequence and duplicate or misaddressed replies do not adv
       deliver(wrongDestination);
       deliver(valid);
       deliver(valid);
+    } else if (request.opcode === 1) {
+      deliver(reply(message, 128, { session: 3 }));
     }
   });
 
