@@ -18,6 +18,25 @@
      * (test/nodes/payload-verb-html.test.js).
      */
     const REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
+    const MAV_BOOL_VALUES = [0, 1, '0', '1'];
+    const validateMavBool = RED.mavlink.oneOf(MAV_BOOL_VALUES);
+    const VALUE_VALIDATORS = {
+      'camera|track-point': {
+        pointX: RED.mavlink.validateRange(0, 1),
+        pointY: RED.mavlink.validateRange(0, 1),
+        radius: RED.mavlink.validateRange(0, 1),
+      },
+      'camera|track-rectangle': {
+        topLeftX: RED.mavlink.validateRange(0, 1),
+        topLeftY: RED.mavlink.validateRange(0, 1),
+        bottomRightX: RED.mavlink.validateRange(0, 1),
+        bottomRightY: RED.mavlink.validateRange(0, 1),
+      },
+      'camera|storage-format': {
+        format: (v, opt) => RED.mavlink.isBlank(v) ? true : validateMavBool(v, opt),
+        resetImageLog: (v, opt) => RED.mavlink.isBlank(v) ? true : validateMavBool(v, opt),
+      },
+    };
 
     const payloadDefaults = {
       name: { value: '' },
@@ -62,14 +81,21 @@
           validate(v, _opt) {
             const topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
             const verb = RED.mavlink.liveOr(this, '#node-input-verb', this.verb, '');
-            const needed = REQUIRED_VALUES[`${topic}|${verb}`];
-            if (!needed) return true;
+            const key = `${topic}|${verb}`;
+            const needed = REQUIRED_VALUES[key];
             const values = v || {};
-            for (let i = 0; i < needed.length; i++) {
-              if (RED.mavlink.isBlank(values[needed[i]])) {
-                return `needs ${needed.join(', ')} — the command has no sentinel for `
-                  + `an unset one, so a blank field is sent as 0`;
+            if (needed) {
+              for (let i = 0; i < needed.length; i++) {
+                if (RED.mavlink.isBlank(values[needed[i]])) {
+                  return `needs ${needed.join(', ')} — the command has no sentinel for `
+                    + `an unset one, so a blank field is sent as 0`;
+                }
               }
+            }
+            const validators = VALUE_VALIDATORS[key] || {};
+            for (const field of Object.keys(validators)) {
+              const verdict = validators[field](values[field], _opt);
+              if (verdict !== true) return `${field} ${verdict}`;
             }
             return true;
           },

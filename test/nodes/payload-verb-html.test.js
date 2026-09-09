@@ -450,6 +450,106 @@ test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden
   );
 });
 
+test('payload values validate normalized tracking fields only for the selected verb', () => {
+  const { values } = require('./html-assert').loadNodeDefaults('mavlink-payload');
+  const validate = (topic, verb, saved) => values.validate.call({ topic, verb }, saved, {});
+  const point = { pointX: 0.5, pointY: 0.25, radius: 0.1, cameraId: 100 };
+  const rectangle = {
+    topLeftX: 0.1, topLeftY: 0.2, bottomRightX: 0.8, bottomRightY: 0.9, cameraId: 100,
+  };
+
+  assert.equal(validate('camera', 'track-point', point), true);
+  for (const field of ['pointX', 'pointY', 'radius']) {
+    for (const bad of [-0.01, 1.01, NaN]) {
+      assert.match(
+        String(validate('camera', 'track-point', { ...point, [field]: bad })),
+        /between 0 and 1/,
+        `track-point ${field} rejects ${String(bad)}`
+      );
+    }
+  }
+  assert.equal(
+    validate('camera', 'track-point', { ...point, topLeftX: -1 }),
+    true,
+    'track-point ignores fields owned by another verb'
+  );
+
+  assert.equal(validate('camera', 'track-rectangle', rectangle), true);
+  for (const field of ['topLeftX', 'topLeftY', 'bottomRightX', 'bottomRightY']) {
+    for (const bad of [-0.01, 1.01, NaN]) {
+      assert.match(
+        String(validate('camera', 'track-rectangle', { ...rectangle, [field]: bad })),
+        /between 0 and 1/,
+        `track-rectangle ${field} rejects ${String(bad)}`
+      );
+    }
+  }
+  assert.equal(
+    validate('camera', 'track-rectangle', { ...rectangle, pointX: -1, radius: NaN }),
+    true,
+    'track-rectangle ignores fields owned by another verb'
+  );
+  assert.equal(
+    validate('camera', 'track-point', { ...point, pointX: '', pointY: undefined, radius: null }),
+    true,
+    'blank tracking values keep the shared numeric-validator semantics'
+  );
+});
+
+test('payload storage booleans validate saved numeric and string MAV_BOOL values', () => {
+  const { values } = require('./html-assert').loadNodeDefaults('mavlink-payload');
+  const validate = (verb, saved) => values.validate.call({ topic: 'camera', verb }, saved, {});
+
+  for (const format of [0, 1, '0', '1']) {
+    for (const resetImageLog of [0, 1, '0', '1']) {
+      assert.equal(validate('storage-format', { storageId: 1, format, resetImageLog }), true);
+    }
+  }
+  for (const field of ['format', 'resetImageLog']) {
+    for (const bad of [2, '2', NaN]) {
+      assert.match(
+        String(validate('storage-format', { storageId: 1, format: 0, resetImageLog: 0, [field]: bad })),
+        /must be one of/,
+        `storage-format ${field} rejects ${String(bad)}`
+      );
+    }
+  }
+  assert.equal(
+    validate('storage-format', { storageId: 1, format: '', resetImageLog: undefined }),
+    true,
+    'blank values retain the shared optional-value semantics'
+  );
+  assert.equal(
+    validate('storage-format', { format: 0, resetImageLog: 0, pointX: -1 }),
+    true,
+    'storage-format ignores fields owned by another verb'
+  );
+});
+
+test('payload values validation follows live dialog selection before save and saved selection when closed', () => {
+  const { loadNodeDefaults } = require('./html-assert');
+  const closed = loadNodeDefaults('mavlink-payload').values;
+  const point = { pointX: -0.1, pointY: 0.5, radius: 0.1 };
+  assert.equal(
+    closed.validate.call({ id: 'p1', topic: 'camera', verb: 'photo' }, point, {}),
+    true,
+    'closed validation uses the saved verb'
+  );
+
+  const open = loadNodeDefaults('mavlink-payload', {}, {
+    dom: {
+      '#node-input-topic': { val: 'camera' },
+      '#node-input-verb': { val: 'track-point' },
+    },
+    editStack: [{ id: 'p1' }],
+  }).values;
+  assert.match(
+    String(open.validate.call({ id: 'p1', topic: 'camera', verb: 'photo' }, point, {})),
+    /between 0 and 1/,
+    'the current dialog selection validates the value that Done will save'
+  );
+});
+
 test('payload topic, verb, path, and target compid carry rings (walled-garden sweep)', () => {
   const { loadNodeDefaults } = require('./html-assert');
   const defaults = loadNodeDefaults('mavlink-payload');
