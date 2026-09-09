@@ -43,7 +43,7 @@
       const bound = [other.localIdentity].concat(other.additionalIdentities || []);
       (identityIds || []).some((identityId) => {
         const identity = RED.nodes.node(identityId);
-        if (identity && identity.role === 'companion' && bound.indexOf(identityId) !== -1) {
+        if (identity?.role === 'companion' && bound.indexOf(identityId) !== -1) {
           conflict = other;
           return true;
         }
@@ -360,7 +360,7 @@
         removeItem: syncAdditionalIdentities,
         addItem(container, _index, data) {
           const $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
-          fillIdentityRow($sel, data && data.id ? data.id : '');
+          fillIdentityRow($sel, data?.id ? data.id : '');
           $sel.on('change', syncAdditionalIdentities);
         },
       });
@@ -397,7 +397,7 @@
         portsRequested = true;
         $.getJSON(RED.mavlink.adminApiUrl('/mavlink/serial-ports'), (data) => {
           const $list = $('#mav-conn-serial-ports').empty();
-          ((data && data.ports) || []).forEach((port) => {
+          ((data?.ports) || []).forEach((port) => {
             $('<option></option>').val(port.path).text(port.manufacturer || '').appendTo($list);
           });
         });

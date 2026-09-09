@@ -114,7 +114,7 @@
          */
         function populateComponents() {
           const primary = dialectRow($dialect.val());
-          const chain = (primary && primary.files) || [];
+          const chain = (primary?.files) || [];
           const saved = String($('#node-config-input-additionalDialects').val() || '')
             .split(',').map((s) => s.trim()).filter(Boolean);
           $components.empty();
@@ -145,7 +145,7 @@
 
         function populateRevisions(prefer) {
           const row = dialectRow($dialect.val());
-          const versions = (row && row.versions) ? row.versions.slice() : [{ id: 'seed', label: 'Seed (shipped)' }];
+          const versions = (row?.versions) ? row.versions.slice() : [{ id: 'seed', label: 'Seed (shipped)' }];
           $revision.empty();
           versions.forEach((v) => {
             $('<option>').val(v.id).text(v.label)
@@ -164,7 +164,7 @@
         function loadLibrary(done) {
           $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog'))
             .done((data) => {
-              library = (data && data.dialects) || [];
+              library = (data?.dialects) || [];
               $status.text(library.length ? '' : 'Dialect library empty — Update catalog when online.');
               if (done) done();
             })
@@ -236,7 +236,7 @@
               });
             })
             .fail((xhr) => {
-              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'download failed';
+              const msg = (xhr?.responseJSON?.error) || 'download failed';
               $status.text(`Update failed: ${msg}`);
             });
         });
@@ -254,10 +254,10 @@
             data: JSON.stringify({})
           })
             .done((data) => {
-              $status.text(`Rebuilt — ${(data && data.cleared) || 0} cached dialect(s) dropped. Redeploy to recompile.`);
+              $status.text(`Rebuilt — ${(data?.cleared) || 0} cached dialect(s) dropped. Redeploy to recompile.`);
             })
             .fail((xhr) => {
-              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'rebuild failed';
+              const msg = (xhr?.responseJSON?.error) || 'rebuild failed';
               $status.text(`Rebuild failed: ${msg}`);
             });
         });
@@ -275,7 +275,7 @@
           $status.text(`Comparing ${entry} with seed...`);
           $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog/compare'), { file: entry, snapshot: rev })
             .done((data) => {
-              const c = data && data.comparison;
+              const c = data?.comparison;
               if (!c) {
                 $status.text('No comparison available.');
                 return;
@@ -298,7 +298,7 @@
               );
             })
             .fail((xhr) => {
-              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'comparison failed';
+              const msg = (xhr?.responseJSON?.error) || 'comparison failed';
               $status.text(`Comparison failed: ${msg}`);
             });
         });
@@ -323,7 +323,7 @@
               $paramDefsStatus.text(`Updated ${data.count} parameter definitions.`);
             })
             .fail((xhr) => {
-              const msg = (xhr && xhr.responseJSON && xhr.responseJSON.error) || 'update failed';
+              const msg = (xhr?.responseJSON?.error) || 'update failed';
               $paramDefsStatus.text(`Update failed: ${msg}`);
             })
             .always(() => {

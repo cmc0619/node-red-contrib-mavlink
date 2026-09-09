@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 'use strict';
 
 /**
@@ -65,7 +64,7 @@ async function waitPeer(conn) {
   const start = Date.now();
   while (Date.now() - start < 60000) {
     const c = conn.peerTable.getComponent(1, 1);
-    if (c && c.primaryEndpoint) return c;
+    if (c?.primaryEndpoint) return c;
     await sleep(200);
   }
   throw new Error('peer not learned');
@@ -78,7 +77,7 @@ async function apGuidedArmTakeoff(conn) {
   const modeDeadline = Date.now() + 120000;
   while (Date.now() < modeDeadline) {
     const c = conn.peerTable.getComponent(1, 1);
-    if (c && c.flightMode === 4) break;
+    if (c?.flightMode === 4) break;
     if (c?.armed) {
       sendCmd(conn, 400, [0, 21196, 0, 0, 0, 0, 0]);
       await sleep(500);
@@ -103,7 +102,7 @@ async function apGuidedArmTakeoff(conn) {
   let relMm = 0;
   while (Date.now() < climbDeadline) {
     const pos = conn.peerTable.getComponent(1, 1)?.position;
-    relMm = pos && pos.relativeAlt != null ? Number(pos.relativeAlt) : 0;
+    relMm = pos?.relativeAlt != null ? Number(pos.relativeAlt) : 0;
     if (relMm > 8000) break;
     await sleep(1000);
   }

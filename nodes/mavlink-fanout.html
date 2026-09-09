@@ -225,7 +225,7 @@
         // so even Build delivery resolves through the Connection.
         RED.mavlink.loadEnumsCatalog(['MAV_TYPE'], (catalog) => {
           const sel = $('#node-input-vehicleType');
-          RED.mavlink.fillEnumSelect(sel, (catalog.enums && catalog.enums.MAV_TYPE) || [], {
+          RED.mavlink.fillEnumSelect(sel, (catalog.enums?.MAV_TYPE) || [], {
             saved: node.vehicleType,
             preferLive: true,
             allowEmpty: true,

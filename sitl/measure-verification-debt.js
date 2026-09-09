@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 'use strict';
 
 /**
@@ -129,7 +128,7 @@ async function waitPeer(conn, sysid, timeoutMs = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.primaryEndpoint) return c;
+    if (c?.primaryEndpoint) return c;
     await sleep(200);
   }
   throw new Error(`peer ${sysid} not learned`);
@@ -162,7 +161,7 @@ async function apGuidedArm(conn, sysid) {
   const modeDeadline = Date.now() + 120000;
   while (Date.now() < modeDeadline) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.flightMode === 4) break;
+    if (c?.flightMode === 4) break;
     if (c?.armed) {
       sendCmd(conn, sysid, 400, [0, 21196, 0, 0, 0, 0, 0]);
       await sleep(500);
@@ -198,7 +197,7 @@ async function probeTakeoffCompletion(results) {
   try {
     await apGuidedArm(conn, 1);
     const posBefore = conn.peerTable.getComponent(1, 1)?.position;
-    const homeAmslMm = posBefore && posBefore.alt != null && posBefore.relativeAlt != null
+    const homeAmslMm = posBefore?.alt != null && posBefore.relativeAlt != null
       ? Number(posBefore.alt) - Number(posBefore.relativeAlt)
       : null;
     sendCmd(conn, 1, 22, [0, 0, 0, 0, 0, 0, 10]);
@@ -213,7 +212,7 @@ async function probeTakeoffCompletion(results) {
     });
     const outcome = await promise;
     const posAfter = conn.peerTable.getComponent(1, 1)?.position;
-    const relMm = posAfter && posAfter.relativeAlt != null ? Number(posAfter.relativeAlt) : null;
+    const relMm = posAfter?.relativeAlt != null ? Number(posAfter.relativeAlt) : null;
     const ok = outcome.success && homeAmslMm != null && homeAmslMm > 100000;
     note(results, 'takeoff-14.79-sitl', ok,
       ok
@@ -364,7 +363,7 @@ async function probePx4LoiterReposition(results) {
     const ackWait = waitCommandAck(conn, 11, DO_REPOSITION);
     conn.send(msg, { band: BAND.CONTROL, target: { sysid: 11, compid: 1 } });
     const ack = await ackWait;
-    const accepted = ack && ack.result === 0;
+    const accepted = ack?.result === 0;
     note(results, 'px4-loiter-reposition-14.108', accepted,
       accepted
         ? `DO_REPOSITION ACCEPTED from Hold with changeMode=false (${ack.latencyMs}ms)`
@@ -437,8 +436,8 @@ async function probeGotoHeadingAp(results) {
     });
     const { ack, initialHdg, finalHdg, sampleCount } = await sampleHeadingAfterReposition(conn, 1, msg);
     const delta = headingDeltaDeg(finalHdg, 90);
-    const ignored = ack && ack.result === 0 && delta != null && delta > 30;
-    note(results, 'goto-heading-ap-14.108', ack && ack.result === 0,
+    const ignored = ack?.result === 0 && delta != null && delta > 30;
+    note(results, 'goto-heading-ap-14.108', ack?.result === 0,
       ignored
         ? `param4 yaw ignored — final hdg ${finalHdg.toFixed(1)}° (Δ90=${delta.toFixed(1)}°); completion tier does not capture heading`
         : `ack=${ack ? ack.result : 'timeout'} hdg=${finalHdg}`,
@@ -479,7 +478,7 @@ async function probeGotoHeadingPx4(results) {
     const initialDelta = headingDeltaDeg(initialHdg, 90);
     const movedToward = initialDelta != null && delta != null && delta < initialDelta - 15;
     const honoured = delta != null && (delta < 30 || movedToward);
-    note(results, 'goto-heading-px4-14.108', ack && ack.result === 0,
+    note(results, 'goto-heading-px4-14.108', ack?.result === 0,
       honoured
         ? `PX4 honoured param4 yaw — final hdg ${finalHdg.toFixed(1)}° (Δ90=${delta.toFixed(1)}°, initial Δ=${initialDelta != null ? initialDelta.toFixed(1) : 'n/a'}°); completion tier still ack-only`
         : `ack ok but heading inconclusive — final hdg ${finalHdg} (Δ90=${delta}, initialΔ=${initialDelta}); completion tier ack-only`,

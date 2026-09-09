@@ -398,7 +398,7 @@
   RED.mavlink.formRow = function (label, control, opts) {
     opts = opts || {};
     const row = $('<div class="form-row"></div>');
-    const tip = (control && control.attr) ? (control.attr('title') || '') : '';
+    const tip = (control?.attr) ? (control.attr('title') || '') : '';
     const $lbl = $('<label></label>')
       .css({ width: opts.labelWidth || '120px', display: 'inline-block' })
       .text(label);
@@ -602,7 +602,7 @@
 
   function valueFromSelector(selector) {
     const $el = $(selector);
-    return $el && $el.length ? String($el.val() || '').trim() : '';
+    return $el?.length ? String($el.val() || '').trim() : '';
   }
 
   /**
@@ -745,9 +745,9 @@
     // profile misses the cache instead of being served the previous catalog.
     function forProfile(vehicleId) {
       const profile = vehicleId ? RED.nodes.node(vehicleId) : null;
-      const dialect = (profile && profile.dialect) || '';
-      const firmware = (profile && profile.firmware) || '';
-      const family = (profile && profile.vehicleFamily) || '';
+      const dialect = (profile?.dialect) || '';
+      const firmware = (profile?.firmware) || '';
+      const family = (profile?.vehicleFamily) || '';
       const query = { vehicle: vehicleId, dialect };
       if (firmware) query.firmware = firmware;
       if (family) query.vehicleFamily = family;
@@ -791,7 +791,7 @@
     const connectionId = read('connection', connectionSelector);
     if (connectionId) {
       const conn = RED.nodes.node(connectionId);
-      const vehicleRef = RED.mavlink.vehicleIdFrom(conn && conn.vehicle);
+      const vehicleRef = RED.mavlink.vehicleIdFrom(conn?.vehicle);
       if (vehicleRef) return forProfile(vehicleRef);
     }
     return empty();
@@ -805,7 +805,7 @@
    * @returns {string}
    */
   RED.mavlink.adminApiUrl = function (path) {
-    let root = (RED.settings && RED.settings.httpAdminRoot) || '/';
+    let root = (RED.settings?.httpAdminRoot) || '/';
     if (root.slice(-1) !== '/') root += '/';
     return root + String(path || '').replace(/^\//, '');
   };
@@ -857,7 +857,7 @@
     }
 
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), (data) => {
-      finish((data && data.dialects) || []);
+      finish((data?.dialects) || []);
     }).fail(() => {
       finish([]);
     });
@@ -891,13 +891,13 @@
       return;
     }
     $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, (data) => {
-      if (token && token.cancelled) return;
+      if (token?.cancelled) return;
       cb({
         dialect: data.dialect,
         enums: data.enums || {}
       });
     }).fail(() => {
-      if (token && token.cancelled) return;
+      if (token?.cancelled) return;
       cb({ dialect: '', enums: {} });
     });
   };
@@ -983,7 +983,7 @@
       if (number === typed || name === bare) { exact.push(entry); continue; }
       if (name.startsWith(bare) || number.startsWith(typed)) { starts.push(entry); continue; }
       if (name.includes(bare)) { contains.push(entry); continue; }
-      if (entry.description && entry.description.toUpperCase().includes(typed)) described.push(entry);
+      if (entry.description?.toUpperCase().includes(typed)) described.push(entry);
     }
     return exact.concat(starts, contains, described).slice(0, ENUM_SEARCH_HITS);
   };
@@ -1116,7 +1116,7 @@
     RED.mavlink.ensureSavedEnumOption($select, saved);
     if (saved || opts.allowEmpty) {
       $select.val(saved);
-    } else if (entries && entries.length) {
+    } else if (entries?.length) {
       $select.val(String(entries[0][valueKey]));
     }
     RED.mavlink.bindSelectTitleSync($select, { namespace: opts.titleNamespace || 'mavEnumTip' });
@@ -1366,7 +1366,7 @@
    */
   RED.mavlink.identityRole = function (identityId) {
     const idNode = identityId ? RED.nodes.node(identityId) : null;
-    const role = idNode && idNode.role;
+    const role = idNode?.role;
     return role === 'companion' || role === 'custom' ? role : 'gcs';
   };
 
@@ -1391,7 +1391,7 @@
       const idNode = RED.nodes.node(id);
       if (!idNode) return;
       const role = RED.mavlink.identityRole(id);
-      if (rolesAllowed && rolesAllowed.indexOf(role) === -1) return;
+      if (rolesAllowed?.indexOf(role) === -1) return;
       out.push({ id, role, label: `${idNode.name || 'identity'} (${role})` });
     });
     return out;
@@ -1585,7 +1585,7 @@
     const top = stack.length ? stack[stack.length - 1] : null;
     if (!top || top.id !== owner.id) return null;
     const $el = $(selector);
-    return $el && $el.length ? $el : null;
+    return $el?.length ? $el : null;
   };
 
   /**
@@ -1923,7 +1923,7 @@
       value: '',
       type: 'mavlink-connection',
       validate(v, _opt) {
-        if (RED.mavlink.liveOr(this, modeSelector, this && this[modeField]) === 'build') return true;
+        if (RED.mavlink.liveOr(this, modeSelector, this?.[modeField]) === 'build') return true;
         // '_ADD_' is what the platform's "none" option carries until save
         // rewrites it to ''; treat it as blank too, so the field reds while
         // the dialog is still open rather than only after Done.
@@ -1947,10 +1947,10 @@
     const dialectSelector = '#node-input-dialect';
 
     function currentMode(self) {
-      return RED.mavlink.liveOr(self, modeSelector, self && self[modeField]);
+      return RED.mavlink.liveOr(self, modeSelector, self?.[modeField]);
     }
     function currentDialect(self) {
-      return RED.mavlink.liveOr(self, dialectSelector, self && self.dialect);
+      return RED.mavlink.liveOr(self, dialectSelector, self?.dialect);
     }
 
     const defaults = {

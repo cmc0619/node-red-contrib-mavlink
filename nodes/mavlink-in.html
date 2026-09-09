@@ -156,7 +156,7 @@
           height: 'auto',
           addItem(container, _index, data) {
             const $sel = $('<select>', { style: 'width:100%;' }).appendTo(container);
-            paintRow($sel, (data && data.name) || '');
+            paintRow($sel, (data?.name) || '');
           },
         });
         (node.messages || []).forEach((name) => {
