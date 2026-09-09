@@ -444,7 +444,7 @@ function listExampleFiles() {
 
 function enableConsoleDebug(flows) {
   for (const n of flows) {
-    if (n && n.type === 'debug') n.console = true;
+    if (n?.type === 'debug') n.console = true;
   }
   return flows;
 }
@@ -592,7 +592,7 @@ function verdictFrom(profile, summary, log) {
     const apFence = lastByTag.get('debug:fence status');
     const apRally = lastByTag.get('debug:rally status');
     const px4Fence = lastByTag.get('debug:px4 fence status');
-    const apOk = [apMission, apFence, apRally].every((d) => d && d.result === 'succeeded');
+    const apOk = [apMission, apFence, apRally].every((d) => d?.result === 'succeeded');
     // The PX4 fence leg fails loud from the vehicle side now — an UNSUPPORTED
     // MISSION_ACK or the transfer deadline — not from a node-side gate. Only
     // the transfer machine's own phases count as that measurement: 'ack' (the
@@ -1857,7 +1857,7 @@ async function main() {
       results.push({
         file: f,
         status: 'FAIL',
-        reason: String(err && err.stack ? err.stack : err),
+        reason: String(err?.stack ? err.stack : err),
       });
       // best-effort unlock binds
       try {

@@ -137,7 +137,7 @@ async function waitPeer(conn, sysid, timeoutMs = 30000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.primaryEndpoint) return c;
+    if (c?.primaryEndpoint) return c;
     await sleep(200);
   }
   throw new Error(`peer ${sysid} not learned`);
@@ -158,7 +158,7 @@ async function apGuidedArmTakeoff(conn, sysid, results, tag) {
   const modeDeadline = Date.now() + 120000;
   while (Date.now() < modeDeadline) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.flightMode === 4) break;
+    if (c?.flightMode === 4) break;
     if (c?.armed) {
       sendCmd(conn, sysid, 400, [0, 21196, 0, 0, 0, 0, 0]);
       await sleep(500);
@@ -184,7 +184,7 @@ async function apGuidedArmTakeoff(conn, sysid, results, tag) {
   let relMm = 0;
   while (Date.now() < climbDeadline) {
     const pos = conn.peerTable.getComponent(sysid, 1)?.position;
-    relMm = pos && pos.relativeAlt != null ? Number(pos.relativeAlt) : 0;
+    relMm = pos?.relativeAlt != null ? Number(pos.relativeAlt) : 0;
     if (relMm > 8000) break;
     await sleep(1000);
   }
@@ -229,7 +229,7 @@ async function px4OffboardClimb(conn, sysid, results, tag) {
   while (Date.now() < climbDeadline) {
     const pos = conn.peerTable.getComponent(sysid, 1)?.position;
     // GLOBAL relative_alt is mm; also accept local z via GPI once airborne.
-    relMm = pos && pos.relativeAlt != null ? Number(pos.relativeAlt) : 0;
+    relMm = pos?.relativeAlt != null ? Number(pos.relativeAlt) : 0;
     if (relMm > 5000) break;
     if (!isPx4Offboard(conn.peerTable.getComponent(sysid, 1)?.flightMode)) {
       requestPx4Offboard(conn, sysid);
@@ -274,7 +274,7 @@ async function flyAround(conn, sysid) {
 }
 
 function sectionFresh(component, name, maxAgeMs) {
-  const sec = component.sections && component.sections[name];
+  const sec = component.sections?.[name];
   if (!sec || sec.lastSeen == null) return { ok: false, ageMs: null };
   const ageMs = Date.now() - Number(sec.lastSeen);
   return { ok: ageMs <= maxAgeMs, ageMs };
@@ -287,7 +287,7 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
     return;
   }
   const snapPeer = conn.peerTable.snapshot().find((p) => Number(p.sysid) === Number(sysid));
-  const snap = snapPeer && snapPeer.components.find((x) => Number(x.compid) === 1);
+  const snap = snapPeer?.components.find((x) => Number(x.compid) === 1);
 
   note(results, `${tag}-identity`, c.type != null && c.autopilot != null && c.systemStatus != null,
     `type=${c.type} autopilot=${c.autopilot} systemStatus=${c.systemStatus} flightMode=${c.flightMode}`,
@@ -341,7 +341,7 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
   }
 
   const ver = c.autopilotVersion;
-  const verOk = Boolean(ver && ver.flightSwVersion != null);
+  const verOk = Boolean(ver?.flightSwVersion != null);
   note(results, `${tag}-autopilot-version`, verOk,
     verOk ? JSON.stringify(ver) : 'no AUTOPILOT_VERSION (PARTIAL-ok if SIH mute)',
     { autopilotVersion: ver, capabilities: c.capabilities });
@@ -352,7 +352,7 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
     { count: texts.length, sample: texts.slice(-3) });
 
   // Snapshot projection: units converted, same presence.
-  const snapOk = Boolean(snap && snap.armed === true && snap.position
+  const snapOk = Boolean(snap?.armed === true && snap.position
     && Number(snap.position.relativeAlt) > (opts.minRelM || 5)
     && snap.gps && Number(snap.gps.fixType) >= 3
     && snap.battery
@@ -360,12 +360,12 @@ function assertPeerFields(conn, sysid, results, tag, opts) {
   note(results, `${tag}-snapshot`, snapOk,
     snapOk ? 'snapshot projects armed+position+gps+battery+primary' : 'snapshot incomplete',
     {
-      snapArmed: snap && snap.armed,
-      snapRelAlt: snap && snap.position && snap.position.relativeAlt,
-      snapGps: snap && snap.gps,
-      snapBattery: snap && snap.battery,
-      snapHome: snap && snap.home,
-      snapSections: snap && snap.sections,
+      snapArmed: snap?.armed,
+      snapRelAlt: snap?.position?.relativeAlt,
+      snapGps: snap?.gps,
+      snapBattery: snap?.battery,
+      snapHome: snap?.home,
+      snapSections: snap?.sections,
     });
 }
 
@@ -391,7 +391,7 @@ async function runStack(label, connOpts, flyPrep, results) {
       minRelM: label.startsWith('px4') ? 4 : 7,
     });
   } catch (err) {
-    note(results, `${label}-fatal`, false, String(err && err.message ? err.message : err));
+    note(results, `${label}-fatal`, false, String(err?.message ? err.message : err));
   }
   try {
     sendCmd(conn, connOpts.sysid, 21, [0, 0, 0, 0, 0, 0, 0]);

@@ -197,7 +197,7 @@ async function waitPeer(conn, sysid, timeoutMs = 30000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.primaryEndpoint) return c;
+    if (c?.primaryEndpoint) return c;
     await sleep(200);
   }
   throw new Error(`peer ${sysid} not learned`);
@@ -210,7 +210,7 @@ async function apGuidedArmTakeoff(conn, sysid, results) {
   const deadline = Date.now() + 120000;
   while (Date.now() < deadline) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.flightMode === 4) break;
+    if (c?.flightMode === 4) break;
     if (c?.armed) {
       sendCmd(conn, sysid, 400, [0, 21196, 0, 0, 0, 0, 0]);
       await sleep(500);
@@ -238,7 +238,7 @@ async function apGuidedArmTakeoff(conn, sysid, results) {
   let rel = 0;
   while (Date.now() < climbDeadline) {
     const pos = conn.peerTable.getComponent(sysid, 1)?.position;
-    rel = pos && pos.relativeAlt != null ? Number(pos.relativeAlt) / 1000 : 0;
+    rel = pos?.relativeAlt != null ? Number(pos.relativeAlt) / 1000 : 0;
     if (rel > 8) break;
     await sleep(1000);
   }
@@ -683,7 +683,7 @@ async function main() {
     await sleep(1000);
     await probeYawAndRate(ap, 1, results, 'ap');
   } catch (err) {
-    note(results, 'ap-fatal', false, String(err && err.message ? err.message : err));
+    note(results, 'ap-fatal', false, String(err?.message ? err.message : err));
   }
   // Land / disarm best-effort
   try {
@@ -748,7 +748,7 @@ async function main() {
       : 'OFFBOARD not engaged — yaw+rate probe degraded');
     await probeYawAndRate(px4, 11, results, 'px4');
   } catch (err) {
-    note(results, 'px4-fatal', false, String(err && err.message ? err.message : err));
+    note(results, 'px4-fatal', false, String(err?.message ? err.message : err));
   }
   try {
     sendCmd(px4, 11, 400, [0, 21196, 0, 0, 0, 0, 0]);

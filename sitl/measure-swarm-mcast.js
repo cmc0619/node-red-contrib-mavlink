@@ -113,7 +113,7 @@ async function waitPeer(conn, sysid, timeoutMs = PEER_TIMEOUT_MS) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.primaryEndpoint) return c;
+    if (c?.primaryEndpoint) return c;
     await sleep(200);
   }
   throw new Error(`peer ${sysid} not learned within ${timeoutMs}ms`);
@@ -305,7 +305,7 @@ async function main() {
     skipMcast,
     skipPx4,
   };
-  note(results, 'summary', skipMcast || (peerRow && peerRow.ok), 'swarm mcast measurement complete', summary);
+  note(results, 'summary', skipMcast || (peerRow?.ok), 'swarm mcast measurement complete', summary);
   fs.writeFileSync(OUT, JSON.stringify({ results, summary }, null, 2), { mode: 0o600 });
   console.error(`wrote ${OUT}`);
 }

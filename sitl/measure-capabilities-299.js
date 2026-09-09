@@ -107,7 +107,7 @@ async function waitPeer(conn, sysid, timeoutMs = 30000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const c = conn.peerTable.getComponent(sysid, 1);
-    if (c && c.primaryEndpoint) return c;
+    if (c?.primaryEndpoint) return c;
     await sleep(200);
   }
   throw new Error(`peer ${sysid} not learned`);
@@ -135,8 +135,8 @@ async function measureStack(label, connOpts, results) {
     if (Number(decoded.sysid) !== Number(connOpts.sysid)) return;
     const row = {
       atMs: Date.now(),
-      capabilities: decoded.fields && decoded.fields.capabilities,
-      flightSwVersion: decoded.fields && decoded.fields.flight_sw_version,
+      capabilities: decoded.fields?.capabilities,
+      flightSwVersion: decoded.fields?.flight_sw_version,
     };
     if (phase === 'passive') passiveMessages.push(row);
     else afterRequest.push(row);
@@ -163,7 +163,7 @@ async function measureStack(label, connOpts, results) {
       break;
     }
     const peer = conn.peerTable.getComponent(connOpts.sysid, 1);
-    if (peer && peer.autopilotVersion && peer.capabilities != null) {
+    if (peer?.autopilotVersion && peer.capabilities != null) {
       answer = {
         atMs: Date.now(),
         capabilities: peer.capabilities,
@@ -176,20 +176,20 @@ async function measureStack(label, connOpts, results) {
   }
   const latencyMs = answer ? answer.atMs - t0 : null;
   const peer = conn.peerTable.getComponent(connOpts.sysid, 1);
-  const caps = answer && answer.capabilities != null
+  const caps = answer?.capabilities != null
     ? answer.capabilities
-    : peer && peer.capabilities;
+    : peer?.capabilities;
   const bits = caps != null ? capBits(caps) : null;
 
   note(results, `${label}-request`, Boolean(answer),
     answer
-      ? `AUTOPILOT_VERSION in ${latencyMs}ms caps=${bits && bits.raw}`
+      ? `AUTOPILOT_VERSION in ${latencyMs}ms caps=${bits?.raw}`
       : `no reply within ${REQUEST_TIMEOUT_MS}ms`,
     {
       latencyMs,
       capabilities: bits,
-      peerCapabilities: peer && peer.capabilities != null ? capBits(peer.capabilities) : null,
-      flightSwVersion: answer && answer.flightSwVersion,
+      peerCapabilities: peer?.capabilities != null ? capBits(peer.capabilities) : null,
+      flightSwVersion: answer?.flightSwVersion,
     });
 
   unsub();
