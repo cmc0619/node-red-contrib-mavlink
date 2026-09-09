@@ -92,7 +92,7 @@ test('log list accepts zero and one based ids, preserves metadata, and ignores w
   assert.equal(stub.sentNames().filter((name) => name === 'LOG_REQUEST_LIST').length, 1);
 });
 
-test('log list retries only the missing id range after a dropped entry', async () => {
+test('log list retries the directory after a dropped entry', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
   let requestCount = 0;
@@ -112,7 +112,7 @@ test('log list retries only the missing id range after a dropped entry', async (
   const retry = stub.sent.filter(({ message }) => message.name === 'LOG_REQUEST_LIST').at(-1).message;
   assert.deepEqual(retry, {
     name: 'LOG_REQUEST_LIST',
-    fields: { target_system: 42, target_component: 1, start: 2, end: 2 },
+    fields: { target_system: 42, target_component: 1, start: 0, end: 0xffff },
   });
   const outcome = await done;
 
@@ -298,4 +298,60 @@ test('download cancel sends LOG_REQUEST_END and never a mission or command ack',
   assert.equal(stub.sentNames().some((name) => /ACK/.test(name)), false);
   assert.equal(stub.subscriberCount(), 0);
   assert.equal(clock.pending(), 0);
+});
+
+test('PX4 directory retries a lost zero ID without counting duplicates', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  let requests = 0;
+  stub.onSend((message, deliver) => {
+    if (message.name !== 'LOG_REQUEST_LIST') return;
+    requests += 1;
+    deliver(entry(1, 2, 2, 90));
+    deliver(entry(1, 2, 2, 90));
+    if (requests > 1) deliver(entry(0, 2, 2, 90));
+  });
+  const done = new LogList(machineOptions(stub, clock)).start();
+  assert.equal(stub.subscriberCount(), 1);
+  clock.flush();
+  const outcome = await done;
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(outcome.entries.map(item => item.id), [0, 1]);
+});
+
+test('known byte length completes only after the missing data arrives without EOF', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const machine = new LogDownload(machineOptions(stub, clock, { id: 7, size: 180 }));
+  const done = machine.start();
+  stub.inject(data(7, 90, Buffer.alloc(90, 2)));
+  assert.equal(stub.subscriberCount(), 1);
+  assert.equal(stub.sent.length, 1, 'known size does not cause a request for every packet');
+  stub.inject(data(7, 0, Buffer.alloc(90, 1)));
+  clock.flush();
+  const outcome = await done;
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(outcome.data, Buffer.concat([Buffer.alloc(90, 1), Buffer.alloc(90, 2)]));
+});
+
+test('known empty log completes without a data request', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const done = new LogDownload(machineOptions(stub, clock, { id: 7, size: 0 })).start();
+  clock.flush();
+  const outcome = await done;
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.data.length, 0);
+  assert.deepEqual(stub.sentNames(), ['LOG_REQUEST_END']);
+});
+
+test('observed EOF remains authoritative when a requested byte boundary is longer', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const done = new LogDownload(machineOptions(stub, clock, { id: 7, size: 180 })).start();
+  stub.inject(data(7, 0, 'abc'));
+  clock.flush();
+  const outcome = await done;
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(outcome.data, Buffer.from('abc'));
 });
