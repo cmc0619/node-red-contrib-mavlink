@@ -9,10 +9,24 @@
         ['list', 'List files'],
         ['download', 'Download file'],
         ['upload', 'Upload file'],
+        ['backup', 'Backup files'],
+        ['restore', 'Restore files'],
       ],
       parameters: [
         ['backup', 'Backup parameters'],
         ['restore', 'Restore parameters'],
+      ],
+      missions: [
+        ['backup', 'Backup mission'],
+        ['restore', 'Restore mission'],
+      ],
+      fences: [
+        ['backup', 'Backup fence'],
+        ['restore', 'Restore fence'],
+      ],
+      rally: [
+        ['backup', 'Backup rally points'],
+        ['restore', 'Restore rally points'],
       ],
     };
 
@@ -20,8 +34,11 @@
       const service = RED.mavlink.liveOr(this, '#node-input-service', this.service, 'logs');
       switch (service) {
         case 'logs': return RED.mavlink.oneOf(['list', 'download']).call(this, v, opt);
-        case 'files': return RED.mavlink.oneOf(['list', 'download', 'upload']).call(this, v, opt);
+        case 'files': return RED.mavlink.oneOf(['list', 'download', 'upload', 'backup', 'restore']).call(this, v, opt);
         case 'parameters': return RED.mavlink.oneOf(['backup', 'restore']).call(this, v, opt);
+        case 'missions':
+        case 'fences':
+        case 'rally': return RED.mavlink.oneOf(['backup', 'restore']).call(this, v, opt);
         default: return 'pick a service first';
       }
     }
@@ -55,7 +72,7 @@
       service: {
         value: 'logs',
         required: true,
-        validate: RED.mavlink.oneOf(['logs', 'files', 'parameters']),
+        validate: RED.mavlink.oneOf(['logs', 'files', 'parameters', 'missions', 'fences', 'rally']),
       },
       operation: { value: 'list', required: true, validate: operationValidator },
       logId: {
@@ -153,7 +170,7 @@
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity"></select></div>
-  <div class="form-row"><label for="node-input-service">Service</label><select id="node-input-service"><option value="logs">Logs</option><option value="files">Files</option><option value="parameters">Parameters</option></select></div>
+  <div class="form-row"><label for="node-input-service">Service</label><select id="node-input-service"><option value="logs">Logs</option><option value="files">Files</option><option value="parameters">Parameters</option><option value="missions">Missions</option><option value="fences">Fences</option><option value="rally">Rally</option></select></div>
   <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"></select></div>
   <div class="form-row" id="row-log-id"><label for="node-input-logId">Log id</label><input type="number" id="node-input-logId" min="0" max="65535" step="1" placeholder="msg.payload.id"></div>
   <div class="form-row" id="row-path"><label for="node-input-path">Path</label><input type="text" id="node-input-path" placeholder="msg.payload.path or msg.path"></div>
@@ -171,7 +188,8 @@
   <p>Runs one bounded onboard system service. Output 0 (continue) fires after success and keeps the input message metadata; output 1 (status) carries progress and the terminal record.</p>
   <p><b>Logs</b> lists onboard logs or downloads one selected log with the MAVLink log transfer protocol. The list returns the complete <code>LOG_ENTRY</code> collection; each advertised <code>size</code> is informational.</p>
   <p><b>Download log</b> selects the ID from the Log id field or <code>msg.payload.id</code>. Output 0 is a Buffer in <code>msg.payload</code> with the selected ID in <code>msg.logId</code>; connect a Node-RED File node when the bytes should be saved. The transfer follows <code>LOG_DATA</code> offsets, retries only missing ranges, and ends on a short data packet or zero-count EOF. Supply <code>msg.payload.size</code> as an exact byte length to complete without an EOF packet; all bytes through that boundary must arrive. For PX4, list first and pass the selected entry as <code>{id, size}</code>. Omit <code>size</code> when the advertised length is approximate (for example ArduPilot); completion then follows the peer's short or zero-count EOF. Cancellation sends <code>LOG_REQUEST_END</code>.</p>
-  <p><b>Files</b> uses MAVLink FTP. List and download read the path from <code>msg.payload.path</code> or the configured Path. Upload takes a Buffer directly from <code>msg.payload</code> and reads its path from <code>msg.path</code> or the configured Path. The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP <code>CREATE_FILE</code> may truncate an existing remote file.</p>
+  <p><b>Files</b> uses MAVLink FTP. List and download read the path from <code>msg.payload.path</code> or the configured Path. Upload takes a Buffer directly from <code>msg.payload</code> and reads its path from <code>msg.path</code> or the configured Path. Backup recursively captures a directory as <code>{root, directories, files}</code>; Restore consumes that bundle and writes it below the configured Path. The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP <code>CREATE_FILE</code> may truncate an existing remote file.</p>
   <p><b>Parameters</b> backup requests the parameter-only table and returns an array of <code>{paramId, paramType, value}</code> records. Pass that array directly as <code>msg.payload</code> to Restore; it also survives JSON or File-node round trips. Non-finite values and negative zero are represented as the strings <code>"Infinity"</code>, <code>"-Infinity"</code>, <code>"NaN"</code>, and <code>"-0"</code>. Restore sends records sequentially and reports the confirmed count on partial failure; there is no rollback of earlier writes. Auto encoding uses peer capabilities and the Connection profile firmware; choose Bytewise or C cast to override it.</p>
-  <p>All services use the selected Connection, Identity, target sysid/compid, timeout, and retry settings. Set <code>msg.payload === false</code> to suppress an operation. A node close cancels its active transfer. Status records omit large list, download, and parameter payloads.</p>
+  <p><b>Missions, Fences, and Rally</b> backup downloads the selected MAVLink mission plan and returns its canonical item array in <code>msg.payload</code>. Restore consumes that array and uploads it to the matching mission type. Numeric <code>NaN</code>, <code>Infinity</code>, <code>-Infinity</code>, and <code>-0</code> values are represented as strings so JSON and File-node round trips keep their meaning. These services reuse <code>MISSION_REQUEST_LIST</code>, <code>MISSION_COUNT</code>, and the mission transfer protocol with its per-target, per-plan lock; the vehicle reports unsupported plan types on output 1.</p>
+  <p>All services use the selected Connection, Identity, target sysid/compid, timeout, and retry settings. Set <code>msg.payload === false</code> to suppress an operation. A node close cancels its active transfer. Status records omit large list, download, backup, and parameter payloads.</p>
 </script>

@@ -18,7 +18,11 @@ test('mavlink-system editor registers closed service and operation selectors', (
   assert.equal(defaults.operation.required, true);
   assert.equal(defaults.operation.validate.call({ service: 'logs' }, 'download', {}), true);
   assert.match(String(defaults.operation.validate.call({ service: 'logs' }, 'backup', {})), /one of/);
-  assert.match(String(defaults.operation.validate.call({ service: 'files' }, 'backup', {})), /one of/);
+  assert.equal(defaults.operation.validate.call({ service: 'files' }, 'backup', {}), true);
+  assert.equal(defaults.operation.validate.call({ service: 'files' }, 'restore', {}), true);
+  assert.equal(defaults.operation.validate.call({ service: 'missions' }, 'backup', {}), true);
+  assert.equal(defaults.operation.validate.call({ service: 'fences' }, 'restore', {}), true);
+  assert.equal(defaults.operation.validate.call({ service: 'rally' }, 'backup', {}), true);
   assert.equal(defaults.targetComponent.value, 1);
   assert.match(String(defaults.targetComponent.validate(0, {})), /between 1 and 255/);
 });
@@ -55,6 +59,19 @@ test('mavlink-system help and editor expose each service contract', () => {
   assert.match(html, /paramId, paramType, value/);
   assert.match(html, /no rollback/);
   assert.match(html, /msg\.payload/);
+  assert.match(html, /Missions/);
+  assert.match(html, /Fences/);
+  assert.match(html, /Rally/);
+  assert.match(html, /MISSION_REQUEST_LIST/);
+  assert.match(html, /MISSION_COUNT/);
+});
+
+test('mavlink-system refreshes operation validation after rebuilding the select', () => {
+  assert.match(
+    html,
+    /\$operation\.val\(selected\);\s*\$operation\.trigger\('change'\);/,
+    'changing service must notify the shared enum validator of the preserved operation'
+  );
 });
 
 test('mavlink-system companion hides sysid while keeping config compid visible', () => {
