@@ -62,7 +62,7 @@ test('vehicleType is a MAV_TYPE select loaded from the shared catalog (§6)', ()
     /\/mavlink\/build\/messages/,
     'the full Build message catalog must not be fetched for one enum table'
   );
-  assert.match(html, /enums\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
+  assert.match(html, /enums\??\.MAV_TYPE/, 'MAV_TYPE table is read from the catalog');
   assert.match(
     html,
     /RED\.mavlink\.loadEnumsCatalog\(\['MAV_TYPE'\][\s\S]*?enumLoadToken, \{ isBuild: false \}\)/,

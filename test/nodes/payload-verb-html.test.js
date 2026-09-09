@@ -340,7 +340,7 @@ test('payload frame row binds to the frame property and follows the INT carrier 
   // §6 hidden is not honored, both halves: the carrier choice is pinned to
   // what is sent when its row hides, and frame resets to the editor default
   // rather than saving a stale value the operator can no longer see.
-  assert.match(payloadHtml, /data\.carrierMatters/);
+  assert.match(payloadHtml, /data\??\.carrierMatters/);
   assert.match(payloadHtml, /if \(!matters\) \$\('#node-input-sendAs'\)\.val\('int'\);/);
   assert.match(payloadHtml, /if \(!shown\) \$\('#node-input-frame'\)\.val\('3'\);/);
   assert.equal(
