@@ -42,6 +42,19 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-fanout` | Fan-out one action across selected vehicles, with optional per-member offsets |
 | `mavlink-formation` | Position a group into a geometric formation around an anchor |
 
+### Payload control and discovery
+
+The Payload node offers camera streaming, point/rectangle tracking, storage formatting,
+and explicit gimbal-manager configure/take/release commands. Photo interval and count
+already support timed capture. Gimbal device-ID suggestions come from managers observed
+on the selected Connection; manual IDs remain available. State exposes each manager's
+capabilities, radian limits, and primary/secondary owners under `gimbalManagers`.
+Discovery does not acquire control; use **Take control** explicitly before aiming when
+the manager requires ownership, and **Release control** when finished.
+
+The Command node's **Run Prearm Checks** preset requests the checks. An accepted command
+acknowledgement means they will run, not that they passed or the vehicle is armable.
+
 ## Examples
 
 Importable flows ship with the package — 23 of them, plus 43 more for a live SITL rig. In

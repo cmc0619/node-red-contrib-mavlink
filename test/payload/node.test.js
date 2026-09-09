@@ -34,6 +34,41 @@ test('mavlink-payload node builds command-backed payload messages', () => {
   assert.equal(sent[1].confirmation, 'command_ack');
 });
 
+test('mavlink-payload Build emits the explicit gimbal take sentinels', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    sendAs: 'long',
+    delivery: 'build',
+    dialect: 'common',
+    topic: 'gimbal',
+    verb: 'take',
+    targetSystem: 7,
+    targetComponent: 154,
+  });
+  let sent;
+
+  node.emit(
+    'input',
+    {
+      payload: {
+        // Only the selected device id is exposed by the Take control editor.
+        values: { gimbalDeviceId: 2 },
+      },
+    },
+    (messages) => { sent = messages; },
+    () => {}
+  );
+
+  assert.equal(sent[0].payload.fields.command, 1001);
+  assert.equal(sent[0].payload.fields.param1, -2);
+  assert.equal(sent[0].payload.fields.param2, -2);
+  assert.equal(sent[0].payload.fields.param3, -1);
+  assert.equal(sent[0].payload.fields.param4, -1);
+  assert.equal(sent[0].payload.fields.param7, 2);
+});
+
 test('the retired payload.carrier override is not read: the config choice wins', () => {
   // Same rename at the message level: the per-message override moved to
   // `payload.sendAs`. A payload still carrying the old `carrier` key must

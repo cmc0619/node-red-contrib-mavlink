@@ -128,6 +128,7 @@
     <li><code>gps</code> — <code>fixType</code> (GPS_FIX_TYPE), <code>satellites</code>.</li>
     <li><code>battery</code> — <code>id</code>, <code>voltage</code> V, <code>remaining</code> %, <code>current</code> A; SYS_STATUS carries no id/current, BATTERY_STATUS no voltage.</li>
     <li><code>home</code> — <code>lat</code>/<code>lon</code> degrees, <code>alt</code> m AMSL.</li>
+    <li><code>gimbalManagers</code> — one entry per discovered <code>gimbalDeviceId</code>; each retains raw <code>information</code> capabilities and radian ranges plus <code>status</code> primary/secondary control IDs. Zero ownership IDs mean no owner, and State never selects or seizes a manager.</li>
     <li><code>autopilotVersion</code> — raw <code>flightSwVersion</code>, <code>boardVersion</code>, <code>vendorId</code>, and <code>productId</code>, plus the raw <code>capabilities</code> bitmask as a decimal string; <code>softwareVersion</code> decodes the standard major/minor/patch/releaseType bytes, and <code>flightCustomVersion</code> is the eight-byte custom value as lowercase hex.</li>
   </ul>
   <p>These are last-seen values, not live readings — gate on the <code>sections.*</code> ages (ms) for freshness.</p>

@@ -140,6 +140,17 @@ test('Stop Message Interval: user cannot override pinned param 2', () => {
   assertParamAt('stop_message_interval', { 2: 500000 }, 2, -1);
 });
 
+test('Run Prearm Checks is a zero-param command with no completion wait', () => {
+  const preset = getPreset('run_prearm_checks');
+  assert.equal(preset.name, 'Run Prearm Checks');
+  assert.equal(preset.command, 'MAV_CMD_RUN_PREARM_CHECKS');
+  assert.equal(preset.commandId, 401);
+  assert.equal(preset.group, 'system');
+  assert.deepEqual(preset.exposedParams, []);
+  assert.equal(preset.completionKey, undefined, 'Run Prearm Checks has no completion condition');
+  assert.deepEqual(buildParamArray(preset, { 1: 99, 2: 99 }), [0, 0, 0, 0, 0, 0, 0]);
+});
+
 // ── noAutoRetry flags ──────────────────────────────────────────────────────
 
 test('MISSION_START has noAutoRetry=true', () => {
@@ -291,4 +302,3 @@ test('GCS parity: blank takeoff yaw encodes NaN — the editor renders no yaw fi
   assert.ok(Number.isNaN(arr[3]), 'blank yaw encodes NaN (current heading mode)');
   assert.equal(arr[6], 25);
 });
-

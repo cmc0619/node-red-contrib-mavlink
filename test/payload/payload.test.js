@@ -73,6 +73,64 @@ test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation 
   assert.equal(blank.message.fields.param1, undefined, 'blank cameraId');
 });
 
+test('camera stream, tracking, and storage verbs use their dialect commands', () => {
+  const cases = [
+    ['start-stream', 2502, { streamId: 2, cameraId: 100 }, [2, 100]],
+    ['stop-stream', 2503, { streamId: 2, cameraId: 100 }, [2, 100]],
+    ['track-point', 2004, { pointX: 0.5, pointY: 0.25, radius: 0.1, cameraId: 100 }, [0.5, 0.25, 0.1, 100]],
+    ['track-rectangle', 2005, {
+      topLeftX: 0.1, topLeftY: 0.2, bottomRightX: 0.8, bottomRightY: 0.9, cameraId: 100,
+    }, [0.1, 0.2, 0.8, 0.9, 100]],
+    ['stop-tracking', 2010, { cameraId: 100 }, [100]],
+    ['storage-format', 526, { storageId: 1, format: 1, resetImageLog: 0 }, [1, 1, 0]],
+  ];
+  for (const [verb, command, values, params] of cases) {
+    const built = buildPayloadMessage({
+      carrier: 'long', topic: 'camera', verb,
+      target: { sysid: 2, compid: 100 }, values,
+    });
+    assert.equal(built.confirmation, 'command_ack', verb);
+    assert.equal(built.message.fields.command, command, verb);
+    params.forEach((value, index) => assert.equal(built.message.fields[`param${index + 1}`], value, `${verb} param${index + 1}`));
+  }
+});
+
+test('gimbal manager configure, take, and release keep protocol-owned sentinels', () => {
+  const configure = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'configure',
+    target: { sysid: 2, compid: 154 },
+    values: {
+      primarySysid: 42, primaryCompid: 191,
+      secondarySysid: 43, secondaryCompid: 192, gimbalDeviceId: 2,
+    },
+  });
+  assert.equal(configure.message.fields.command, 1001);
+  assert.deepEqual(
+    [1, 2, 3, 4, 7].map((index) => configure.message.fields[`param${index}`]),
+    [42, 191, 43, 192, 2]
+  );
+
+  const take = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'take',
+    target: { sysid: 2, compid: 154 },
+    values: { gimbalDeviceId: 2 },
+  });
+  assert.deepEqual(
+    [1, 2, 3, 4, 7].map((index) => take.message.fields[`param${index}`]),
+    [-2, -2, -1, -1, 2]
+  );
+
+  const release = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'release',
+    target: { sysid: 2, compid: 154 },
+    values: { gimbalDeviceId: 2 },
+  });
+  assert.deepEqual(
+    [1, 2, 3, 4, 7].map((index) => release.message.fields[`param${index}`]),
+    [-3, -3, -1, -1, 2]
+  );
+});
+
 test('gimbal manager aim uses the message path and declares no confirmation', () => {
   const built = buildPayloadMessage({
     carrier: 'long',

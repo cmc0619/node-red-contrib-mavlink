@@ -129,6 +129,7 @@
     pause:         [],
     resume:        [],
     request_message:    [{ index: 1, messages: true }, { index: 2 }],
+    run_prearm_checks:  [],
     set_message_interval: [{ index: 1, messages: true }, { index: 2 }, { index: 3 }],
     stop_message_interval: [{ index: 1, messages: true }],
     reboot_autopilot: [{ index: 1 }, { index: 2 }],
@@ -1223,6 +1224,7 @@
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).</li>
   </ul>
+  <p><b>Run Prearm Checks</b> sends <code>MAV_CMD_RUN_PREARM_CHECKS</code>; an accepted acknowledgement means the checks will run, not that they passed or the vehicle is armable.</p>
   <p>A broadcast target (sysid 0) is refused on <b>Send &amp; confirm</b> and
   <b>Send &amp; await completion</b>: one COMMAND_ACK cannot answer for a fleet, and the first
   vehicle to respond would settle the wait. Broadcast rides <b>Send</b> (fire-and-forget), or

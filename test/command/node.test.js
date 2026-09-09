@@ -41,6 +41,31 @@ test('Build tier: the editor default carries COMMAND_LONG and a top-level status
   assert.equal(sent[1].result, 'built');
 });
 
+test('Run Prearm Checks builds MAV_CMD 401 with no completion wait', async () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'run_prearm_checks',
+    delivery: 'build',
+  });
+
+  let sent;
+  node.emit('input', { payload: {} }, (messages) => { sent = messages; }, () => {});
+  await tick();
+
+  assert.equal(sent[0].payload.name, 'COMMAND_LONG');
+  assert.equal(sent[0].payload.fields.command, 401);
+  assert.deepEqual(
+    [1, 2, 3, 4, 5, 6, 7].map((index) => sent[0].payload.fields[`param${index}`]),
+    [0, 0, 0, 0, 0, 0, 0]
+  );
+  assert.equal(sent[1].result, 'built');
+});
+
 test('Build tier with carrier int: output 0 carries a COMMAND_INT with config frame and degE7 coords', async () => {
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);

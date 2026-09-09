@@ -97,6 +97,17 @@ test('gimbal path picker offers every aim path, including the acked command form
   );
 });
 
+test('gimbal device ids keep manual entry and add live manager suggestions', () => {
+  assert.match(payloadHtml, /id="payload-gimbal-device-ids"/, 'manual number input can use the datalist');
+  assert.match(payloadHtml, /\.attr\('list', 'payload-gimbal-device-ids'\)/, 'gimbal device field is suggestion-enabled');
+  assert.match(payloadHtml, /adminApiUrl\('\/mavlink\/gimbal-managers'\)/, 'manager route is used');
+  assert.match(payloadHtml, /\{ connection \}/, 'the selected Connection scopes discovery');
+  assert.match(payloadHtml, /manager\.gimbalDeviceId/, 'discovered device IDs populate suggestions');
+  assert.match(payloadHtml, /manager\.sysid/, 'suggestions retain the manager system address');
+  assert.match(payloadHtml, /manager\.compid/, 'suggestions retain the manager component address');
+  assert.match(payloadHtml, /\.attr\('label', `\$\{manager\.sysid\}\/\$\{manager\.compid\}`\)/, 'manual IDs show their manager address');
+});
+
 test('payload controls take their shape from the field metadata (§6)', () => {
   // A two-state enum is a checkbox, a bitmask is a multi-select, any other
   // enum is a pulldown, everything else is a number. None of it is a list of

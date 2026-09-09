@@ -89,6 +89,12 @@
       { value: 'stop-photo', label: 'Stop photo' },
       { value: 'start-video', label: 'Start video' },
       { value: 'stop-video', label: 'Stop video' },
+      { value: 'start-stream', label: 'Start stream' },
+      { value: 'stop-stream', label: 'Stop stream' },
+      { value: 'track-point', label: 'Track point' },
+      { value: 'track-rectangle', label: 'Track rectangle' },
+      { value: 'stop-tracking', label: 'Stop tracking' },
+      { value: 'storage-format', label: 'Format storage' },
       { value: 'set-mode', label: 'Set mode' },
       { value: 'zoom', label: 'Zoom' },
       { value: 'focus', label: 'Focus' },
@@ -98,7 +104,10 @@
       { value: 'aim', label: 'Aim' },
       { value: 'set-mode', label: 'Set mode' },
       { value: 'roi-set', label: 'ROI set' },
-      { value: 'roi-clear', label: 'ROI clear' }
+      { value: 'roi-clear', label: 'ROI clear' },
+      { value: 'configure', label: 'Configure manager' },
+      { value: 'take', label: 'Take control' },
+      { value: 'release', label: 'Release control' }
     ],
     servo: [
       { value: 'set', label: 'Set' },
