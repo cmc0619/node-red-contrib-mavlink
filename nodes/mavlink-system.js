@@ -9,6 +9,9 @@
 const logProtocol = require('../lib/log');
 const ftpProtocol = require('../lib/ftp');
 const parameterProtocol = require('../lib/param/backup');
+const { jsonSafeValue } = parameterProtocol;
+const missionProtocol = require('../lib/mission');
+const { missionTypeValue } = require('../lib/mission/types');
 const { resolveParamEncoding, capabilitiesFromPeer } = require('../lib/param');
 const { BAND } = require('../lib/connection/bands');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
@@ -53,9 +56,9 @@ function registerMavlinkSystem(RED) {
           send,
           node,
         };
-        const machine = protocol.createMachine(operation, machineOptions(context));
+        const machine = protocol.createMachine(machineOperation(service, operation), machineOptions(context));
 
-        const release = protocol.locks.acquire(connNode.id, target);
+        const release = protocol.locks.acquire(connNode.id, target, missionTypeFor(service));
         if (!release) {
           delivery.applyActionStatus(node, 'error', `${service} busy`);
           send([null, record(node, service, operation, target, {
@@ -105,9 +108,35 @@ function protocolFor(service) {
     case 'logs': return logProtocol;
     case 'files': return ftpProtocol;
     case 'parameters': return parameterProtocol;
+    case 'missions':
+    case 'fences':
+    case 'rally': return missionProtocol;
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
+}
+
+function missionTypeFor(service) {
+  switch (service) {
+    case 'missions': return missionTypeValue('mission');
+    case 'fences': return missionTypeValue('fence');
+    case 'rally': return missionTypeValue('rally');
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+function machineOperation(service, operation) {
+  switch (`${service}|${operation}`) {
+    case 'missions|backup':
+    case 'fences|backup':
+    case 'rally|backup': return 'download';
+    case 'missions|restore':
+    case 'fences|restore':
+    case 'rally|restore': return 'upload';
+    default: break; // This space intentionally left blank (§5)
+  }
+  return operation;
 }
 
 function machineOptions(context) {
@@ -163,6 +192,19 @@ function machineOptions(context) {
         path: msg.path === undefined ? config.path : msg.path,
         data: payload,
       };
+    case 'files|backup':
+      return {
+        ...shared,
+        source: connNode.resolveSourceIds(identityId),
+        path: payload.path === undefined ? config.path : payload.path,
+      };
+    case 'files|restore':
+      return {
+        ...shared,
+        source: connNode.resolveSourceIds(identityId),
+        path: msg.path === undefined ? config.path : msg.path,
+        entries: payload,
+      };
     case 'parameters|backup':
       return {
         ...shared,
@@ -173,6 +215,23 @@ function machineOptions(context) {
         ...shared,
         encoding: resolvedEncoding(config, payload, connNode, target, profile),
         params: payload,
+      };
+    case 'missions|backup':
+    case 'fences|backup':
+    case 'rally|backup':
+      return {
+        ...shared,
+        missionType: missionTypeFor(service),
+        sourceIds: connNode.resolveSourceIds(identityId),
+      };
+    case 'missions|restore':
+    case 'fences|restore':
+    case 'rally|restore':
+      return {
+        ...shared,
+        missionType: missionTypeFor(service),
+        sourceIds: connNode.resolveSourceIds(identityId),
+        items: payload,
       };
     default: break; // This space intentionally left blank (§5)
   }
@@ -186,7 +245,15 @@ function bandFor(service, operation) {
     case 'files|list':
     case 'files|download':
     case 'files|upload':
+    case 'files|backup':
+    case 'files|restore':
     case 'parameters|backup':
+    case 'missions|backup':
+    case 'fences|backup':
+    case 'rally|backup':
+    case 'missions|restore':
+    case 'fences|restore':
+    case 'rally|restore':
       return BAND.BULK;
     case 'parameters|restore':
       return BAND.CONTROL;
@@ -241,6 +308,9 @@ function statusFields(outcome) {
     data: _data,
     entries: _entries,
     params: _params,
+    items: _items,
+    files: _files,
+    directories: _directories,
     ...fields
   } = outcome;
   return fields;
@@ -263,11 +333,37 @@ function successMessage(service, operation, outcome, msg) {
     case 'files|upload':
       output.payload = { bytes: outcome.bytes };
       return output;
+    case 'files|backup':
+      output.payload = {
+        root: outcome.root,
+        directories: outcome.directories,
+        files: outcome.files,
+      };
+      return output;
+    case 'files|restore':
+      output.payload = {
+        bytes: outcome.bytes,
+        restoredFiles: outcome.restoredFiles,
+        restoredDirectories: outcome.restoredDirectories,
+      };
+      return output;
     case 'parameters|backup':
       output.payload = outcome.params;
       return output;
     case 'parameters|restore':
       output.payload = { restored: outcome.restored };
+      return output;
+    case 'missions|backup':
+    case 'fences|backup':
+    case 'rally|backup':
+      output.payload = outcome.items.map((item) => Object.fromEntries(
+        Object.entries(item).map(([key, value]) => [key, jsonSafeValue(value)])
+      ));
+      return output;
+    case 'missions|restore':
+    case 'fences|restore':
+    case 'rally|restore':
+      output.payload = { restored: outcome.count };
       return output;
     default: break; // This space intentionally left blank (§5)
   }
@@ -281,8 +377,16 @@ function successBadge(service, operation, outcome) {
     case 'files|list': return `${outcome.count} files`;
     case 'files|download': return 'file downloaded';
     case 'files|upload': return `${outcome.bytes} bytes uploaded`;
+    case 'files|backup': return `${outcome.files.length} files backed up`;
+    case 'files|restore': return `${outcome.restoredFiles} files restored`;
     case 'parameters|backup': return `${outcome.count} params backed up`;
     case 'parameters|restore': return `${outcome.restored} params restored`;
+    case 'missions|backup':
+    case 'fences|backup':
+    case 'rally|backup': return `${outcome.count} ${service} backed up`;
+    case 'missions|restore':
+    case 'fences|restore':
+    case 'rally|restore': return `${outcome.count} ${service} restored`;
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
