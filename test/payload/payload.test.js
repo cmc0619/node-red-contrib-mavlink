@@ -5,6 +5,19 @@ const assert = require('node:assert/strict');
 
 const { buildPayloadMessage } = require('../../lib/payload');
 
+test('rectangle tracking preserves camera IDs in COMMAND_INT', () => {
+  for (const cameraId of [1, 255]) {
+    const { message } = buildPayloadMessage({
+      topic: 'camera', verb: 'track-rectangle', carrier: 'int', frame: 3,
+      target: { sysid: 42, compid: 100 },
+      values: { topLeftX: 0.1, topLeftY: 0.2, bottomRightX: 0.8, bottomRightY: 0.9, cameraId },
+    });
+    assert.equal(message.fields.x, cameraId);
+    assert.equal(message.fields.param1, 0.1);
+    assert.equal(message.fields.param4, 0.9);
+  }
+});
+
 test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', () => {
   const built = buildPayloadMessage({
     carrier: 'long',
