@@ -26,6 +26,7 @@ const {
   createParamListCollector,
   matchesParamEcho,
   matchesParamReadReply,
+  capabilitiesFromPeer,
 } = require('../lib/param');
 const {
   readParamDefs,
@@ -474,22 +475,6 @@ function requestFrom(config, payload, { target, profile, capabilities }) {
     encoding,
     capabilities,
   };
-}
-
-/**
- * Read AUTOPILOT_VERSION.capabilities for the addressed component, when known.
- *
- * @param {object} connectionNode
- * @param {{sysid: number, compid: number}} target
- * @returns {number|null}
- */
-function capabilitiesFromPeer(connectionNode, target) {
-  // Missing component or capabilities → fall through to firmware (null).
-  const component = connectionNode.peerTable.getComponent(target.sysid, target.compid);
-  if (!component || component.capabilities == null || component.capabilities === '') {
-    return null;
-  }
-  return Number(component.capabilities);
 }
 
 function completeBuild(node, send, message) {

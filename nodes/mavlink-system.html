@@ -1,0 +1,177 @@
+<script type="text/javascript">
+  (function () {
+    const SERVICE_OPERATIONS = {
+      logs: [
+        ['list', 'List logs'],
+        ['download', 'Download log'],
+      ],
+      files: [
+        ['list', 'List files'],
+        ['download', 'Download file'],
+        ['upload', 'Upload file'],
+      ],
+      parameters: [
+        ['backup', 'Backup parameters'],
+        ['restore', 'Restore parameters'],
+      ],
+    };
+
+    function operationValidator(v, opt) {
+      const service = RED.mavlink.liveOr(this, '#node-input-service', this.service, 'logs');
+      switch (service) {
+        case 'logs': return RED.mavlink.oneOf(['list', 'download']).call(this, v, opt);
+        case 'files': return RED.mavlink.oneOf(['list', 'download', 'upload']).call(this, v, opt);
+        case 'parameters': return RED.mavlink.oneOf(['backup', 'restore']).call(this, v, opt);
+        default: return 'pick a service first';
+      }
+    }
+
+    function utf8ByteLength(value) {
+      let length = 0;
+      for (const character of String(value)) {
+        const codePoint = character.codePointAt(0);
+        length += codePoint <= 0x7f ? 1 : (codePoint <= 0x7ff ? 2 : (codePoint <= 0xffff ? 3 : 4));
+      }
+      return length;
+    }
+
+    function pathValidator(v, _opt) {
+      const service = RED.mavlink.liveOr(this, '#node-input-service', this.service, 'logs');
+      if (service !== 'files' || RED.mavlink.isBlank(v)) return true;
+      const path = String(v);
+      if (/\u0000/.test(path)) return 'must not contain NUL';
+      if (utf8ByteLength(path) > 239) return 'must be at most 239 UTF-8 bytes';
+      return true;
+    }
+
+    const systemDefaults = {
+      name: { value: '' },
+      connection: RED.mavlink.connectionDefault(),
+      identity: {
+        value: '',
+        type: 'mavlink-local-identity',
+        validate: RED.mavlink.identityOverrideValidator(),
+      },
+      service: {
+        value: 'logs',
+        required: true,
+        validate: RED.mavlink.oneOf(['logs', 'files', 'parameters']),
+      },
+      operation: { value: 'list', required: true, validate: operationValidator },
+      logId: {
+        value: '',
+        validate(v, opt) {
+          const service = RED.mavlink.liveOr(this, '#node-input-service', this.service, 'logs');
+          const operation = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'list');
+          if (service !== 'logs' || operation !== 'download') return true;
+          return RED.mavlink.validateIntRange(0, 65535).call(this, v, opt);
+        },
+      },
+      path: { value: '', validate: pathValidator },
+      paramEncoding: {
+        value: 'auto',
+        validate(v, opt) {
+          const service = RED.mavlink.liveOr(this, '#node-input-service', this.service, 'logs');
+          if (service !== 'parameters') return true;
+          return RED.mavlink.oneOf(['auto', 'bytewise', 'c-cast']).call(this, v, opt);
+        },
+      },
+      targetSystem: {
+        value: '',
+        validate: RED.mavlink.validateTargetSystem(['confirm'], 'delivery', 'confirm'),
+      },
+      targetComponent: { value: 1, required: true, validate: RED.mavlink.validateUint8(1) },
+      ...RED.mavlink.ackDefaults(() => true),
+    };
+
+    RED.nodes.registerType('mavlink-system', {
+      category: 'mavlink',
+      paletteLabel: 'system',
+      color: '#e6e6ff',
+      defaults: systemDefaults,
+      inputs: 1,
+      outputs: 2,
+      outputLabels: ['continue', 'status'],
+      icon: 'font-awesome/fa-server',
+      label() { return this.name || `system ${this.service || 'logs'} ${this.operation || 'list'}`; },
+      oneditprepare() {
+        const node = this;
+        const $service = $('#node-input-service');
+        const $operation = $('#node-input-operation');
+
+        function refreshRows() {
+          const service = $service.val() || 'logs';
+          const operation = $operation.val() || 'list';
+          $('#row-log-id').toggle(service === 'logs' && operation === 'download');
+          $('#row-path').toggle(service === 'files');
+          $('#row-param-encoding').toggle(service === 'parameters');
+          $('#row-identity').toggle(
+            RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
+          );
+          RED.mavlink.applyCompanionTargetVisibility({
+            isBuild: false,
+            identityId: $('#node-input-identity').val() || '',
+            hideCompidWhenCompanion: false,
+            targetSystemRow: '#row-targetSystem',
+            targetComponentRow: '#row-targetComponent',
+          });
+        }
+
+        function refreshOperations() {
+          const service = $service.val() || 'logs';
+          const options = SERVICE_OPERATIONS[service];
+          const saved = node.operation;
+          const current = $operation.val();
+          const selected = options.some((option) => option[0] === saved)
+            ? saved
+            : (options.some((option) => option[0] === current) ? current : options[0][0]);
+          $operation.empty();
+          options.forEach((option) => {
+            $('<option></option>').val(option[0]).text(option[1]).appendTo($operation);
+          });
+          $operation.val(selected);
+          refreshRows();
+        }
+
+        $service.on('change', refreshOperations);
+        $operation.on('change', refreshRows);
+        $('#node-input-connection').on('change', () => {
+          RED.mavlink.refreshIdentitySelect(node);
+          refreshRows();
+          RED.mavlink.reloadTargetCompId(node);
+        });
+        $('#node-input-identity').on('change', refreshRows);
+        RED.mavlink.refreshIdentitySelect(node);
+        RED.mavlink.reloadTargetCompId(node);
+        refreshOperations();
+      },
+    });
+  }());
+</script>
+
+<script type="text/html" data-template-name="mavlink-system">
+  <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+  <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
+  <div class="form-row" id="row-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity"></select></div>
+  <div class="form-row"><label for="node-input-service">Service</label><select id="node-input-service"><option value="logs">Logs</option><option value="files">Files</option><option value="parameters">Parameters</option></select></div>
+  <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"></select></div>
+  <div class="form-row" id="row-log-id"><label for="node-input-logId">Log id</label><input type="number" id="node-input-logId" min="0" max="65535" step="1" placeholder="msg.payload.id"></div>
+  <div class="form-row" id="row-path"><label for="node-input-path">Path</label><input type="text" id="node-input-path" placeholder="msg.payload.path or msg.path"></div>
+  <details id="row-param-encoding">
+    <summary>Advanced options</summary>
+    <div class="form-row"><label for="node-input-paramEncoding">Parameter encoding</label><select id="node-input-paramEncoding"><option value="auto">Auto</option><option value="bytewise">Bytewise</option><option value="c-cast">C cast</option></select></div>
+  </details>
+  <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Step timeout (ms)</label><input type="number" id="node-input-timeoutMs" min="1" step="1" placeholder="10000"></div>
+  <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" min="0" step="1" placeholder="3"></div>
+</script>
+
+<script type="text/html" data-help-name="mavlink-system">
+  <p>Runs one bounded onboard system service. Output 0 (continue) fires after success and keeps the input message metadata; output 1 (status) carries progress and the terminal record.</p>
+  <p><b>Logs</b> lists onboard logs or downloads one selected log with the MAVLink log transfer protocol. The list returns the complete <code>LOG_ENTRY</code> collection; each advertised <code>size</code> is informational.</p>
+  <p><b>Download log</b> selects the ID from the Log id field or <code>msg.payload.id</code>. Output 0 is a Buffer in <code>msg.payload</code> with the selected ID in <code>msg.logId</code>; connect a Node-RED File node when the bytes should be saved. The transfer follows <code>LOG_DATA</code> offsets, retries only missing ranges, and ends on a short data packet or zero-count EOF. Supply <code>msg.payload.size</code> as an exact byte length to complete without an EOF packet; all bytes through that boundary must arrive. For PX4, list first and pass the selected entry as <code>{id, size}</code>. Omit <code>size</code> when the advertised length is approximate (for example ArduPilot); completion then follows the peer's short or zero-count EOF. Cancellation sends <code>LOG_REQUEST_END</code>.</p>
+  <p><b>Files</b> uses MAVLink FTP. List and download read the path from <code>msg.payload.path</code> or the configured Path. Upload takes a Buffer directly from <code>msg.payload</code> and reads its path from <code>msg.path</code> or the configured Path. The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP <code>CREATE_FILE</code> may truncate an existing remote file.</p>
+  <p><b>Parameters</b> backup requests the parameter-only table and returns an array of <code>{paramId, paramType, value}</code> records. Pass that array directly as <code>msg.payload</code> to Restore; it also survives JSON or File-node round trips. Non-finite values and negative zero are represented as the strings <code>"Infinity"</code>, <code>"-Infinity"</code>, <code>"NaN"</code>, and <code>"-0"</code>. Restore sends records sequentially and reports the confirmed count on partial failure; there is no rollback of earlier writes. Auto encoding uses peer capabilities and the Connection profile firmware; choose Bytewise or C cast to override it.</p>
+  <p>All services use the selected Connection, Identity, target sysid/compid, timeout, and retry settings. Set <code>msg.payload === false</code> to suppress an operation. A node close cancels its active transfer. Status records omit large list, download, and parameter payloads.</p>
+</script>
