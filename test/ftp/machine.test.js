@@ -423,3 +423,241 @@ test('cancel, NAK, timeout, and send errors all settle with cleanup and no live 
   assert.equal(sendErrorOutcome.phase, 'send');
   assert.match(sendErrorOutcome.reason, /link down/);
 });
+
+test('create-directory sends the protocol operation and reports the path', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    assert.equal(request.opcode, 9);
+    assert.equal(request.data.toString(), '/restore/folder');
+    deliver(reply(message, 128));
+  });
+
+  const outcome = await createMachine(OPERATION.CREATE_DIRECTORY, machineOptions(stub, clock, {
+    path: '/restore/folder',
+  })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.path, '/restore/folder');
+});
+
+test('backup recursively lists a selected directory, skips dot traversal records, and downloads files', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    const path = request.data.toString();
+    if (request.opcode === 3) {
+      if (path === '/config' && request.offset === 0) {
+        deliver(reply(message, 128, {
+          data: Buffer.from('Dfolder\0Froot.bin\t3\0D.\0D..\0'),
+        }));
+      } else if (path === '/config' && request.offset === 4) {
+        deliver(nack(message, NAK_ERROR.EOF));
+      } else if (path === '/config/folder' && request.offset === 0) {
+        deliver(reply(message, 128, { data: Buffer.from('Finner.bin\t2\0') }));
+      } else if (path === '/config/folder' && request.offset === 1) {
+        deliver(nack(message, NAK_ERROR.EOF));
+      }
+      return;
+    }
+    if (request.opcode === 4) {
+      if (path === '/config/root.bin') {
+        deliver(reply(message, 128, {
+          session: 7, size: 4, data: Buffer.from([3, 0, 0, 0]),
+        }));
+      } else if (path === '/config/folder/inner.bin') {
+        deliver(reply(message, 128, {
+          session: 8, size: 4, data: Buffer.from([2, 0, 0, 0]),
+        }));
+      }
+      return;
+    }
+    if (request.opcode === 5) {
+      if (request.session === 7 && request.offset === 0) {
+        deliver(reply(message, 128, { session: 7, data: Buffer.from('abc') }));
+      } else if (request.session === 7 && request.offset === 3) {
+        deliver(nack(message, NAK_ERROR.EOF, { session: 7 }));
+      } else if (request.session === 8 && request.offset === 0) {
+        deliver(reply(message, 128, { session: 8, data: Buffer.from('de') }));
+      } else if (request.session === 8 && request.offset === 2) {
+        deliver(nack(message, NAK_ERROR.EOF, { session: 8 }));
+      }
+      return;
+    }
+    if (request.opcode === 1) deliver(reply(message, 128, { session: request.session }));
+  });
+
+  const outcome = await createMachine(OPERATION.BACKUP, machineOptions(stub, clock, {
+    path: '/config',
+  })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(outcome.root, '/config');
+  assert.deepEqual(outcome.directories, ['folder']);
+  assert.deepEqual(outcome.files, [
+    { path: 'root.bin', data: 'YWJj' },
+    { path: 'folder/inner.bin', data: 'ZGU=' },
+  ]);
+  const requests = stub.sent.map(({ message }) => decodePayload(message.fields.payload));
+  assert.deepEqual(requests.filter((request) => request.opcode === 1).map((request) => request.session), [7, 8]);
+  assert.equal(stub.subscriberCount(), 0);
+});
+
+test('restore creates recorded directories and uploads base64 file data below the destination root', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const bundle = {
+    version: 1,
+    root: '/config',
+    directories: ['folder'],
+    files: [
+      { path: 'root.bin', data: 'YWJj' },
+      { path: 'folder/inner.bin', data: 'ZGU=' },
+    ],
+  };
+  let nextSession = 20;
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === 9) {
+      assert.ok(['/restore', '/restore/folder'].includes(request.data.toString()));
+      deliver(nack(message, NAK_ERROR.FILE_EXISTS));
+    } else if (request.opcode === 3) {
+      deliver(nack(message, NAK_ERROR.EOF));
+    } else if (request.opcode === 6) {
+      const session = nextSession;
+      nextSession += 1;
+      deliver(reply(message, 128, { session }));
+    } else if (request.opcode === 7) {
+      deliver(reply(message, 128, { session: request.session, size: 0 }));
+    } else if (request.opcode === 1) {
+      deliver(reply(message, 128, { session: request.session }));
+    }
+  });
+
+  const outcome = await createMachine(OPERATION.RESTORE, machineOptions(stub, clock, {
+    path: '/restore',
+    entries: bundle,
+  })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.bytes, 5);
+  assert.equal(outcome.restoredFiles, 2);
+  assert.equal(outcome.restoredDirectories, 1);
+  const requests = stub.sent.map(({ message }) => decodePayload(message.fields.payload));
+  assert.deepEqual(requests.filter((request) => request.opcode === 6).map((request) => request.data.toString()), [
+    '/restore/root.bin',
+    '/restore/folder/inner.bin',
+  ]);
+  assert.deepEqual(requests.filter((request) => request.opcode === 7).map((request) => request.data.toString()), ['abc', 'de']);
+});
+
+test('backup and restore surface child failures with partial progress', async () => {
+  const backupStub = new StubConnection();
+  const backupClock = new FakeTimers();
+  backupStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILE_NOT_FOUND)));
+  const backup = await createMachine(OPERATION.BACKUP, machineOptions(backupStub, backupClock, {
+    path: '/missing',
+  })).start();
+  assert.equal(backup.result, 'failed');
+  assert.equal(backup.protocol.errorCode, NAK_ERROR.FILE_NOT_FOUND);
+
+  const restoreStub = new StubConnection();
+  const restoreClock = new FakeTimers();
+  restoreStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILE_PROTECTED)));
+  const restore = await createMachine(OPERATION.RESTORE, machineOptions(restoreStub, restoreClock, {
+    path: '/restore',
+    entries: { directories: ['folder'], files: [{ path: 'file.bin', data: 'eA==' }] },
+  })).start();
+  assert.equal(restore.result, 'failed');
+  assert.equal(restore.restoredDirectories, 0);
+  assert.equal(restore.restoredFiles, 0);
+  assert.equal(restore.protocol.errorCode, NAK_ERROR.FILE_PROTECTED);
+  assert.equal(restoreStub.sent.length, 1);
+});
+
+test('restore rejects a recorded directory whose existing path is a file', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    const path = request.data.toString();
+    if (request.opcode === 9) {
+      deliver(nack(message, NAK_ERROR.FILE_EXISTS));
+    } else if (request.opcode === 3 && path === '/restore') {
+      if (request.offset === 0) {
+        deliver(reply(message, 128, { data: Buffer.from('Fcollision\t1\0') }));
+      } else {
+        deliver(nack(message, NAK_ERROR.EOF));
+      }
+    } else if (request.opcode === 3 && path === '/restore/collision') {
+      deliver(nack(message, NAK_ERROR.FILE_NOT_FOUND));
+    }
+  });
+
+  const outcome = await createMachine(OPERATION.RESTORE, machineOptions(stub, clock, {
+    path: '/restore',
+    entries: { directories: ['collision'], files: [] },
+  })).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.restoredDirectories, 0);
+  assert.equal(outcome.protocol.errorCode, NAK_ERROR.FILE_NOT_FOUND);
+  assert.equal(stub.sent.map(({ message }) => decodePayload(message.fields.payload))
+    .some((request) => request.opcode === 6), false);
+});
+
+test('cancelling a composite transfer cancels its active FTP child', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend(() => {});
+  const machine = createMachine(OPERATION.BACKUP, machineOptions(stub, clock, {
+    path: '/config', maxRetries: 0,
+  }));
+  const run = machine.start();
+  machine.cancel();
+  const outcome = await run;
+  assert.equal(outcome.result, 'cancelled');
+  assert.equal(stub.subscriberCount(), 0);
+  assert.equal(clock.pending(), 0);
+});
+
+test('cancelling after a child settles does not start the next restore file', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  let createFiles = 0;
+  let cancellationQueued = false;
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === 9) {
+      deliver(reply(message, 128));
+    } else if (request.opcode === 6) {
+      createFiles += 1;
+      deliver(reply(message, 128, { session: 30 + createFiles }));
+    } else if (request.opcode === 7) {
+      deliver(reply(message, 128, { session: request.session, size: 0 }));
+    } else if (request.opcode === 1) {
+      deliver(reply(message, 128, { session: request.session }));
+    }
+  });
+  const machine = createMachine(OPERATION.RESTORE, machineOptions(stub, clock, {
+    path: '/restore',
+    entries: {
+      directories: [],
+      files: [{ path: 'first.bin', data: 'YQ==' }, { path: 'second.bin', data: 'Yg==' }],
+    },
+    onProgress: (update) => {
+      if (!cancellationQueued && update.phase === 'data' && update.offset === 1) {
+        cancellationQueued = true;
+        queueMicrotask(() => machine.cancel());
+      }
+    },
+  }));
+
+  const outcome = await machine.start();
+  assert.equal(outcome.result, 'cancelled');
+  assert.equal(createFiles, 1);
+  assert.equal(stub.subscriberCount(), 0);
+  assert.equal(clock.pending(), 0);
+});
