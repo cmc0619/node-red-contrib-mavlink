@@ -122,15 +122,15 @@
           const options = SERVICE_OPERATIONS[service];
           const saved = node.operation;
           const current = $operation.val();
-          const selected = options.some((option) => option[0] === saved)
-            ? saved
-            : (options.some((option) => option[0] === current) ? current : options[0][0]);
+          const selected = options.some((option) => option[0] === current)
+            ? current
+            : (options.some((option) => option[0] === saved) ? saved : options[0][0]);
           $operation.empty();
           options.forEach((option) => {
             $('<option></option>').val(option[0]).text(option[1]).appendTo($operation);
           });
           $operation.val(selected);
-          refreshRows();
+          $operation.trigger('change');
         }
 
         $service.on('change', refreshOperations);
