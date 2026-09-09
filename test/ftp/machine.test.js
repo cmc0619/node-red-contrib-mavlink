@@ -16,6 +16,9 @@ function machineOptions(stub, clock, extra = {}) {
     subscribe: (filter, handler) => stub.subscribe(filter, handler),
     target: TARGET,
     source: SOURCE,
+    onProgress: () => {
+      // Fixture ignores progress unless a test overrides it.
+    },
     timeoutMs: 10,
     maxRetries: 1,
     ...fakeDeps(clock),
