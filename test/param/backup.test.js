@@ -9,6 +9,8 @@ const {
   OPERATION,
 } = require('../../lib/param/backup');
 const { paramValueToWire } = require('../../lib/codec/param-union');
+const { createWire } = require('../../lib/connection/wire');
+const { loadBundled } = require('../../lib/metadata/bundled');
 const { StubConnection, FakeTimers, fakeDeps } = require('../mission/stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
@@ -57,6 +59,28 @@ function echo(param, extra = {}, encoding = 'bytewise') {
       ...extra,
     },
   };
+}
+
+function serializeSetAndEcho(wire, message) {
+  const sent = wire.decode(
+    wire.serialize(message, { sysid: 255, compid: 1, seq: 0 }),
+    { address: '127.0.0.1', port: 14550 }
+  )[0];
+  const echoedMessage = {
+    name: 'PARAM_VALUE',
+    fields: {
+      param_id: sent.fields.param_id,
+      param_value: sent.fields.param_value,
+      param_type: sent.fields.param_type,
+      param_index: 0,
+      param_count: 1,
+    },
+  };
+  const echoed = wire.decode(
+    wire.serialize(echoedMessage, { sysid: TARGET.sysid, compid: TARGET.compid, seq: 1 }),
+    { address: '127.0.0.1', port: 14551 }
+  )[0];
+  return { sent, echoed };
 }
 
 test('parameter backup exports operations and a per-target lock registry', () => {
@@ -168,8 +192,9 @@ test('backup decode errors settle and tear down the subscription and timer', asy
   assert.equal(clock.pending(), 0);
 });
 
-test('backup represents nonfinite REAL32 values as strings for JSON round-trip', async () => {
-  const saved = [Infinity, -Infinity, NaN];
+test('backup preserves signed zero and nonfinite REAL32 values through JSON and the wire', async () => {
+  const saved = [-0, Infinity, -Infinity, NaN];
+  const wire = createWire({ bundle: loadBundled('common') });
   for (const value of saved) {
     const stub = new StubConnection();
     const clock = new FakeTimers();
@@ -180,26 +205,40 @@ test('backup represents nonfinite REAL32 values as strings for JSON round-trip',
     });
 
     const backup = await createMachine(OPERATION.BACKUP, machineOptions(stub, clock, { encoding: 'c-cast' })).start();
+    const expected = Object.is(value, -0) ? '-0' : String(value);
     assert.equal(typeof backup.params[0].value, 'string');
-    assert.equal(backup.params[0].value, String(value));
-    assert.doesNotMatch(JSON.stringify(backup.params), /null/);
+    assert.equal(backup.params[0].value, expected);
+    const roundTripped = JSON.parse(JSON.stringify(backup.params));
+    assert.equal(roundTripped[0].value, expected);
 
     const restoreStub = new StubConnection();
     const restoreClock = new FakeTimers();
+    let sentWireValue;
+    let echoedWireValue;
     restoreStub.onSend((message, deliver) => {
       if (message.name === 'PARAM_SET') {
-        deliver(echo({ paramId: 'FLOAT', paramType: 9, value }, {}, 'c-cast'));
+        const actual = serializeSetAndEcho(wire, message);
+        sentWireValue = actual.sent.fields.param_value;
+        echoedWireValue = actual.echoed.fields.param_value;
+        deliver(actual.echoed);
       }
     });
     const restored = await createMachine(OPERATION.RESTORE, machineOptions(restoreStub, restoreClock, {
       encoding: 'c-cast',
-      params: JSON.parse(JSON.stringify(backup.params)),
+      params: roundTripped,
     })).start();
     assert.equal(restored.result, 'succeeded');
     assert.equal(restored.restored, 1);
-    const restoredWireValue = restoreStub.sent[0].message.fields.param_value;
-    if (Number.isNaN(value)) assert.ok(Number.isNaN(restoredWireValue));
-    else assert.equal(restoredWireValue, value);
+    if (Object.is(value, -0)) {
+      assert.equal(Object.is(sentWireValue, -0), true);
+      assert.equal(Object.is(echoedWireValue, -0), true);
+    } else if (Number.isNaN(value)) {
+      assert.equal(Number.isNaN(sentWireValue), true);
+      assert.equal(Number.isNaN(echoedWireValue), true);
+    } else {
+      assert.equal(sentWireValue, value);
+      assert.equal(echoedWireValue, value);
+    }
   }
 });
 
