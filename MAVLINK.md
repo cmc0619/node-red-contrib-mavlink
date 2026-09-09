@@ -146,6 +146,29 @@ POSCTL is index 3, `0x00030000` (= `196608`) — the HEARTBEAT pack, not `DO_SET
 `properties=2`: Flow Hold, Follow, SystemID, Turtle. Copter integers 8, 10, 12, 26 were
 not published.
 
+**Camera rectangle tracking uses param5 as a camera ID (2026-09-09).**
+Evidence: `common.xml`, `MAV_CMD_CAMERA_TRACK_RECTANGLE` (2005), param5
+`Target Camera ID` (0..255). This is a scalar ID, not latitude. The Payload
+COMMAND_INT recipe must mark param5 as raw rather than applying the frame's
+coordinate scaling. A builder regression verifies that ID 255 remains x=255.
 ## Open questions
 
 *(Unverified beliefs worth measuring go here — never in Entries.)*
+
+**Log-transfer interoperability to verify on the wire (2026-09-09).**
+Source inspection of [PX4 at 0d2c7058](https://github.com/PX4/PX4-Autopilot/blob/0d2c7058b328687c01ec08c8cf9f77c930aaada6/src/modules/mavlink/mavlink_log_handler.cpp)
+shows `handle_log_request_list` advertising `last_log_num = num_logs` for the full
+list while `state_listing` emits IDs starting at zero. `handle_log_request_data`
+returns without sending when the requested offset reaches the file size; a final
+full 90-byte packet therefore has no separate zero-count EOF response. It also
+requires a list request before downloading. Source-matching JavaScript fixtures
+reproduce the affected client behavior; these are not SITL or vehicle captures.
+Measure the list metadata and exact-multiple-of-90 EOF behavior on the target PX4
+release before promoting these observations to Entries. A caller-supplied exact
+byte length can establish a download boundary without interpreting silence as EOF.
+
+For comparison, [ArduPilot at 4891432f](https://github.com/ArduPilot/ardupilot/blob/4891432f35c371d432336dea78260588d3543000/libraries/AP_Logger/AP_Logger_MAVLinkLogTransfer.cpp)
+uses 1-based list IDs, clamps the requested end to its log count, and sends a
+zero-count data response for an offset at or beyond its size. Its advertised size
+must not be treated as an exact byte length merely because it appeared in LOG_ENTRY.
+
