@@ -126,7 +126,10 @@ test('gimbal manager configure, take, and release keep protocol-owned sentinels'
   const take = buildPayloadMessage({
     carrier: 'long', topic: 'gimbal', verb: 'take',
     target: { sysid: 2, compid: 154 },
-    values: { gimbalDeviceId: 2 },
+    values: {
+      primarySysid: 42, primaryCompid: 191,
+      secondarySysid: 43, secondaryCompid: 192, gimbalDeviceId: 2,
+    },
   });
   assert.deepEqual(
     [1, 2, 3, 4, 7].map((index) => take.message.fields[`param${index}`]),
@@ -136,12 +139,22 @@ test('gimbal manager configure, take, and release keep protocol-owned sentinels'
   const release = buildPayloadMessage({
     carrier: 'long', topic: 'gimbal', verb: 'release',
     target: { sysid: 2, compid: 154 },
-    values: { gimbalDeviceId: 2 },
+    values: {
+      primarySysid: 42, primaryCompid: 191,
+      secondarySysid: 43, secondaryCompid: 192, gimbalDeviceId: 2,
+    },
   });
   assert.deepEqual(
     [1, 2, 3, 4, 7].map((index) => release.message.fields[`param${index}`]),
     [-3, -3, -1, -1, 2]
   );
+
+  const legacyAim = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'aim', path: 'legacy',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: -15, roll: 2, yaw: 90, mode: 99 },
+  });
+  assert.equal(legacyAim.message.fields.param7, 2, 'legacy aim keeps its pinned mount mode');
 });
 
 test('gimbal manager aim uses the message path and declares no confirmation', () => {
