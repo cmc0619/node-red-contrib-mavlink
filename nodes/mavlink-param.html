@@ -38,7 +38,7 @@
       paramId: {
         value: '',
         validate(v, _opt) {
-          const action = RED.mavlink.liveOr(this, '#node-input-action', this && this.action, 'read');
+          const action = RED.mavlink.liveOr(this, '#node-input-action', this?.action, 'read');
           if (action === 'request-list' || indexAddressed(this)) return true;
           if (RED.mavlink.isBlank(v)) {
             return 'is required — a set or a read by name identifies the parameter by its '
@@ -96,14 +96,14 @@
           // and without this the node stays red over a field that is no longer
           // on screen — the same trap the index validator avoids, and the one
           // hiding a row creates if the check is not hidden with it.
-          if (RED.mavlink.liveOr(this, '#node-input-action', this && this.action, 'read') !== 'set') {
+          if (RED.mavlink.liveOr(this, '#node-input-action', this?.action, 'read') !== 'set') {
             return true;
           }
           if (RED.mavlink.isBlank(v)) return true;
           const n = Number(v);
           if (!Number.isFinite(n)) return false;
           const defs = _paramDefsByKey[paramDefsKey(this)];
-          const def = defs && defs[editedParamId(this)];
+          const def = defs?.[editedParamId(this)];
           if (!def) return true;
           if (def.bits) {
             // A documented bitmask's legal values are its flags, not a scalar
@@ -180,8 +180,8 @@
    * @returns {boolean}
    */
   function indexAddressed(node) {
-    return RED.mavlink.liveOr(node, '#node-input-action', node && node.action, 'read') === 'read'
-      && RED.mavlink.liveOr(node, '#node-input-lookup', node && node.lookup, 'name') === 'index';
+    return RED.mavlink.liveOr(node, '#node-input-action', node?.action, 'read') === 'read'
+      && RED.mavlink.liveOr(node, '#node-input-lookup', node?.lookup, 'name') === 'index';
   }
 
   /**
@@ -192,7 +192,7 @@
    * @returns {string}
    */
   function editedParamId(node) {
-    return RED.mavlink.liveOr(node, '#node-input-paramId', node && node.paramId)
+    return RED.mavlink.liveOr(node, '#node-input-paramId', node?.paramId)
       .toUpperCase().trim();
   }
 
@@ -428,7 +428,7 @@
           if (currentDefsKey() !== key) return;
           _paramDefs = {};
           _defsCatalog = '';
-          _defsNotice = (xhr && xhr.responseJSON && xhr.responseJSON.error) ||
+          _defsNotice = (xhr?.responseJSON?.error) ||
             'Parameter definitions unavailable.';
           _defsLoaded = true;
           rebuildParamIndex();
@@ -452,7 +452,7 @@
         _paramText = {};
         for (let n = 0; n < _paramIds.length; n++) {
           const entry = _paramDefs[_paramIds[n]];
-          _paramText[_paramIds[n]] = entry && entry.description
+          _paramText[_paramIds[n]] = entry?.description
             ? entry.description.toUpperCase() : '';
         }
         const hasDefs = _paramIds.length > 0;
@@ -573,7 +573,7 @@
         // saves, so whether Node-RED round-trips one is unverified here — and a
         // Type that silently saves empty is the §14 failure with extra steps.
         const $type = $('#node-input-paramType');
-        const published = def && def.type;
+        const published = def?.type;
         // Option values are the MAV_PARAM_TYPE *name*, which is what the node
         // saves and the runtime reads. `saved` is passed explicitly so the
         // narrowed list does not get the previous pick appended back as a
@@ -635,18 +635,18 @@
         // and maintains the units hint. A private span here would be a second
         // units mechanism for the same job.
         RED.mavlink.applyFieldMeta('node-input-value', {
-          description: def && def.description ? def.description : '',
+          description: def?.description ? def.description : '',
           // The helper's key is `units`; a parameter definition carries `unit`.
-          units: def && def.unit ? def.unit : '',
+          units: def?.unit ? def.unit : '',
         });
 
         // Bounds and step are hints on the box; the validator is what actually
         // refuses, since a saved flow can carry anything.
-        if (def && def.min !== undefined) $value.attr('min', def.min);
+        if (def?.min !== undefined) $value.attr('min', def.min);
         else $value.removeAttr('min');
-        if (def && def.max !== undefined) $value.attr('max', def.max);
+        if (def?.max !== undefined) $value.attr('max', def.max);
         else $value.removeAttr('max');
-        if (def && def.increment !== undefined) $value.attr('step', def.increment);
+        if (def?.increment !== undefined) $value.attr('step', def.increment);
         else $value.removeAttr('step');
 
         $select.empty();

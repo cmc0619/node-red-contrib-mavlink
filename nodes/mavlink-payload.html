@@ -201,7 +201,7 @@
           ? (meta.default === null || meta.default === undefined ? '' : meta.default)
           : stashed;
         let $input;
-        if (entries && entries.length) {
+        if (entries?.length) {
           if (RED.mavlink.isFalseTrueEnum(entries)) {
             $input = RED.mavlink.booleanEnumInput(entries, {
               saved,
@@ -247,8 +247,8 @@
 
       function renderFields(data) {
         const $box = $('#payload-fields').empty();
-        const fields = (data && data.fields) || {};
-        const enums = (data && data.enums) || {};
+        const fields = (data?.fields) || {};
+        const enums = (data?.enums) || {};
         // The route emits the recipe's own slot order (param1..param7), which
         // is how the protocol reads: lat, lon, alt — not alphabetically.
         const keys = Object.keys(fields);
@@ -307,7 +307,7 @@
       function applyCarrier(data) {
         const sel = selection();
         const matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
-          && Boolean(data && data.carrierMatters);
+          && Boolean(data?.carrierMatters);
         if (!matters) $('#node-input-sendAs').val('int');
         $('#row-payload-sendAs').toggle(matters);
         applyFrameRow(matters);

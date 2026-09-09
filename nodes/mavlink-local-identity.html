@@ -144,7 +144,7 @@
         // explicitly (owns MAV_TYPE / MAV_AUTOPILOT). CompID fetches its own,
         // per role, in refillCompIds below.
         RED.mavlink.loadEnumsCatalog(['MAV_TYPE', 'MAV_AUTOPILOT'], (catalog) => {
-          const enums = (catalog && catalog.enums) || {};
+          const enums = (catalog?.enums) || {};
           // Prefer live dialog values so a role change before the catalog
           // resolves is not overwritten by the pre-edit saved snapshot.
           RED.mavlink.fillEnumSelect($hbType, enums.MAV_TYPE || [], {

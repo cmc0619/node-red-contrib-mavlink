@@ -239,7 +239,7 @@
    */
   function paramValues(owner, savedJson) {
     const values = {};
-    if (owner && owner._mavParamsRendered && RED.mavlink.ownDialogField(owner, '#node-input-params')) {
+    if (owner?._mavParamsRendered && RED.mavlink.ownDialogField(owner, '#node-input-params')) {
       return scrapeParamInputs();
     }
     let parsed;
@@ -511,7 +511,7 @@
        * @param {{commands?: Array}|null} catalog
        */
       function applyPresetOptionTips($sel, catalog) {
-        const sel = $sel && $sel.length ? $sel : $('#node-input-preset');
+        const sel = $sel?.length ? $sel : $('#node-input-preset');
         if (!sel.length || !catalog) return;
         const byId = {};
         (catalog.commands || []).forEach((c) => {
@@ -719,7 +719,7 @@
       }
 
       function messageEntries(catalog) {
-        return ((catalog && catalog.messages) || []).map((msg) => ({
+        return ((catalog?.messages) || []).map((msg) => ({
             name: msg.name,
             value: msg.id,
             // label optional — fillEnumSelect falls back to enumOptionLabel
@@ -887,7 +887,7 @@
             if ($('#node-input-mode').val() !== 'advanced') return;
             if ($('#node-input-advancedCommand').val() !== cmdId) return;
             container.empty();
-            if (catalog.error && !(catalog.commands && catalog.commands.length)) {
+            if (catalog.error && !(catalog.commands?.length)) {
               container.append($('<div class="form-row"><em>Could not load command parameters for this Vehicle dialect. Deploy the Vehicle Profile (required for custom dialects).</em></div>'));
               return;
             }
