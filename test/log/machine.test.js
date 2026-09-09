@@ -267,6 +267,48 @@ test('duplicate data does not create another range or complete early', async () 
   assert.equal(stub.sentNames().filter((name) => name === 'LOG_REQUEST_DATA').length, 1);
 });
 
+test('out-of-order data does not re-send the unchanged EOF gap, while retries and changed gaps still send', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  let gapRequests = 0;
+  stub.onSend((message, deliver) => {
+    if (message.name !== 'LOG_REQUEST_DATA') return;
+    if (message.fields.count === LOG_REQUEST_BYTES) {
+      deliver(data(7, 180, Buffer.alloc(90, 2)));
+      deliver(data(7, 270, Buffer.alloc(90, 3)));
+      deliver({
+        name: 'LOG_DATA', sysid: 42, compid: 1,
+        fields: { id: 7, ofs: 450, count: 0, data: Buffer.alloc(90) },
+      });
+    } else if (message.fields.ofs === 0 && message.fields.count === 180) {
+      gapRequests += 1;
+      if (gapRequests === 1) deliver(data(7, 360, Buffer.alloc(90, 4)));
+      if (gapRequests === 2) deliver(data(7, 0, Buffer.alloc(90, 1)));
+    } else if (message.fields.ofs === 90 && message.fields.count === 90) {
+      deliver(data(7, 90, Buffer.alloc(90, 5)));
+    }
+  });
+
+  const done = new LogDownload(machineOptions(stub, clock, { id: 7 })).start();
+  const requests = () => stub.sent
+    .filter(({ message }) => message.name === 'LOG_REQUEST_DATA')
+    .map(({ message }) => ({ ofs: message.fields.ofs, count: message.fields.count }));
+  assert.deepEqual(requests(), [
+    { ofs: 0, count: LOG_REQUEST_BYTES },
+    { ofs: 0, count: 180 },
+  ]);
+
+  clock.flush(1);
+  const outcome = await done;
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(requests(), [
+    { ofs: 0, count: LOG_REQUEST_BYTES },
+    { ofs: 0, count: 180 },
+    { ofs: 0, count: 180 },
+    { ofs: 90, count: 90 },
+  ]);
+});
+
 test('wrong log id and wrong source do not settle the download', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
