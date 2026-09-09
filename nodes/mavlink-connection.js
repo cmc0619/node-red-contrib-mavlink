@@ -27,6 +27,8 @@ const { capBadge } = require('../lib/delivery');
 
 /** Admin endpoint path listing host serial ports for the editor (§6). */
 const SERIAL_PORTS_ROUTE = '/mavlink/serial-ports';
+/** Admin endpoint path listing discovered gimbal managers for the editor. */
+const GIMBAL_MANAGERS_ROUTE = '/mavlink/gimbal-managers';
 
 module.exports = function registerMavlinkConnection(RED) {
   /**
@@ -44,6 +46,38 @@ module.exports = function registerMavlinkConnection(RED) {
         (ports) => res.json({ ports }),
         (err) => res.status(500).json({ ports: [], error: err.message })
       );
+    }
+  );
+
+  /**
+   * Discovered gimbal managers for the payload editor. The peer table already
+   * owns the detached, JSON-safe view; this route only flattens its
+   * system/component nesting and never sends a request over the connection.
+   */
+  RED.httpAdmin.get(
+    GIMBAL_MANAGERS_ROUTE,
+    RED.auth.needsPermission('mavlink.read'),
+    (req, res) => {
+      const connection = RED.nodes.getNode(req.query.connection);
+      if (!connection || !connection.peerTable) {
+        return res.status(404).json({ error: 'Connection not found or not deployed' });
+      }
+
+      const managers = [];
+      for (const peer of connection.peerTable.snapshot()) {
+        for (const component of peer.components) {
+          for (const manager of component.gimbalManagers) {
+            managers.push({
+              sysid: peer.sysid,
+              compid: component.compid,
+              gimbalDeviceId: manager.gimbalDeviceId,
+              information: manager.information,
+              status: manager.status,
+            });
+          }
+        }
+      }
+      return res.json({ managers });
     }
   );
 

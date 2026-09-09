@@ -5,6 +5,19 @@ const assert = require('node:assert/strict');
 
 const { buildPayloadMessage } = require('../../lib/payload');
 
+test('rectangle tracking preserves camera IDs in COMMAND_INT', () => {
+  for (const cameraId of [1, 255]) {
+    const { message } = buildPayloadMessage({
+      topic: 'camera', verb: 'track-rectangle', carrier: 'int', frame: 3,
+      target: { sysid: 42, compid: 100 },
+      values: { topLeftX: 0.1, topLeftY: 0.2, bottomRightX: 0.8, bottomRightY: 0.9, cameraId },
+    });
+    assert.equal(message.fields.x, cameraId);
+    assert.equal(message.fields.param1, 0.1);
+    assert.equal(message.fields.param4, 0.9);
+  }
+});
+
 test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', () => {
   const built = buildPayloadMessage({
     carrier: 'long',
@@ -71,6 +84,77 @@ test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation 
     values: {},
   });
   assert.equal(blank.message.fields.param1, undefined, 'blank cameraId');
+});
+
+test('camera stream, tracking, and storage verbs use their dialect commands', () => {
+  const cases = [
+    ['start-stream', 2502, { streamId: 2, cameraId: 100 }, [2, 100]],
+    ['stop-stream', 2503, { streamId: 2, cameraId: 100 }, [2, 100]],
+    ['track-point', 2004, { pointX: 0.5, pointY: 0.25, radius: 0.1, cameraId: 100 }, [0.5, 0.25, 0.1, 100]],
+    ['track-rectangle', 2005, {
+      topLeftX: 0.1, topLeftY: 0.2, bottomRightX: 0.8, bottomRightY: 0.9, cameraId: 100,
+    }, [0.1, 0.2, 0.8, 0.9, 100]],
+    ['stop-tracking', 2010, { cameraId: 100 }, [100]],
+    ['storage-format', 526, { storageId: 1, format: 1, resetImageLog: 0 }, [1, 1, 0]],
+  ];
+  for (const [verb, command, values, params] of cases) {
+    const built = buildPayloadMessage({
+      carrier: 'long', topic: 'camera', verb,
+      target: { sysid: 2, compid: 100 }, values,
+    });
+    assert.equal(built.confirmation, 'command_ack', verb);
+    assert.equal(built.message.fields.command, command, verb);
+    params.forEach((value, index) => assert.equal(built.message.fields[`param${index + 1}`], value, `${verb} param${index + 1}`));
+  }
+});
+
+test('gimbal manager configure, take, and release keep protocol-owned sentinels', () => {
+  const configure = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'configure',
+    target: { sysid: 2, compid: 154 },
+    values: {
+      primarySysid: 42, primaryCompid: 191,
+      secondarySysid: 43, secondaryCompid: 192, gimbalDeviceId: 2,
+    },
+  });
+  assert.equal(configure.message.fields.command, 1001);
+  assert.deepEqual(
+    [1, 2, 3, 4, 7].map((index) => configure.message.fields[`param${index}`]),
+    [42, 191, 43, 192, 2]
+  );
+
+  const take = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'take',
+    target: { sysid: 2, compid: 154 },
+    values: {
+      primarySysid: 42, primaryCompid: 191,
+      secondarySysid: 43, secondaryCompid: 192, gimbalDeviceId: 2,
+    },
+  });
+  assert.deepEqual(
+    [1, 2, 3, 4, 7].map((index) => take.message.fields[`param${index}`]),
+    [-2, -2, -1, -1, 2]
+  );
+
+  const release = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'release',
+    target: { sysid: 2, compid: 154 },
+    values: {
+      primarySysid: 42, primaryCompid: 191,
+      secondarySysid: 43, secondaryCompid: 192, gimbalDeviceId: 2,
+    },
+  });
+  assert.deepEqual(
+    [1, 2, 3, 4, 7].map((index) => release.message.fields[`param${index}`]),
+    [-3, -3, -1, -1, 2]
+  );
+
+  const legacyAim = buildPayloadMessage({
+    carrier: 'long', topic: 'gimbal', verb: 'aim', path: 'legacy',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: -15, roll: 2, yaw: 90, mode: 99 },
+  });
+  assert.equal(legacyAim.message.fields.param7, 2, 'legacy aim keeps its pinned mount mode');
 });
 
 test('gimbal manager aim uses the message path and declares no confirmation', () => {

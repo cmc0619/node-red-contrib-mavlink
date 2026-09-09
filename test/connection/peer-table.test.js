@@ -95,6 +95,134 @@ test('table is keyed by sysid with components nested underneath', () => {
   assert.ok(table.getComponent(1, 154));
 });
 
+test('gimbal manager information and status retain multiple device IDs per component', () => {
+  const table = new PeerTable({ now: () => 100 });
+  const update = (name, fields) => table.update(
+    { name, sysid: 1, compid: 154, fields },
+    EP1,
+    100
+  );
+
+  update('GIMBAL_MANAGER_INFORMATION', {
+    time_boot_ms: 10,
+    cap_flags: 0,
+    gimbal_device_id: 0,
+    roll_min: 0,
+    roll_max: 0,
+    pitch_min: 0,
+    pitch_max: 0,
+    yaw_min: 0,
+    yaw_max: 0,
+  });
+  update('GIMBAL_MANAGER_INFORMATION', {
+    time_boot_ms: 11,
+    cap_flags: 5,
+    gimbal_device_id: 2,
+    roll_min: -1,
+    roll_max: 1,
+    pitch_min: -2,
+    pitch_max: 2,
+    yaw_min: -3,
+    yaw_max: 3,
+  });
+  update('GIMBAL_MANAGER_STATUS', {
+    time_boot_ms: 20,
+    flags: 9,
+    gimbal_device_id: 2,
+    primary_control_sysid: 0,
+    primary_control_compid: 0,
+    secondary_control_sysid: 42,
+    secondary_control_compid: 43,
+  });
+  update('GIMBAL_MANAGER_STATUS', {
+    time_boot_ms: 21,
+    flags: 7,
+    gimbal_device_id: 0,
+    primary_control_sysid: 17,
+    primary_control_compid: 18,
+    secondary_control_sysid: 0,
+    secondary_control_compid: 0,
+  });
+
+  const component = table.getComponent(1, 154);
+  assert.equal(component.gimbalManagers.size, 2);
+  assert.deepEqual(component.gimbalManagers.get(0).status, {
+    timeBootMs: 21,
+    flags: 7,
+    gimbalDeviceId: 0,
+    primaryControlSysid: 17,
+    primaryControlCompid: 18,
+    secondaryControlSysid: 0,
+    secondaryControlCompid: 0,
+  });
+  assert.deepEqual(component.gimbalManagers.get(2).status, {
+    timeBootMs: 20,
+    flags: 9,
+    gimbalDeviceId: 2,
+    primaryControlSysid: 0,
+    primaryControlCompid: 0,
+    secondaryControlSysid: 42,
+    secondaryControlCompid: 43,
+  });
+
+  const snapshot = table.snapshot();
+  assert.deepEqual(snapshot[0].components[0].gimbalManagers, [
+    {
+      gimbalDeviceId: 0,
+      information: {
+        timeBootMs: 10,
+        capFlags: 0,
+        gimbalDeviceId: 0,
+        rollMin: 0,
+        rollMax: 0,
+        pitchMin: 0,
+        pitchMax: 0,
+        yawMin: 0,
+        yawMax: 0,
+      },
+      status: {
+        timeBootMs: 21,
+        flags: 7,
+        gimbalDeviceId: 0,
+        primaryControlSysid: 17,
+        primaryControlCompid: 18,
+        secondaryControlSysid: 0,
+        secondaryControlCompid: 0,
+      },
+    },
+    {
+      gimbalDeviceId: 2,
+      information: {
+        timeBootMs: 11,
+        capFlags: 5,
+        gimbalDeviceId: 2,
+        rollMin: -1,
+        rollMax: 1,
+        pitchMin: -2,
+        pitchMax: 2,
+        yawMin: -3,
+        yawMax: 3,
+      },
+      status: {
+        timeBootMs: 20,
+        flags: 9,
+        gimbalDeviceId: 2,
+        primaryControlSysid: 0,
+        primaryControlCompid: 0,
+        secondaryControlSysid: 42,
+        secondaryControlCompid: 43,
+      },
+    },
+  ]);
+  assert.equal(snapshot[0].components[0].sections.gimbalManagers, 0);
+  assert.doesNotThrow(() => JSON.stringify(snapshot));
+
+  snapshot[0].components[0].gimbalManagers[0].status.flags = 99;
+  snapshot[0].components[0].gimbalManagers[1].information.rollMin = 99;
+  assert.equal(table.getComponent(1, 154).gimbalManagers.get(0).status.flags, 7);
+  assert.equal(table.getComponent(1, 154).gimbalManagers.get(2).information.rollMin, -1);
+});
+
 test('MISSION_CURRENT is tracked and projected with zero values preserved', () => {
   const table = new PeerTable({ now: () => 100 });
   table.update({
