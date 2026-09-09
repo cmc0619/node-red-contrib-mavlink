@@ -5,9 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
-const { loadNodeDefaults } = require('./html-assert');
+const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const htmlPath = path.join(__dirname, '..', '..', 'nodes', 'mavlink-system.html');
+const html = fs.readFileSync(htmlPath, 'utf8');
 
 test('mavlink-system editor registers closed service and operation selectors', () => {
   const defaults = loadNodeDefaults('mavlink-system');
@@ -43,7 +44,6 @@ test('mavlink-system conditionally validates log id, FTP path, and parameter enc
 });
 
 test('mavlink-system help and editor expose each service contract', () => {
-  const html = fs.readFileSync(htmlPath, 'utf8');
   assert.match(html, /data-template-name="mavlink-system"/);
   assert.match(html, /data-help-name="mavlink-system"/);
   assert.match(html, /LOG_DATA/);
@@ -55,4 +55,24 @@ test('mavlink-system help and editor expose each service contract', () => {
   assert.match(html, /paramId, paramType, value/);
   assert.match(html, /no rollback/);
   assert.match(html, /msg\.payload/);
+});
+
+test('mavlink-system companion hides sysid while keeping config compid visible', () => {
+  assert.match(html, /RED\.mavlink\.applyCompanionTargetVisibility\(/);
+  assert.match(html, /hideCompidWhenCompanion:\s*false/);
+  assert.match(html, /targetSystemRow:\s*['"]#row-targetSystem['"]/);
+  assert.match(html, /targetComponentRow:\s*['"]#row-targetComponent['"]/);
+  assert.match(html, /id="row-targetSystem"/);
+  assert.match(html, /id="row-targetComponent"/);
+  assert.match(
+    html,
+    /\$\('#node-input-identity'\)\.on\('change',\s*refreshRows\)/,
+    'identity changes refresh companion target visibility'
+  );
+  assertChangeHandlerContains(
+    html,
+    "$('#node-input-connection')",
+    'refreshRows()',
+    'connection changes refresh companion target visibility'
+  );
 });

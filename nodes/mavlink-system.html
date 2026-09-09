@@ -117,6 +117,13 @@
           $('#row-identity').toggle(
             RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
           );
+          RED.mavlink.applyCompanionTargetVisibility({
+            isBuild: false,
+            identityId: $('#node-input-identity').val() || '',
+            hideCompidWhenCompanion: false,
+            targetSystemRow: '#row-targetSystem',
+            targetComponentRow: '#row-targetComponent',
+          });
         }
 
         function refreshOperations() {
@@ -142,6 +149,7 @@
           refreshRows();
           RED.mavlink.reloadTargetCompId(node);
         });
+        $('#node-input-identity').on('change', refreshRows);
         RED.mavlink.refreshIdentitySelect(node);
         RED.mavlink.reloadTargetCompId(node);
         refreshOperations();
@@ -159,8 +167,8 @@
   <div class="form-row" id="row-log-id"><label for="node-input-logId">Log id</label><input type="number" id="node-input-logId" min="0" max="65535" step="1" placeholder="msg.payload.id"></div>
   <div class="form-row" id="row-path"><label for="node-input-path">Path</label><input type="text" id="node-input-path" placeholder="msg.payload.path or msg.path"></div>
   <div class="form-row" id="row-param-encoding"><label for="node-input-paramEncoding">Parameter encoding</label><select id="node-input-paramEncoding"><option value="auto">Auto</option><option value="bytewise">Bytewise</option><option value="c-cast">C cast</option></select></div>
-  <div class="form-row"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
+  <div class="form-row" id="row-targetSystem"><label for="node-input-targetSystem">Target sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255" placeholder="(profile default)"></div>
+  <div class="form-row" id="row-targetComponent"><label for="node-input-targetComponent">Target compid</label><select id="node-input-targetComponent"></select></div>
   <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Step timeout (ms)</label><input type="number" id="node-input-timeoutMs" min="1" step="1" placeholder="10000"></div>
   <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" min="0" step="1" placeholder="3"></div>
 </script>
