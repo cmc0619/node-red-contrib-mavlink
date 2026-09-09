@@ -85,7 +85,7 @@
       "mavlink-param": "nodes/mavlink-param.js",
       "mavlink-payload": "nodes/mavlink-payload.js",
       "mavlink-state": "nodes/mavlink-state.js",
-      "mavlink-log": "nodes/mavlink-log.js",
+      "mavlink-system": "nodes/mavlink-system.js",
       "mavlink-mission": "nodes/mavlink-mission.js",
       "mavlink-fanout": "nodes/mavlink-fanout.js",
       "mavlink-formation": "nodes/mavlink-formation.js"

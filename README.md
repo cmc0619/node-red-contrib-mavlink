@@ -39,7 +39,7 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-state` | Peer table reads and transitions |
 | `mavlink-health` | Assert an identity's health with an expiring lease; a fault stops its HEARTBEAT |
 | `mavlink-mission` | Upload, download, or clear mission/fence/rally |
-| `mavlink-log` | List onboard logs or download a selected log to a Buffer |
+| `mavlink-system` | Onboard logs, MAVLink FTP files, and parameter backup/restore |
 | `mavlink-fanout` | Fan-out one action across selected vehicles, with optional per-member offsets |
 | `mavlink-formation` | Position a group into a geometric formation around an anchor |
 
@@ -56,16 +56,27 @@ the manager requires ownership, and **Release control** when finished.
 The Command node's **Run Prearm Checks** preset requests the checks. An accepted command
 acknowledgement means they will run, not that they passed or the vehicle is armable.
 
-### Onboard log retrieval
+### Onboard system services
 
-Use **List logs** to obtain log IDs, timestamps, and advertised sizes. Pass a selected
-entry as `msg.payload` to **Download log**, or configure its log ID. Successful downloads
-put the bytes in `msg.payload` and the ID in `msg.logId`, preserving other message fields
-such as `msg.filename` for a downstream File node. The status output reports progress
-and transfer failures. Timeout and retry settings are explicit in the editor.
+Use **mavlink-system** with **Logs → List** to obtain log IDs, timestamps, and advertised
+sizes. Pass a selected PX4 entry as `{id, size}` in `msg.payload` to **Logs → Download**,
+or configure the log ID. Omit `size` for peers whose advertised size is approximate, such
+as ArduPilot; completion then follows a short or zero-count EOF. Successful downloads put
+the bytes in `msg.payload` and the ID in `msg.logId`, preserving fields such as
+`msg.filename` for a downstream File node. A cancelled log transfer sends
+`LOG_REQUEST_END`.
 
-This node retrieves stored logs; it does not decode log contents or subscribe to live
-logging streams. Downloaded bytes are held in memory until the transfer completes.
+**Files** uses MAVLink FTP: list and download read `msg.payload.path` or the configured
+Path; upload takes a Buffer from `msg.payload` and reads `msg.path` or the configured Path.
+The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP `CREATE_FILE` may
+truncate an existing remote file.
+
+**Parameters → Backup** returns parameter-only `{paramId, paramType, value}` records that
+can travel through JSON or File nodes and be wired directly to **Parameters → Restore**.
+Non-finite values use string representations, and Restore reports its confirmed prefix on
+partial failure without rolling back earlier writes. All services preserve input metadata
+on output 0; progress and terminal records use output 1, with large result data omitted
+from status records. Timeout and retry settings are explicit in the editor.
 
 ## Examples
 
