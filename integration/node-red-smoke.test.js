@@ -26,6 +26,7 @@ const nodeIds = [
   'node-param',
   'node-payload',
   'node-state',
+  'node-log',
   'node-mission',
   'node-fanout',
   'node-health',
@@ -154,6 +155,15 @@ function representativeFlow() {
       targetSystem: '1',
       targetComponent: '1',
       wires: [[]]
+    }),
+    editorShaped('mavlink-log', {
+      id: 'node-log',
+      z: 'flow',
+      connection: 'connection',
+      operation: 'list',
+      targetSystem: '1',
+      targetComponent: '1',
+      wires: [[], []]
     }),
     editorShaped('mavlink-mission', {
       id: 'node-mission',

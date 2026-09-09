@@ -39,8 +39,20 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-state` | Peer table reads and transitions |
 | `mavlink-health` | Assert an identity's health with an expiring lease; a fault stops its HEARTBEAT |
 | `mavlink-mission` | Upload, download, or clear mission/fence/rally |
+| `mavlink-log` | List onboard logs or download a selected log to a Buffer |
 | `mavlink-fanout` | Fan-out one action across selected vehicles, with optional per-member offsets |
 | `mavlink-formation` | Position a group into a geometric formation around an anchor |
+
+### Onboard log retrieval
+
+Use **List logs** to obtain log IDs, timestamps, and advertised sizes. Pass a selected
+entry as `msg.payload` to **Download log**, or configure its log ID. Successful downloads
+put the bytes in `msg.payload` and the ID in `msg.logId`, preserving other message fields
+such as `msg.filename` for a downstream File node. The status output reports progress
+and transfer failures. Timeout and retry settings are explicit in the editor.
+
+This node retrieves stored logs; it does not decode log contents or subscribe to live
+logging streams. Downloaded bytes are held in memory until the transfer completes.
 
 ## Examples
 
