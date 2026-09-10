@@ -277,7 +277,7 @@ test('cleanup failure does not replace the primary transfer failure', async () =
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.phase, 'ack');
   assert.equal(outcome.protocol.errorCode, NAK_ERROR.FILENOTFOUND);
-  assert.match(outcome.cleanupError, /invalid session/);
+  assert.match(outcome.cleanupError, /INVALIDSESSION/);
 });
 
 test('upload writes bounded chunks and reports bytes after cleanup', async () => {
