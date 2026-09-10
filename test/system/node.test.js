@@ -322,13 +322,47 @@ test('the backup bundle asks each plan section for its own type and keeps nonfin
   const Node = loadNode(conn);
   const node = new Node({ ...BASE, service: 'backup', operation: 'backup', path: '/config', targetComponent: 191 });
   const result = await runInput(node, { payload: {} });
-  assert.deepEqual(planTypes, [0, 1, 2], 'mission, fence and rally each ask for their own plan type');
+  assert.deepEqual(planTypes, [1, 2], 'fence and rally each ask for their own plan type');
+  assert.ok(!planTypes.includes(0), 'the bundle does not carry the mission');
   const bundle = JSON.parse(JSON.stringify(result.outputs.at(-1)[0].payload));
-  assert.equal(bundle.mission[0].param1, 'NaN');
-  assert.equal(bundle.mission[0].param2, '-0');
+  assert.equal(bundle.mission, undefined, 'the mission is the Mission node\'s, not the bundle\'s');
+  assert.equal(bundle.fence[0].param1, 'NaN');
+  assert.equal(bundle.fence[0].param2, '-0');
   assert.equal(bundle.fence[0].z, 'NaN');
   assert.deepEqual(bundle.files, { root: '/config', directories: [], files: [] });
   assert.equal(result.outputs.at(-1)[1].bundle, undefined, 'the bundle stays off the status output');
+});
+
+test('a backup keeps the sections that transferred when one fails', async () => {
+  const conn = new StubConnection();
+  conn._sourceIds = { sysid: 255, compid: 190 };
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 191 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'PARAM_REQUEST_LIST') {
+      deliver(paramValue({ paramId: 'A', paramType: 9, paramIndex: 0, paramCount: 1, value: 1.5, compid: 191 }));
+      return;
+    }
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', sysid: 42, compid: 191,
+        fields: { count: 0, mission_type: message.fields.mission_type, target_system: 255, target_component: 190 } });
+      return;
+    }
+    if (message.name !== 'FILE_TRANSFER_PROTOCOL') return;
+    // No card in the slot: the files section cannot list its root.
+    deliver(ftpReply(message, OPCODE.NAK, Buffer.from([NAK_ERROR.FILENOTFOUND])));
+  });
+  const Node = loadNode(conn);
+  const node = new Node({ ...BASE, service: 'backup', operation: 'backup', path: '/config', targetComponent: 191 });
+  const result = await runInput(node, { payload: {} });
+
+  const [message, record] = result.outputs.at(-1);
+  // The parameters, fence and rally captures cannot be retaken from a vehicle
+  // that has since been reflashed, so the failed files section does not throw
+  // them away — and the run says 'partial', never 'succeeded' (§9).
+  assert.equal(record.result, 'partial');
+  assert.deepEqual(Object.keys(message.payload).sort(), ['fence', 'parameters', 'rally']);
+  assert.equal(message.payload.parameters[0].paramId, 'A');
+  assert.ok(record.failed.files.reason, 'the outcome names why the files section did not make it');
 });
 
 test('a restore of one section runs that section alone, on its own band', async () => {
@@ -352,9 +386,12 @@ test('a restore of one section runs that section alone, on its own band', async 
     }));
   });
   const Node = loadNode(conn);
-  const node = new Node({ ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'bytewise' });
+  const node = new Node({
+    ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'bytewise', sections: ['parameters'],
+  });
   const result = await runInput(node, { payload: { parameters: params }, topic: 'restore' });
-  assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { parameters: 2 } });
+  assert.deepEqual(result.outputs.at(-1)[0].payload,
+    { result: 'succeeded', sections: { parameters: 2 }, failed: undefined });
   assert.equal(result.outputs.at(-1)[0].topic, 'restore');
   assert.deepEqual([...bands], [4], 'a restore is a transfer, so it rides the bulk band');
   assert.equal(conn.sentNames().filter((name) => name === 'MISSION_COUNT').length, 0, 'no plan section runs');
@@ -374,28 +411,67 @@ test('a segmented restore uses the plan type its section names', async () => {
     }
   });
   const Node = loadNode(conn);
-  const node = new Node({ ...BASE, service: 'backup', operation: 'restore' });
+  const node = new Node({ ...BASE, service: 'backup', operation: 'restore', sections: ['rally'] });
   const result = await runInput(node, {
     payload: { rally: [{ frame: 3, command: 5100, current: 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: 1, y: 2, z: 3 }] },
   });
   assert.deepEqual(planTypes, [2], 'rally restores under the rally plan type');
-  assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { rally: 1 } });
+  assert.deepEqual(result.outputs.at(-1)[0].payload,
+    { result: 'succeeded', sections: { rally: 1 }, failed: undefined });
 });
 
-test('a second bundle on the same target reports the lock', async (t) => {
+test('a ticked section the bundle does not carry fails alone', async () => {
+  const conn = new StubConnection();
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      deliver({ name: 'MISSION_REQUEST_INT', sysid: 42, compid: 1, fields: { seq: 0, mission_type: message.fields.mission_type } });
+      return;
+    }
+    if (message.name === 'MISSION_ITEM_INT') {
+      deliver({ name: 'MISSION_ACK', sysid: 42, compid: 1, fields: { type: 0, mission_type: message.fields.mission_type } });
+    }
+  });
+  const Node = loadNode(conn);
+  // Parameters is ticked but the bundle has only a fence. The editor cannot
+  // grey the box — the bundle does not exist until this message arrives — so
+  // the section craters on its own and the fence still goes up.
+  const node = new Node({ ...BASE, service: 'backup', operation: 'restore', sections: ['parameters', 'fence'] });
+  const result = await runInput(node, {
+    payload: { fence: [{ frame: 3, command: 5001, current: 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: 1, y: 2, z: 3 }] },
+  });
+
+  const [message, record] = result.outputs.at(-1);
+  assert.equal(record.result, 'partial');
+  assert.deepEqual(message.payload.sections, { fence: 1 }, 'the fence the bundle did carry still restored');
+  assert.equal(message.payload.result, 'partial',
+    'output 0 says partial: a half-written restore must not read complete');
+  assert.ok(message.payload.failed.parameters.reason,
+    'output 0 names the section that did not make it, not just the status record');
+  assert.ok(record.failed.parameters.reason, 'the absent section is named with a reason');
+});
+
+test('a second bundle names the locked section and still tries the rest', async (t) => {
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
   conn.onSend(() => {});
   const Node = loadNode(conn);
-  const first = new Node({ ...BASE, service: 'backup', operation: 'backup', id: 'first-bundle' });
+  // Long enough that the holder does not retry its own request while the
+  // second bundle works through the sections it is not holding.
+  const first = new Node({ ...BASE, service: 'backup', operation: 'backup', id: 'first-bundle', timeoutMs: 5000 });
   const second = new Node({ ...BASE, service: 'backup', operation: 'backup', id: 'second-bundle' });
   t.after(() => first.emit('close', () => {}));
 
   first.emit('input', { payload: {} }, () => {}, () => {});
   await new Promise((resolve) => setImmediate(resolve));
   const result = await runInput(second, { payload: {} });
-  assert.equal(result.outputs.at(-1)[1].phase, 'locked');
+  // The lock is the parameters section's alone. It is reported against that
+  // section rather than ending the bundle, so the sections the other run is
+  // not holding still get their turn.
+  const record = result.outputs.at(-1)[1];
+  assert.equal(record.failed.parameters.phase, 'locked');
+  assert.match(record.failed.parameters.reason, /already in progress/);
   assert.equal(conn.sentNames().filter((name) => name === 'PARAM_REQUEST_LIST').length, 1);
+  assert.ok(conn.sentNames().includes('MISSION_REQUEST_LIST'), 'the fence section still ran');
 });
 
 test('files backup and restore use the FTP bundle contract and preserve metadata', async () => {

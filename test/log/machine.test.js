@@ -413,11 +413,19 @@ test('known empty log completes without a data request', async () => {
   assert.deepEqual(stub.sentNames(), ['LOG_REQUEST_END']);
 });
 
-test('observed EOF remains authoritative when a requested byte boundary is longer', async () => {
+test('a short read under a requested byte boundary does not end the log, an EOF does', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
   const done = new LogDownload(machineOptions(stub, clock, { id: 7, size: 180 })).start();
+  // Three bytes is a short read, not the end of a log the caller sized at 180.
+  // Settling on it would report a truncated log as a complete one; only the
+  // peer's own zero-count EOF outranks the requested boundary.
   stub.inject(data(7, 0, 'abc'));
+  assert.ok(
+    !stub.sentNames().includes('LOG_REQUEST_END'),
+    'a short read must not settle a download whose exact length is known'
+  );
+  stub.inject(data(7, 3, Buffer.alloc(0)));
   clock.flush();
   const outcome = await done;
   assert.equal(outcome.result, 'succeeded');

@@ -42,6 +42,10 @@
       return true;
     }
 
+    // The bundle's sections, in transfer order. Restore may narrow to a
+    // subset; backup always covers all of them.
+    const RESTORE_SECTIONS = ['parameters', 'fence', 'rally', 'files'];
+
     const systemDefaults = {
       name: { value: '' },
       connection: RED.mavlink.connectionDefault(),
@@ -66,6 +70,17 @@
         },
       },
       path: { value: '', validate: pathValidator },
+      sections: {
+        value: [...RESTORE_SECTIONS],
+        validate(v) {
+          const service = RED.mavlink.liveOr(this, '#node-input-service', this.service, 'logs');
+          const operation = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'list');
+          if (service !== 'backup' || operation !== 'restore') return true;
+          // A restore that selects nothing runs no engine. The ring is the
+          // only place that can say so before deploy.
+          return Array.isArray(v) && v.length > 0;
+        },
+      },
       paramEncoding: {
         value: 'auto',
         validate(v, opt) {
@@ -103,6 +118,7 @@
           $('#row-log-id').toggle(service === 'logs' && operation === 'download');
           $('#row-path').toggle(service === 'files' || service === 'backup');
           $('#row-param-encoding').toggle(service === 'backup');
+          $('#row-sections').toggle(service === 'backup' && operation === 'restore');
           $('#row-identity').toggle(
             RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
           );
@@ -143,6 +159,11 @@
         RED.mavlink.reloadTargetCompId(node);
         refreshOperations();
       },
+      oneditsave() {
+        // jQuery answers null, not [], for a multiple select with nothing
+        // picked. The runtime reads this array as it is saved.
+        this.sections = $('#node-input-sections').val() || [];
+      },
     });
   }());
 </script>
@@ -155,6 +176,15 @@
   <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"></select></div>
   <div class="form-row" id="row-log-id"><label for="node-input-logId">Log id</label><input type="number" id="node-input-logId" min="0" max="65535" step="1" placeholder="msg.payload.id"></div>
   <div class="form-row" id="row-path"><label for="node-input-path">Path</label><input type="text" id="node-input-path" placeholder="msg.payload.path or msg.path"></div>
+  <div class="form-row" id="row-sections">
+    <label for="node-input-sections">Restore</label>
+    <select id="node-input-sections" multiple size="4" style="width:70%;height:auto">
+      <option value="parameters">Parameters</option>
+      <option value="fence">Geofence</option>
+      <option value="rally">Rally points</option>
+      <option value="files">Files</option>
+    </select>
+  </div>
   <details id="row-param-encoding">
     <summary>Advanced options</summary>
     <div class="form-row"><label for="node-input-paramEncoding">Parameter encoding</label><select id="node-input-paramEncoding"><option value="auto">Auto</option><option value="bytewise">Bytewise</option><option value="c-cast">C cast</option></select></div>
@@ -170,6 +200,6 @@
   <p><b>Logs</b> lists onboard logs or downloads one selected log with the MAVLink log transfer protocol. The list returns the complete <code>LOG_ENTRY</code> collection; each advertised <code>size</code> is informational.</p>
   <p><b>Download log</b> selects the ID from the Log id field or <code>msg.payload.id</code>. Output 0 is a Buffer in <code>msg.payload</code> with the selected ID in <code>msg.logId</code>; connect a Node-RED File node when the bytes should be saved. The transfer follows <code>LOG_DATA</code> offsets, retries only missing ranges, and ends on a short data packet or zero-count EOF. Supply <code>msg.payload.size</code> as an exact byte length to complete without an EOF packet; all bytes through that boundary must arrive. For PX4, list first and pass the selected entry as <code>{id, size}</code>. Omit <code>size</code> when the advertised length is approximate (for example ArduPilot); completion then follows the peer's short or zero-count EOF. Cancellation sends <code>LOG_REQUEST_END</code>.</p>
   <p><b>Files</b> uses MAVLink FTP. List and download read the path from <code>msg.payload.path</code> or the configured Path. Upload takes a Buffer directly from <code>msg.payload</code> and reads its path from <code>msg.path</code> or the configured Path. The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP <code>CREATE_FILE</code> may truncate an existing remote file.</p>
-  <p><b>Backup/Restore</b> runs the existing parameters, mission, fence, rally, and FTP engines sequentially. Backup returns <code>{parameters, mission, fence, rally, files}</code>; the FTP portion is <code>{root, directories, files:[{path, data}]}</code> with file data base64 encoded. The root comes from the configured Path or <code>msg.path</code>. It stops at the first failed section and identifies that section; success is reported only after every section completes. Restore consumes this bundle through the same engines sequentially and has no rollback for earlier sections. It covers whichever sections the object actually carries, so passing <code>{mission}</code> alone restores only the mission and a bundle whose backup lost a section restores the rest. Parameter encoding is available under Advanced options. JSON and File nodes can save and restore the bundle.</p>
+  <p><b>Backup/Restore</b> runs the existing parameters, fence, rally, and FTP engines sequentially. A backup that captures everything returns <code>{parameters, fence, rally, files}</code>; a partial one carries only the sections that made it; the FTP portion is <code>{root, directories, files:[{path, data}]}</code> with file data base64 encoded. The root comes from the configured Path or <code>msg.path</code>. The mission is not included: it is the task loaded for one flight rather than vehicle configuration, and the Mission node transfers it. A section that fails does not end the run &mdash; the remaining sections still transfer, the result is <code>partial</code> rather than <code>succeeded</code>, and <code>failed</code> names each section that did not make it with its reason. Cancelling does stop the run. Restore consumes this bundle through the same engines sequentially and has no rollback for earlier sections. Restore returns <code>{result, sections, failed}</code>, where <code>result</code> is <code>succeeded</code> or <code>partial</code> and <code>sections</code> counts what each engine wrote. It covers the sections selected on the node, so a bundle can be replayed whole or one section at a time &mdash; a parameters restore that failed can be retried on its own without rewriting the geofence. The list cannot be narrowed to match a particular bundle, because the bundle only exists once a message arrives; a selected section the bundle does not carry fails as that section and the others still run. Parameter encoding is available under Advanced options. JSON and File nodes can save and restore the bundle.</p>
   <p>All services use the selected Connection, Identity, target sysid/compid, timeout, and retry settings. Set <code>msg.payload === false</code> to suppress an operation. A node close cancels its active transfer. Status records omit large list, download, backup, and parameter payloads.</p>
 </script>
