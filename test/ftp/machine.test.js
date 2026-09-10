@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createMachine } = require('../../lib/ftp');
+const { FtpMachine } = require('../../lib/ftp');
 const { decodePayload, NAK_ERROR } = require('../../lib/ftp/items');
 const { StubConnection, FakeTimers, fakeDeps } = require('../mission/stubs/connection');
 
@@ -54,7 +54,7 @@ function nack(message, errorCode, options = {}) {
   return reply(message, 129, { ...options, data: Buffer.from([errorCode]), size: 1 });
 }
 
-test('FTP exports the operation factory and packs protocol requests', async () => {
+test('FTP exports the machine and packs protocol requests', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
   stub.onSend((message, deliver) => {
@@ -64,7 +64,7 @@ test('FTP exports the operation factory and packs protocol requests', async () =
     deliver(nack(message, 6));
   });
 
-  const machine = createMachine('list', machineOptions(stub, clock, { path: '/' }));
+  const machine = new FtpMachine('list', machineOptions(stub, clock, { path: '/' }));
   assert.equal(typeof machine.start, 'function');
   assert.equal(typeof machine.cancel, 'function');
   const outcome = await machine.start();
@@ -75,7 +75,7 @@ test('FTP exports the operation factory and packs protocol requests', async () =
   assert.equal(stub.subscriberCount(), 0);
 
   const firstSequence = decodePayload(stub.sent[0].message.fields.payload).seq;
-  const second = createMachine('list', machineOptions(stub, clock, { path: '/' }));
+  const second = new FtpMachine('list', machineOptions(stub, clock, { path: '/' }));
   assert.equal((await second.start()).result, 'succeeded');
   const secondSequence = decodePayload(stub.sent[1].message.fields.payload).seq;
   assert.equal(secondSequence, (firstSequence + 2) & 0xffff);
@@ -84,7 +84,7 @@ test('FTP exports the operation factory and packs protocol requests', async () =
 test('unknown FTP operations fail through the existing start outcome', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
-  const outcome = await createMachine('unknown', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('unknown', machineOptions(stub, clock, {
     path: '/ignored',
   })).start();
 
@@ -110,7 +110,7 @@ test('list paginates by wire entry index and skips unsupported directory records
     }
   });
 
-  const outcome = await createMachine('list', machineOptions(stub, clock, { path: '/logs' })).start();
+  const outcome = await new FtpMachine('list', machineOptions(stub, clock, { path: '/logs' })).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.entries, [
@@ -146,7 +146,7 @@ test('download reads sequential chunks, accepts EOF, and terminates the session'
     }
   });
 
-  const outcome = await createMachine('download', machineOptions(stub, clock, { path: '/log.bin' })).start();
+  const outcome = await new FtpMachine('download', machineOptions(stub, clock, { path: '/log.bin' })).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.data, Buffer.from('abcde'));
@@ -182,7 +182,7 @@ test('download accepts authoritative EOF after the file shrinks', async () => {
     }
   });
 
-  const outcome = await createMachine('download', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('download', machineOptions(stub, clock, {
     path: '/shrunk.bin',
   })).start();
 
@@ -211,7 +211,7 @@ test('download reports termination timeout instead of false success when cleanup
     }
   });
 
-  const done = createMachine('download', machineOptions(stub, clock, {
+  const done = new FtpMachine('download', machineOptions(stub, clock, {
     path: '/dropped-termination', maxRetries: 1,
   })).start();
   clock.flush();
@@ -243,7 +243,7 @@ test('download reports a termination NAK as cleanup failure', async () => {
     }
   });
 
-  const outcome = await createMachine('download', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('download', machineOptions(stub, clock, {
     path: '/naked-termination',
   })).start();
 
@@ -270,7 +270,7 @@ test('cleanup failure does not replace the primary transfer failure', async () =
     }
   });
 
-  const outcome = await createMachine('download', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('download', machineOptions(stub, clock, {
     path: '/primary-failure',
   })).start();
 
@@ -304,7 +304,7 @@ test('upload writes bounded chunks and reports bytes after cleanup', async () =>
     }
   });
 
-  const outcome = await createMachine('upload', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('upload', machineOptions(stub, clock, {
     path: '/upload.bin',
     data,
   })).start();
@@ -327,7 +327,7 @@ test('upload accepts the specification zero-sized write acknowledgement', async 
     if (request.opcode === 1) deliver(reply(message, 128, { session: 0 }));
   });
 
-  const outcome = await createMachine('upload', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('upload', machineOptions(stub, clock, {
     path: '/spec.bin', data: Buffer.from('spec'),
   })).start();
 
@@ -366,7 +366,7 @@ test('retries preserve sequence and duplicate or misaddressed replies do not adv
     }
   });
 
-  const done = createMachine('download', machineOptions(stub, clock, {
+  const done = new FtpMachine('download', machineOptions(stub, clock, {
     path: '/short',
     maxRetries: 1,
   })).start();
@@ -392,7 +392,7 @@ test('cancel, NAK, timeout, and send errors all settle with cleanup and no live 
       deliver(reply(message, 128, { session: 4, size: 4, data: Buffer.from([9, 0, 0, 0]) }));
     }
   });
-  const cancelMachine = createMachine('download', machineOptions(cancelStub, cancelClock, { path: '/cancel' }));
+  const cancelMachine = new FtpMachine('download', machineOptions(cancelStub, cancelClock, { path: '/cancel' }));
   const cancelled = cancelMachine.start();
   cancelMachine.cancel();
   const cancelOutcome = await cancelled;
@@ -407,7 +407,7 @@ test('cancel, NAK, timeout, and send errors all settle with cleanup and no live 
     const request = decodePayload(message.fields.payload);
     if (request.opcode === 6) deliver(nack(message, 10));
   });
-  const nakOutcome = await createMachine('upload', machineOptions(nakStub, nakClock, {
+  const nakOutcome = await new FtpMachine('upload', machineOptions(nakStub, nakClock, {
     path: '/missing', data: Buffer.from('x'),
   })).start();
   assert.equal(nakOutcome.result, 'failed');
@@ -417,7 +417,7 @@ test('cancel, NAK, timeout, and send errors all settle with cleanup and no live 
   const timeoutStub = new StubConnection();
   const timeoutClock = new FakeTimers();
   timeoutStub.onSend(() => {});
-  const timedOut = createMachine('list', machineOptions(timeoutStub, timeoutClock, {
+  const timedOut = new FtpMachine('list', machineOptions(timeoutStub, timeoutClock, {
     path: '/', maxRetries: 0,
   })).start();
   timeoutClock.flush();
@@ -428,7 +428,7 @@ test('cancel, NAK, timeout, and send errors all settle with cleanup and no live 
 
   const sendErrorStub = new StubConnection();
   const sendErrorClock = new FakeTimers();
-  const sendErrorOutcome = await createMachine('list', machineOptions(sendErrorStub, sendErrorClock, {
+  const sendErrorOutcome = await new FtpMachine('list', machineOptions(sendErrorStub, sendErrorClock, {
     path: '/', send: () => { throw new Error('link down'); },
   })).start();
   assert.equal(sendErrorOutcome.result, 'failed');
@@ -446,7 +446,7 @@ test('create-directory sends the protocol operation and reports the path', async
     deliver(reply(message, 128));
   });
 
-  const outcome = await createMachine('create-directory', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('create-directory', machineOptions(stub, clock, {
     path: '/restore/folder',
   })).start();
 
@@ -501,7 +501,7 @@ test('backup recursively lists a selected directory, skips dot traversal records
     if (request.opcode === 1) deliver(reply(message, 128, { session: request.session }));
   });
 
-  const outcome = await createMachine('backup', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('backup', machineOptions(stub, clock, {
     path: '/config',
   })).start();
 
@@ -548,7 +548,7 @@ test('restore creates recorded directories and uploads base64 file data below th
     }
   });
 
-  const outcome = await createMachine('restore', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('restore', machineOptions(stub, clock, {
     path: '/restore',
     entries: bundle,
   })).start();
@@ -569,7 +569,7 @@ test('backup and restore surface child failures with partial progress', async ()
   const backupStub = new StubConnection();
   const backupClock = new FakeTimers();
   backupStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILENOTFOUND)));
-  const backup = await createMachine('backup', machineOptions(backupStub, backupClock, {
+  const backup = await new FtpMachine('backup', machineOptions(backupStub, backupClock, {
     path: '/missing',
   })).start();
   assert.equal(backup.result, 'failed');
@@ -578,7 +578,7 @@ test('backup and restore surface child failures with partial progress', async ()
   const restoreStub = new StubConnection();
   const restoreClock = new FakeTimers();
   restoreStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILEPROTECTED)));
-  const restore = await createMachine('restore', machineOptions(restoreStub, restoreClock, {
+  const restore = await new FtpMachine('restore', machineOptions(restoreStub, restoreClock, {
     path: '/restore',
     entries: { directories: ['folder'], files: [{ path: 'file.bin', data: 'eA==' }] },
   })).start();
@@ -608,7 +608,7 @@ test('restore rejects a recorded directory whose existing path is a file', async
     }
   });
 
-  const outcome = await createMachine('restore', machineOptions(stub, clock, {
+  const outcome = await new FtpMachine('restore', machineOptions(stub, clock, {
     path: '/restore',
     entries: { directories: ['collision'], files: [] },
   })).start();
@@ -624,7 +624,7 @@ test('cancelling a composite transfer cancels its active FTP child', async () =>
   const stub = new StubConnection();
   const clock = new FakeTimers();
   stub.onSend(() => {});
-  const machine = createMachine('backup', machineOptions(stub, clock, {
+  const machine = new FtpMachine('backup', machineOptions(stub, clock, {
     path: '/config', maxRetries: 0,
   }));
   const run = machine.start();
@@ -653,7 +653,7 @@ test('cancelling after a child settles does not start the next restore file', as
       deliver(reply(message, 128, { session: request.session }));
     }
   });
-  const machine = createMachine('restore', machineOptions(stub, clock, {
+  const machine = new FtpMachine('restore', machineOptions(stub, clock, {
     path: '/restore',
     entries: {
       directories: [],
