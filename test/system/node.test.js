@@ -220,9 +220,9 @@ test('files list uses the configured source identity, path override, and bulk ba
   conn.onSend((message, deliver, options) => {
     assert.equal(options.band, 4);
     const request = decodePayload(message.fields.payload);
-    if (request.opcode === OPCODE.LIST_DIRECTORY && request.offset === 0) {
+    if (request.opcode === OPCODE.LISTDIRECTORY && request.offset === 0) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.from('Ffirst.bin\t3\0')));
-    } else if (request.opcode === OPCODE.LIST_DIRECTORY && request.offset === 1) {
+    } else if (request.opcode === OPCODE.LISTDIRECTORY && request.offset === 1) {
       deliver(ftpReply(message, OPCODE.NAK, Buffer.from([NAK_ERROR.EOF])));
     }
   });
@@ -244,13 +244,13 @@ test('files download returns a Buffer and upload accepts msg.path plus a Buffer 
   downloadConn._sourceIds = { sysid: 255, compid: 190 };
   downloadConn.onSend((message, deliver) => {
     const request = decodePayload(message.fields.payload);
-    if (request.opcode === OPCODE.OPEN_FILE_RO) {
+    if (request.opcode === OPCODE.OPENFILERO) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.from([3, 0, 0, 0]), { session: 5 }));
-    } else if (request.opcode === OPCODE.READ_FILE && request.offset === 0) {
+    } else if (request.opcode === OPCODE.READFILE && request.offset === 0) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.from('abc'), { session: 5 }));
-    } else if (request.opcode === OPCODE.READ_FILE && request.offset === 3) {
+    } else if (request.opcode === OPCODE.READFILE && request.offset === 3) {
       deliver(ftpReply(message, OPCODE.NAK, Buffer.from([NAK_ERROR.EOF]), { session: 5 }));
-    } else if (request.opcode === OPCODE.TERMINATE_SESSION) {
+    } else if (request.opcode === OPCODE.TERMINATESESSION) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 5 }));
     }
   });
@@ -265,11 +265,11 @@ test('files download returns a Buffer and upload accepts msg.path plus a Buffer 
   uploadConn.onSend((message, deliver, options) => {
     assert.equal(options.band, 4);
     const request = decodePayload(message.fields.payload);
-    if (request.opcode === OPCODE.CREATE_FILE) {
+    if (request.opcode === OPCODE.CREATEFILE) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 6 }));
-    } else if (request.opcode === OPCODE.WRITE_FILE) {
+    } else if (request.opcode === OPCODE.WRITEFILE) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 6 }));
-    } else if (request.opcode === OPCODE.TERMINATE_SESSION) {
+    } else if (request.opcode === OPCODE.TERMINATESESSION) {
       deliver(ftpReply(message, OPCODE.ACK, Buffer.alloc(0), { session: 6 }));
     }
   });
@@ -409,7 +409,7 @@ test('files backup and restore use the FTP bundle contract and preserve metadata
   backupConn._sourceIds = { sysid: 255, compid: 190 };
   backupConn.onSend((message, deliver) => {
     const request = decodePayload(message.fields.payload);
-    if (request.opcode === OPCODE.LIST_DIRECTORY && request.offset === 0) {
+    if (request.opcode === OPCODE.LISTDIRECTORY && request.offset === 0) {
       deliver(ftpReply(message, OPCODE.NAK, Buffer.from([NAK_ERROR.EOF])));
     }
   });
@@ -423,7 +423,7 @@ test('files backup and restore use the FTP bundle contract and preserve metadata
   restoreConn._sourceIds = { sysid: 255, compid: 190 };
   restoreConn.onSend((message, deliver) => {
     const request = decodePayload(message.fields.payload);
-    if (request.opcode === OPCODE.CREATE_DIRECTORY) {
+    if (request.opcode === OPCODE.CREATEDIRECTORY) {
       deliver(ftpReply(message, OPCODE.ACK));
     }
   });

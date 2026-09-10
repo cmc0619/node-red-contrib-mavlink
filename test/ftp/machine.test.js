@@ -81,6 +81,18 @@ test('FTP exports the operation factory and packs protocol requests', async () =
   assert.equal(secondSequence, (firstSequence + 2) & 0xffff);
 });
 
+test('unknown FTP operations fail through the existing start outcome', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const outcome = await createMachine('unknown', machineOptions(stub, clock, {
+    path: '/ignored',
+  })).start();
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'send');
+  assert.equal(stub.subscriberCount(), 0);
+  assert.equal(clock.pending(), 0);
+});
 test('list paginates by wire entry index and skips unsupported directory records', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
@@ -227,7 +239,7 @@ test('download reports a termination NAK as cleanup failure', async () => {
     } else if (request.opcode === 5 && request.offset === 4) {
       deliver(nack(message, NAK_ERROR.EOF, { session: 10 }));
     } else if (request.opcode === 1) {
-      deliver(nack(message, NAK_ERROR.INVALID_SESSION, { session: 10 }));
+      deliver(nack(message, NAK_ERROR.INVALIDSESSION, { session: 10 }));
     }
   });
 
@@ -237,7 +249,7 @@ test('download reports a termination NAK as cleanup failure', async () => {
 
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.phase, 'cleanup');
-  assert.equal(outcome.protocol.errorCode, NAK_ERROR.INVALID_SESSION);
+  assert.equal(outcome.protocol.errorCode, NAK_ERROR.INVALIDSESSION);
 });
 
 test('cleanup failure does not replace the primary transfer failure', async () => {
@@ -252,9 +264,9 @@ test('cleanup failure does not replace the primary transfer failure', async () =
         data: Buffer.from([4, 0, 0, 0]),
       }));
     } else if (request.opcode === 5) {
-      deliver(nack(message, NAK_ERROR.FILE_NOT_FOUND, { session: 11 }));
+      deliver(nack(message, NAK_ERROR.FILENOTFOUND, { session: 11 }));
     } else if (request.opcode === 1) {
-      deliver(nack(message, NAK_ERROR.INVALID_SESSION, { session: 11 }));
+      deliver(nack(message, NAK_ERROR.INVALIDSESSION, { session: 11 }));
     }
   });
 
@@ -264,7 +276,7 @@ test('cleanup failure does not replace the primary transfer failure', async () =
 
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.phase, 'ack');
-  assert.equal(outcome.protocol.errorCode, NAK_ERROR.FILE_NOT_FOUND);
+  assert.equal(outcome.protocol.errorCode, NAK_ERROR.FILENOTFOUND);
   assert.match(outcome.cleanupError, /invalid session/);
 });
 
@@ -522,7 +534,7 @@ test('restore creates recorded directories and uploads base64 file data below th
     const request = decodePayload(message.fields.payload);
     if (request.opcode === 9) {
       assert.ok(['/restore', '/restore/folder'].includes(request.data.toString()));
-      deliver(nack(message, NAK_ERROR.FILE_EXISTS));
+      deliver(nack(message, NAK_ERROR.FILEEXISTS));
     } else if (request.opcode === 3) {
       deliver(nack(message, NAK_ERROR.EOF));
     } else if (request.opcode === 6) {
@@ -556,16 +568,16 @@ test('restore creates recorded directories and uploads base64 file data below th
 test('backup and restore surface child failures with partial progress', async () => {
   const backupStub = new StubConnection();
   const backupClock = new FakeTimers();
-  backupStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILE_NOT_FOUND)));
+  backupStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILENOTFOUND)));
   const backup = await createMachine(OPERATION.BACKUP, machineOptions(backupStub, backupClock, {
     path: '/missing',
   })).start();
   assert.equal(backup.result, 'failed');
-  assert.equal(backup.protocol.errorCode, NAK_ERROR.FILE_NOT_FOUND);
+  assert.equal(backup.protocol.errorCode, NAK_ERROR.FILENOTFOUND);
 
   const restoreStub = new StubConnection();
   const restoreClock = new FakeTimers();
-  restoreStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILE_PROTECTED)));
+  restoreStub.onSend((message, deliver) => deliver(nack(message, NAK_ERROR.FILEPROTECTED)));
   const restore = await createMachine(OPERATION.RESTORE, machineOptions(restoreStub, restoreClock, {
     path: '/restore',
     entries: { directories: ['folder'], files: [{ path: 'file.bin', data: 'eA==' }] },
@@ -573,7 +585,7 @@ test('backup and restore surface child failures with partial progress', async ()
   assert.equal(restore.result, 'failed');
   assert.equal(restore.restoredDirectories, 0);
   assert.equal(restore.restoredFiles, 0);
-  assert.equal(restore.protocol.errorCode, NAK_ERROR.FILE_PROTECTED);
+  assert.equal(restore.protocol.errorCode, NAK_ERROR.FILEPROTECTED);
   assert.equal(restoreStub.sent.length, 1);
 });
 
@@ -584,7 +596,7 @@ test('restore rejects a recorded directory whose existing path is a file', async
     const request = decodePayload(message.fields.payload);
     const path = request.data.toString();
     if (request.opcode === 9) {
-      deliver(nack(message, NAK_ERROR.FILE_EXISTS));
+      deliver(nack(message, NAK_ERROR.FILEEXISTS));
     } else if (request.opcode === 3 && path === '/restore') {
       if (request.offset === 0) {
         deliver(reply(message, 128, { data: Buffer.from('Fcollision\t1\0') }));
@@ -592,7 +604,7 @@ test('restore rejects a recorded directory whose existing path is a file', async
         deliver(nack(message, NAK_ERROR.EOF));
       }
     } else if (request.opcode === 3 && path === '/restore/collision') {
-      deliver(nack(message, NAK_ERROR.FILE_NOT_FOUND));
+      deliver(nack(message, NAK_ERROR.FILENOTFOUND));
     }
   });
 
@@ -603,7 +615,7 @@ test('restore rejects a recorded directory whose existing path is a file', async
 
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.restoredDirectories, 0);
-  assert.equal(outcome.protocol.errorCode, NAK_ERROR.FILE_NOT_FOUND);
+  assert.equal(outcome.protocol.errorCode, NAK_ERROR.FILENOTFOUND);
   assert.equal(stub.sent.map(({ message }) => decodePayload(message.fields.payload))
     .some((request) => request.opcode === 6), false);
 });
