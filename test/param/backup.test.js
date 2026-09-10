@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  createMachine,
+  ParamBackupRestore,
   locks,
   OPERATION,
 } = require('../../lib/param/backup');
@@ -103,7 +103,7 @@ test('backup decodes bytewise integer values and returns them in wire-index orde
     deliver(valueFrame({ index: 0, count: 2, paramId: 'A', paramType: 5, value: paramValueToWire(4000000000, 5) }));
   });
 
-  const outcome = await createMachine(OPERATION.BACKUP, machineOptions(stub, clock)).start();
+  const outcome = await new ParamBackupRestore(OPERATION.BACKUP, machineOptions(stub, clock)).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.params, [
@@ -127,7 +127,7 @@ test('backup retries the full list with the same collector and reports received 
     }
   });
 
-  const done = createMachine(OPERATION.BACKUP, machineOptions(stub, clock, { maxRetries: 1 })).start();
+  const done = new ParamBackupRestore(OPERATION.BACKUP, machineOptions(stub, clock, { maxRetries: 1 })).start();
   clock.flush();
   const outcome = await done;
 
@@ -148,7 +148,7 @@ test('repeated duplicate backup frames do not reset the incomplete-list timeout'
     for (const at of [5, 10, 15, 20]) clock.setTimeout(() => deliver(frame), at);
   });
 
-  const done = createMachine(OPERATION.BACKUP, machineOptions(stub, clock, { maxRetries: 0 })).start();
+  const done = new ParamBackupRestore(OPERATION.BACKUP, machineOptions(stub, clock, { maxRetries: 0 })).start();
   clock.flush();
   const outcome = await done;
 
@@ -166,7 +166,7 @@ test('backup ignores wrong source and completes only from the addressed vehicle'
     deliver(valueFrame({ index: 0, count: 1, paramId: 'GOOD', paramType: 6, value: paramValueToWire(7, 6) }));
   });
 
-  const outcome = await createMachine(OPERATION.BACKUP, machineOptions(stub, clock)).start();
+  const outcome = await new ParamBackupRestore(OPERATION.BACKUP, machineOptions(stub, clock)).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.params, [{ paramId: 'GOOD', paramType: 6, value: 7 }]);
@@ -176,7 +176,7 @@ test('backup decode errors settle and tear down the subscription and timer', asy
   const stub = new StubConnection();
   const clock = new FakeTimers();
   stub.onSend(() => {});
-  const machine = createMachine(OPERATION.BACKUP, machineOptions(stub, clock));
+  const machine = new ParamBackupRestore(OPERATION.BACKUP, machineOptions(stub, clock));
   const done = machine.start();
 
   assert.doesNotThrow(() => stub.inject(valueFrame({
@@ -207,7 +207,7 @@ test('backup preserves signed zero and nonfinite REAL32 values through JSON and 
       }
     });
 
-    const backup = await createMachine(OPERATION.BACKUP, machineOptions(stub, clock, { encoding: 'c-cast' })).start();
+    const backup = await new ParamBackupRestore(OPERATION.BACKUP, machineOptions(stub, clock, { encoding: 'c-cast' })).start();
     const expected = Object.is(value, -0) ? '-0' : String(value);
     assert.equal(typeof backup.params[0].value, 'string');
     assert.equal(backup.params[0].value, expected);
@@ -226,7 +226,7 @@ test('backup preserves signed zero and nonfinite REAL32 values through JSON and 
         deliver(actual.echoed);
       }
     });
-    const restored = await createMachine(OPERATION.RESTORE, machineOptions(restoreStub, restoreClock, {
+    const restored = await new ParamBackupRestore(OPERATION.RESTORE, machineOptions(restoreStub, restoreClock, {
       encoding: 'c-cast',
       params: roundTripped,
     })).start();
@@ -264,7 +264,7 @@ test('restore round-trips bytewise and c-cast saved values sequentially', async 
       deliver(echo(sent, { param_type: sent.paramType }, encoding));
     });
 
-    const outcome = await createMachine(OPERATION.RESTORE, machineOptions(stub, clock, {
+    const outcome = await new ParamBackupRestore(OPERATION.RESTORE, machineOptions(stub, clock, {
       encoding,
       params: JSON.parse(JSON.stringify(params)),
     })).start();
@@ -287,7 +287,7 @@ test('restore waits for a matching echo and preserves confirmed prefix on failur
     if (message.fields.param_id === 'A') deliver(echo(params[0]));
   });
 
-  const done = createMachine(OPERATION.RESTORE, machineOptions(stub, clock, { params, maxRetries: 1 })).start();
+  const done = new ParamBackupRestore(OPERATION.RESTORE, machineOptions(stub, clock, { params, maxRetries: 1 })).start();
   clock.flush();
   const outcome = await done;
 
@@ -310,7 +310,7 @@ test('restore ignores wrong source and wrong echo before confirming a parameter'
     deliver(echo(params[0]));
   });
 
-  const outcome = await createMachine(OPERATION.RESTORE, machineOptions(stub, clock, { params })).start();
+  const outcome = await new ParamBackupRestore(OPERATION.RESTORE, machineOptions(stub, clock, { params })).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.equal(stub.sentNames().filter((name) => name === 'PARAM_SET').length, 1);
@@ -322,7 +322,7 @@ test('restore retries only the current parameter with a bounded ceiling', async 
   const clock = new FakeTimers();
   stub.onSend(() => {});
 
-  const done = createMachine(OPERATION.RESTORE, machineOptions(stub, clock, { params, maxRetries: 2 })).start();
+  const done = new ParamBackupRestore(OPERATION.RESTORE, machineOptions(stub, clock, { params, maxRetries: 2 })).start();
   clock.flush();
   const outcome = await done;
 
@@ -340,7 +340,7 @@ test('backup and restore cancel cleanly with partial result information', async 
       deliver(valueFrame({ index: 0, count: 2, paramId: 'A', paramType: 6, value: paramValueToWire(1, 6) }));
     }
   });
-  const backupMachine = createMachine(OPERATION.BACKUP, machineOptions(backupStub, backupClock));
+  const backupMachine = new ParamBackupRestore(OPERATION.BACKUP, machineOptions(backupStub, backupClock));
   const backupDone = backupMachine.start();
   backupMachine.cancel();
   const backupOutcome = await backupDone;
@@ -358,7 +358,7 @@ test('backup and restore cancel cleanly with partial result information', async 
   restoreStub.onSend((message, deliver) => {
     if (message.name === 'PARAM_SET' && message.fields.param_id === 'A') deliver(echo(params[0]));
   });
-  const restoreMachine = createMachine(OPERATION.RESTORE, machineOptions(restoreStub, restoreClock, { params }));
+  const restoreMachine = new ParamBackupRestore(OPERATION.RESTORE, machineOptions(restoreStub, restoreClock, { params }));
   const restoreDone = restoreMachine.start();
   restoreMachine.cancel();
   const restoreOutcome = await restoreDone;
@@ -372,7 +372,7 @@ test('backup and restore cancel cleanly with partial result information', async 
 test('unknown operation settles through the machine failure path', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
-  const machine = createMachine('unknown', machineOptions(stub, clock));
+  const machine = new ParamBackupRestore('unknown', machineOptions(stub, clock));
   const outcome = machine && await Promise.race([
     machine.start(),
     new Promise((resolve) => setTimeout(() => resolve(null), 50)),
