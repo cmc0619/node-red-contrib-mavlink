@@ -58,10 +58,12 @@ test('mavlink-system help and editor expose each service contract', () => {
   assert.match(html, /ArduPilot/);
   assert.match(html, /CREATE_FILE/);
   assert.match(html, /239 UTF-8 bytes/);
-  assert.match(html, /parameters, mission, fence, rally, and FTP/);
+  assert.match(html, /parameters, fence, rally, and FTP/);
   assert.match(html, /root, directories, files:\[\{path, data\}\]/);
   assert.match(html, /base64 encoded/);
-  assert.match(html, /first failed section/);
+  assert.match(html, /the remaining sections still transfer/);
+  assert.match(html, /<code>partial<\/code> rather than <code>succeeded<\/code>/);
+  assert.match(html, /mission is not included/);
   assert.match(html, /no rollback/);
   assert.match(html, /msg\.payload/);
   assert.match(html, /Backup\/Restore/);

@@ -76,9 +76,15 @@ function registerMavlinkSystem(RED) {
  * so the same word is the key in the backup object, the protocol, the mission
  * type and the lock scope.
  *
+ * The mission is not among them. Parameters, geofence, rally points and the
+ * onboard files are the vehicle's configuration — set once and expensive to
+ * lose. A mission is the task loaded for one flight, and the Mission node
+ * already downloads and uploads one; carrying it here backed up a per-flight
+ * payload as if it were system state.
+ *
  * @type {string[]}
  */
-const BUNDLE_SECTIONS = ['parameters', 'mission', 'fence', 'rally', 'files'];
+const BUNDLE_SECTIONS = ['parameters', 'fence', 'rally', 'files'];
 
 /** A mission engine spells the bundle's operations as transfer directions. */
 const MISSION_OPERATION = { backup: 'download', restore: 'upload' };
@@ -143,63 +149,114 @@ async function runMachine(machine, signal) {
 
 async function runBundle(context, signal) {
   const { operation, connNode, target } = context;
-  const result = {};
+  const done = {};
+  const failed = {};
   for (const section of sectionsFor(context)) {
     if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
     const stepContext = { ...context, service: section, payload: sectionPayload(context, section) };
     const release = protocolFor(section).locks.acquire(connNode.id, target, missionTypeFor(section));
     if (!release) {
-      return {
-        result: 'failed',
+      failed[section] = {
         phase: 'locked',
-        section,
         reason: `${section} is already in progress for this target`,
       };
+      continue;
     }
     try {
       const outcome = await runMachine(bundleMachine(stepContext), signal);
+      // Cancellation is the operator's own answer and stops the whole bundle;
+      // a section that merely failed does not, so the run keeps going and the
+      // outcome names it.
       if (signal.aborted || outcome.result === 'cancelled') return { ...outcome, section };
-      if (outcome.result !== 'succeeded') return { ...outcome, section };
-      result[section] = outcome;
+      if (outcome.result === 'succeeded') done[section] = outcome;
+      else failed[section] = { phase: outcome.phase, reason: outcome.reason };
     } finally {
       release();
     }
   }
   switch (operation) {
-    case 'backup':
-      return {
-        result: 'succeeded',
-        phase: 'done',
-        bundle: {
-          parameters: result.parameters.params,
-          mission: jsonSafeItems(result.mission.items),
-          fence: jsonSafeItems(result.fence.items),
-          rally: jsonSafeItems(result.rally.items),
-          files: {
-            root: result.files.root,
-            directories: result.files.directories,
-            files: result.files.files,
-          },
-        },
-      };
-    case 'restore':
-      // An object carrying no section runs no engine. Reporting that as a
-      // restore is the false success §9 names, and the honest place to settle
-      // it is here, where the outcome is reported, not by vetting the payload.
-      if (Object.keys(result).length === 0) {
-        return { result: 'failed', phase: 'empty', reason: 'no section to restore' };
-      }
-      return {
-        result: 'succeeded',
-        phase: 'done',
-        restored: true,
-        sections: Object.fromEntries(
-          Object.entries(result).map(([name, outcome]) => [name, restoreCount(name, outcome)])
-        ),
-      };
+    case 'backup': return backupOutcome(done, failed);
+    case 'restore': return restoreOutcome(done, failed);
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
+}
+
+/**
+ * Report what a backup captured, whether or not every section managed it.
+ * Discarding the sections that did transfer because a later one could not —
+ * the files step on a vehicle with no card is the ordinary case — threw away
+ * a capture that cannot be retaken from a vehicle later reflashed, and a
+ * bundle missing a section is already what a segmented restore accepts.
+ *
+ * A short bundle settles as `partial`, never `succeeded`: reporting an
+ * incomplete capture as a complete one is the false success §9 names, and
+ * this is the point where the outcome is reported.
+ *
+ * @param {Object<string, object>} done  succeeded sections, by section
+ * @param {Object<string, object>} failed  the rest, by section
+ * @returns {object}
+ */
+function backupOutcome(done, failed) {
+  const captured = Object.keys(done);
+  if (captured.length === 0) return { result: 'failed', phase: 'done', failed };
+  const bundle = Object.fromEntries(
+    captured.map((section) => [section, bundleValue(section, done[section])])
+  );
+  if (Object.keys(failed).length === 0) return { result: 'succeeded', phase: 'done', bundle };
+  return { result: 'partial', phase: 'done', bundle, failed };
+}
+
+/**
+ * Report the sections a restore wrote. It also keeps going past a failed
+ * section: stopping never rolled the earlier ones back, so it left the
+ * vehicle in the same mixed state while writing less of what was asked for.
+ *
+ * An object carrying no section at all runs no engine, and reporting that as
+ * a restore is the false success §9 names — settled here, where the outcome
+ * is reported, not by vetting the payload.
+ *
+ * @param {Object<string, object>} done  succeeded sections, by section
+ * @param {Object<string, object>} failed  the rest, by section
+ * @returns {object}
+ */
+function restoreOutcome(done, failed) {
+  const written = Object.keys(done);
+  if (written.length === 0 && Object.keys(failed).length === 0) {
+    return { result: 'failed', phase: 'empty', reason: 'no section to restore' };
+  }
+  if (written.length === 0) return { result: 'failed', phase: 'done', failed };
+  const sections = Object.fromEntries(
+    written.map((section) => [section, restoreCount(section, done[section])])
+  );
+  if (Object.keys(failed).length === 0) {
+    return { result: 'succeeded', phase: 'done', restored: true, sections };
+  }
+  return { result: 'partial', phase: 'done', restored: true, sections, failed };
+}
+
+/**
+ * The saved bundle's shape for one captured section. Each engine names its
+ * result fields differently, and this is the only place that knows which of
+ * them the stored object carries.
+ *
+ * @param {string} section
+ * @param {object} outcome  that section's succeeded outcome
+ * @returns {*}
+ */
+function bundleValue(section, outcome) {
+  switch (section) {
+    case 'parameters': return outcome.params;
+    case 'fence':
+    case 'rally': return jsonSafeItems(outcome.items);
+    case 'files': return {
+      root: outcome.root,
+      directories: outcome.directories,
+      files: outcome.files,
+    };
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined; // nothing matched: no behavior selected (§5)
 }
 
 /**
@@ -241,7 +298,6 @@ function bundleMachine(context) {
   switch (context.service) {
     case 'parameters':
       return parameterProtocol.createMachine(context.operation, options);
-    case 'mission':
     case 'fence':
     case 'rally':
       return missionProtocol.createMachine(MISSION_OPERATION[context.operation], options);
@@ -268,7 +324,6 @@ function jsonSafeItems(items) {
 function restoreCount(section, outcome) {
   switch (section) {
     case 'parameters': return outcome.restored;
-    case 'mission':
     case 'fence':
     case 'rally': return outcome.count;
     case 'files': return {
@@ -286,7 +341,6 @@ function protocolFor(service) {
     case 'logs': return logProtocol;
     case 'files': return ftpProtocol;
     case 'parameters': return parameterProtocol;
-    case 'mission':
     case 'fence':
     case 'rally': return missionProtocol;
     default: break; // This space intentionally left blank (§5)
@@ -296,24 +350,23 @@ function protocolFor(service) {
 
 /**
  * The plan type a section transfers under, which the bundle also passes as its
- * lock scope: mission, fence and rally share one lock registry and this value
- * is the only thing keeping them apart. A section that is not a plan has
- * neither, and that `undefined` carries weight — it is what makes the bundle's
- * files step take the same lock as a standalone Files transfer, which passes
- * no scope of its own.
+ * lock scope: every plan type shares one lock registry and this value is the
+ * only thing keeping them apart, including from a Mission node working the
+ * same vehicle. A section that is not a plan has neither, and that
+ * `undefined` carries weight — it is what makes the bundle's files step take
+ * the same lock as a standalone Files transfer, which passes no scope of its
+ * own.
  *
  * The switch keys on the service name, not on what missionTypeValue returns,
- * because neither test on the result works: MAV_MISSION_TYPE_MISSION is 0, so
- * any falsy check drops the mission's own scope, and missionTypeValue forwards
- * a name it does not know unchanged, so 'files' would scope itself by its name
- * and stop colliding with the transfer it must wait for.
+ * because missionTypeValue forwards a name it does not know unchanged: test
+ * the result and 'files' would scope itself by its own name and stop
+ * colliding with the transfer it must wait for.
  *
  * @param {string} service
  * @returns {number|undefined}
  */
 function missionTypeFor(service) {
   switch (service) {
-    case 'mission':
     case 'fence':
     case 'rally': return missionTypeValue(service);
     default: break; // This space intentionally left blank (§5)
@@ -402,7 +455,6 @@ function machineOptions(context) {
         encoding: resolvedEncoding(config, payload, connNode, target, profile),
         params: payload,
       };
-    case 'mission|backup':
     case 'fence|backup':
     case 'rally|backup':
       return {
@@ -410,7 +462,6 @@ function machineOptions(context) {
         missionType: missionTypeFor(service),
         sourceIds: connNode.resolveSourceIds(identityId),
       };
-    case 'mission|restore':
     case 'fence|restore':
     case 'rally|restore':
       return {
@@ -443,6 +494,16 @@ function finish(node, send, done, msg, service, operation, target, outcome) {
   const status = record(node, service, operation, target, statusFields(outcome));
   if (outcome.result === 'succeeded') {
     delivery.applyActionStatus(node, 'ok', successBadge(service, operation, outcome));
+    send([successMessage(service, operation, outcome, msg), status]);
+    done();
+    return;
+  }
+  if (outcome.result === 'partial') {
+    // What did transfer rides output 0: a bundle missing a section is worth
+    // keeping and a segmented restore already accepts one. The badge and the
+    // record name the sections that did not, so nothing reads it as complete.
+    const missing = Object.keys(outcome.failed).join(', ');
+    delivery.applyActionStatus(node, 'error', `${operation} without ${missing}`);
     send([successMessage(service, operation, outcome, msg), status]);
     done();
     return;
