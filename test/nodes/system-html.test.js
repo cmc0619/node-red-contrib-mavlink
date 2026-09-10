@@ -64,13 +64,18 @@ test('mavlink-system help and editor expose each service contract', () => {
   assert.match(html, /the remaining sections still transfer/);
   assert.match(html, /<code>partial<\/code> rather than <code>succeeded<\/code>/);
   assert.match(html, /mission is not included/);
-  assert.match(html, /id="node-input-section-parameters"/);
-  assert.match(html, /id="node-input-section-files"/);
-  assert.match(html, /the sections ticked on the node/);
+  assert.match(html, /<select id="node-input-sections" multiple/);
+  assert.match(html, /<option value="parameters">/);
+  assert.match(html, /<option value="files">/);
+  assert.match(html, /the sections selected on the node/);
   assert.match(html, /no rollback/);
   assert.match(html, /msg\.payload/);
   assert.match(html, /Backup\/Restore/);
-  assert.doesNotMatch(html, /value="parameters"|value="missions"|value="fences"|value="rally"/);
+  // The abandoned design gave each plan type its own service. `parameters`
+  // and `rally` are legitimate restore-section options now, so pin the
+  // service select itself rather than those bare values.
+  assert.match(html, /<select id="node-input-service">(<option value="(?:logs|files|backup)">[^<]*<\/option>){3}<\/select>/);
+  assert.doesNotMatch(html, /value="missions"|value="fences"/);
   assert.doesNotMatch(html, /\['backup', 'Backup files'\]/);
 });
 

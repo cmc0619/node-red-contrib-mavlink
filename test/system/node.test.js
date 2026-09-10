@@ -390,7 +390,8 @@ test('a restore of one section runs that section alone, on its own band', async 
     ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'bytewise', sections: ['parameters'],
   });
   const result = await runInput(node, { payload: { parameters: params }, topic: 'restore' });
-  assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { parameters: 2 } });
+  assert.deepEqual(result.outputs.at(-1)[0].payload,
+    { result: 'succeeded', sections: { parameters: 2 }, failed: undefined });
   assert.equal(result.outputs.at(-1)[0].topic, 'restore');
   assert.deepEqual([...bands], [4], 'a restore is a transfer, so it rides the bulk band');
   assert.equal(conn.sentNames().filter((name) => name === 'MISSION_COUNT').length, 0, 'no plan section runs');
@@ -415,7 +416,8 @@ test('a segmented restore uses the plan type its section names', async () => {
     payload: { rally: [{ frame: 3, command: 5100, current: 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: 1, y: 2, z: 3 }] },
   });
   assert.deepEqual(planTypes, [2], 'rally restores under the rally plan type');
-  assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { rally: 1 } });
+  assert.deepEqual(result.outputs.at(-1)[0].payload,
+    { result: 'succeeded', sections: { rally: 1 }, failed: undefined });
 });
 
 test('a ticked section the bundle does not carry fails alone', async () => {
@@ -441,6 +443,10 @@ test('a ticked section the bundle does not carry fails alone', async () => {
   const [message, record] = result.outputs.at(-1);
   assert.equal(record.result, 'partial');
   assert.deepEqual(message.payload.sections, { fence: 1 }, 'the fence the bundle did carry still restored');
+  assert.equal(message.payload.result, 'partial',
+    'output 0 says partial: a half-written restore must not read complete');
+  assert.ok(message.payload.failed.parameters.reason,
+    'output 0 names the section that did not make it, not just the status record');
   assert.ok(record.failed.parameters.reason, 'the absent section is named with a reason');
 });
 

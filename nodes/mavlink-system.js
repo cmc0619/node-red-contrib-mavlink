@@ -220,6 +220,10 @@ function backupOutcome(done, failed) {
  * a restore is the false success §9 names — settled here, where the outcome
  * is reported, not by vetting the payload.
  *
+ * `result` is the whole story: a second boolean beside it could only say what
+ * a non-empty `sections` already says, and on a short run the two disagree —
+ * which is how a half-written restore reached output 0 reading complete.
+ *
  * @param {Object<string, object>} done  succeeded sections, by section
  * @param {Object<string, object>} failed  the rest, by section
  * @returns {object}
@@ -233,10 +237,8 @@ function restoreOutcome(done, failed) {
   const sections = Object.fromEntries(
     written.map((section) => [section, restoreCount(section, done[section])])
   );
-  if (Object.keys(failed).length === 0) {
-    return { result: 'succeeded', phase: 'done', restored: true, sections };
-  }
-  return { result: 'partial', phase: 'done', restored: true, sections, failed };
+  if (Object.keys(failed).length === 0) return { result: 'succeeded', phase: 'done', sections };
+  return { result: 'partial', phase: 'done', sections, failed };
 }
 
 /**
@@ -265,14 +267,16 @@ function bundleValue(section, outcome) {
 
 /**
  * Backup covers every section. Restore covers the sections the operator
- * ticked, in the same transfer order, so a bundle can be replayed whole or a
- * section at a time — a parameters restore that failed can be retried on its
- * own without rewriting the fence.
+ * picked, so a bundle can be replayed whole or a section at a time — a
+ * parameters restore that failed can be retried on its own without rewriting
+ * the fence. The editor's select is built from the same four names in the
+ * same transfer order, so the saved array arrives ordered and needs no
+ * intersecting here (§6).
  *
- * The ticks are read, not vetted. A section ticked but absent from the bundle
- * hands its engine nothing and craters there, which the run records against
- * that section and carries on; the editor cannot grey the box, because the
- * bundle does not exist until a message arrives.
+ * A section picked but absent from the bundle hands its engine nothing and
+ * craters there, which the run records against that section before carrying
+ * on; the editor cannot narrow the list, because the bundle does not exist
+ * until a message arrives.
  *
  * @param {object} context
  * @returns {string[]}
@@ -280,9 +284,7 @@ function bundleValue(section, outcome) {
 function sectionsFor(context) {
   switch (context.operation) {
     case 'backup': return BUNDLE_SECTIONS;
-    case 'restore': return BUNDLE_SECTIONS.filter(
-      (section) => context.config.sections.includes(section)
-    );
+    case 'restore': return context.config.sections;
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
@@ -600,7 +602,7 @@ function successMessage(service, operation, outcome, msg) {
       output.payload = outcome.bundle;
       return output;
     case 'backup|restore':
-      output.payload = { restored: outcome.restored, sections: outcome.sections };
+      output.payload = { result: outcome.result, sections: outcome.sections, failed: outcome.failed };
       return output;
     default: break; // This space intentionally left blank (§5)
   }
