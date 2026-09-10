@@ -18,7 +18,11 @@ test('mavlink-system editor registers closed service and operation selectors', (
   assert.equal(defaults.operation.required, true);
   assert.equal(defaults.operation.validate.call({ service: 'logs' }, 'download', {}), true);
   assert.match(String(defaults.operation.validate.call({ service: 'logs' }, 'backup', {})), /one of/);
+  assert.equal(defaults.operation.validate.call({ service: 'files' }, 'upload', {}), true);
   assert.match(String(defaults.operation.validate.call({ service: 'files' }, 'backup', {})), /one of/);
+  assert.equal(defaults.operation.validate.call({ service: 'backup' }, 'backup', {}), true);
+  assert.equal(defaults.operation.validate.call({ service: 'backup' }, 'restore', {}), true);
+  assert.match(String(defaults.operation.validate.call({ service: 'backup' }, 'list', {})), /one of/);
   assert.equal(defaults.targetComponent.value, 1);
   assert.match(String(defaults.targetComponent.validate(0, {})), /between 1 and 255/);
 });
@@ -35,12 +39,14 @@ test('mavlink-system conditionally validates log id, FTP path, and parameter enc
   assert.equal(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(239), {}), true);
   assert.match(String(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(240), {})), /239/);
   assert.match(String(defaults.path.validate.call({ service: 'files' }, 'a\u0000b', {})), /NUL/);
+  assert.equal(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(239), {}), true);
+  assert.match(String(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(240), {})), /239/);
   assert.equal(defaults.path.validate.call({ service: 'logs' }, 'a'.repeat(300), {}), true);
   assert.equal(defaults.paramEncoding.validate.call({ service: 'logs' }, 'invalid', {}), true);
-  assert.equal(defaults.paramEncoding.validate.call({ service: 'parameters', connection: 'connection' }, 'auto', {}), true);
-  assert.equal(defaults.paramEncoding.validate.call({ service: 'parameters' }, 'auto', {}), true);
-  assert.equal(defaults.paramEncoding.validate.call({ service: 'parameters' }, 'bytewise', {}), true);
-  assert.match(String(defaults.paramEncoding.validate.call({ service: 'parameters' }, 'invalid', {})), /one of/);
+  assert.equal(defaults.paramEncoding.validate.call({ service: 'backup', connection: 'connection' }, 'auto', {}), true);
+  assert.equal(defaults.paramEncoding.validate.call({ service: 'backup' }, 'auto', {}), true);
+  assert.equal(defaults.paramEncoding.validate.call({ service: 'backup' }, 'bytewise', {}), true);
+  assert.match(String(defaults.paramEncoding.validate.call({ service: 'backup' }, 'invalid', {})), /one of/);
 });
 
 test('mavlink-system help and editor expose each service contract', () => {
@@ -52,9 +58,23 @@ test('mavlink-system help and editor expose each service contract', () => {
   assert.match(html, /ArduPilot/);
   assert.match(html, /CREATE_FILE/);
   assert.match(html, /239 UTF-8 bytes/);
-  assert.match(html, /paramId, paramType, value/);
+  assert.match(html, /parameters, mission, fence, rally, and FTP/);
+  assert.match(html, /root, directories, files:\[\{path, data\}\]/);
+  assert.match(html, /base64 encoded/);
+  assert.match(html, /first failed section/);
   assert.match(html, /no rollback/);
   assert.match(html, /msg\.payload/);
+  assert.match(html, /Backup\/Restore/);
+  assert.doesNotMatch(html, /value="parameters"|value="missions"|value="fences"|value="rally"/);
+  assert.doesNotMatch(html, /\['backup', 'Backup files'\]/);
+});
+
+test('mavlink-system refreshes operation validation after rebuilding the select', () => {
+  assert.match(
+    html,
+    /\$operation\.val\(selected\);\s*\$operation\.trigger\('change'\);/,
+    'changing service must notify the shared enum validator of the preserved operation'
+  );
 });
 
 test('mavlink-system companion hides sysid while keeping config compid visible', () => {

@@ -9,6 +9,9 @@
 const logProtocol = require('../lib/log');
 const ftpProtocol = require('../lib/ftp');
 const parameterProtocol = require('../lib/param/backup');
+const { jsonSafeValue } = parameterProtocol;
+const missionProtocol = require('../lib/mission');
+const { missionTypeValue } = require('../lib/mission/types');
 const { resolveParamEncoding, capabilitiesFromPeer } = require('../lib/param');
 const { BAND } = require('../lib/connection/bands');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
@@ -39,7 +42,6 @@ function registerMavlinkSystem(RED) {
             connectionNode: connAtDeploy,
             compidFromConfig: true,
           });
-        const protocol = protocolFor(service);
         const context = {
           service,
           operation,
@@ -53,42 +55,11 @@ function registerMavlinkSystem(RED) {
           send,
           node,
         };
-        const machine = protocol.createMachine(operation, machineOptions(context));
-
-        const release = protocol.locks.acquire(connNode.id, target);
-        if (!release) {
-          delivery.applyActionStatus(node, 'error', `${service} busy`);
-          send([null, record(node, service, operation, target, {
-            result: 'failed',
-            phase: 'locked',
-            reason: `a ${service} operation is already in progress for this target`,
-          })]);
-          done();
-          return;
-        }
-
         delivery.applyActionStatus(node, 'sending', `${service} ${operation}…`);
-        await inFlight.track((signal) => {
-          let started = false;
-          signal.addEventListener('abort', () => {
-            if (started) machine.cancel();
-          }, { once: true });
-
-          return Promise.resolve().then(() => {
-            started = true;
-            const startedRun = machine.start();
-            if (signal.aborted) machine.cancel();
-            return startedRun;
-          }).then((outcome) => {
-            release();
-            finish(node, send, done, msg, service, operation, target, outcome);
-            return outcome;
-          }).catch((err) => {
-            release();
-            delivery.failInput(node, send, err, done, { service, operation, target });
-            return undefined;
-          });
-        });
+        await inFlight.track((signal) => run(context, signal).then((outcome) => {
+          finish(node, send, done, msg, service, operation, target, outcome);
+          return outcome;
+        }));
       } catch (err) {
         delivery.failInput(node, send, err, done, { service, operation });
       }
@@ -100,11 +71,251 @@ function registerMavlinkSystem(RED) {
   RED.nodes.registerType('mavlink-system', MavlinkSystemNode);
 }
 
+/**
+ * The bundle's sections in transfer order. Each is the service that owns it,
+ * so the same word is the key in the backup object, the protocol, the mission
+ * type and the lock scope.
+ *
+ * @type {string[]}
+ */
+const BUNDLE_SECTIONS = ['parameters', 'mission', 'fence', 'rally', 'files'];
+
+/** A mission engine spells the bundle's operations as transfer directions. */
+const MISSION_OPERATION = { backup: 'download', restore: 'upload' };
+
+function run(context, signal) {
+  switch (context.service) {
+    case 'backup': return runBundle(context, signal);
+    case 'logs':
+    case 'files': return runSingle(context, signal);
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+async function runSingle(context, signal) {
+  const { service, connNode, target } = context;
+  const protocol = protocolFor(service);
+  const machine = createSingleMachine(context);
+  const release = protocol.locks.acquire(connNode.id, target);
+  if (!release) {
+    return {
+      result: 'failed',
+      phase: 'locked',
+      reason: `a ${service} operation is already in progress for this target`,
+    };
+  }
+  try {
+    return await runMachine(machine, signal);
+  } finally {
+    release();
+  }
+}
+
+function createSingleMachine(context) {
+  const options = machineOptions(context);
+  switch (context.service) {
+    case 'logs': return logProtocol.createMachine(context.operation, options);
+    case 'files': return new ftpProtocol.FtpMachine(context.operation, options);
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+async function runMachine(machine, signal) {
+  let started = false;
+  const cancel = () => {
+    if (started) machine.cancel();
+  };
+  signal.addEventListener('abort', cancel, { once: true });
+  try {
+    return await Promise.resolve().then(() => {
+      if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
+      started = true;
+      const startedRun = machine.start();
+      if (signal.aborted) machine.cancel();
+      return startedRun;
+    });
+  } finally {
+    signal.removeEventListener('abort', cancel);
+  }
+}
+
+async function runBundle(context, signal) {
+  const { operation, connNode, target } = context;
+  const result = {};
+  for (const section of sectionsFor(context)) {
+    if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
+    const stepContext = { ...context, service: section, payload: sectionPayload(context, section) };
+    const release = protocolFor(section).locks.acquire(connNode.id, target, missionTypeFor(section));
+    if (!release) {
+      return {
+        result: 'failed',
+        phase: 'locked',
+        section,
+        reason: `${section} is already in progress for this target`,
+      };
+    }
+    try {
+      const outcome = await runMachine(bundleMachine(stepContext), signal);
+      if (signal.aborted || outcome.result === 'cancelled') return { ...outcome, section };
+      if (outcome.result !== 'succeeded') return { ...outcome, section };
+      result[section] = outcome;
+    } finally {
+      release();
+    }
+  }
+  switch (operation) {
+    case 'backup':
+      return {
+        result: 'succeeded',
+        phase: 'done',
+        bundle: {
+          parameters: result.parameters.params,
+          mission: jsonSafeItems(result.mission.items),
+          fence: jsonSafeItems(result.fence.items),
+          rally: jsonSafeItems(result.rally.items),
+          files: {
+            root: result.files.root,
+            directories: result.files.directories,
+            files: result.files.files,
+          },
+        },
+      };
+    case 'restore':
+      // An object carrying no section runs no engine. Reporting that as a
+      // restore is the false success §9 names, and the honest place to settle
+      // it is here, where the outcome is reported, not by vetting the payload.
+      if (Object.keys(result).length === 0) {
+        return { result: 'failed', phase: 'empty', reason: 'no section to restore' };
+      }
+      return {
+        result: 'succeeded',
+        phase: 'done',
+        restored: true,
+        sections: Object.fromEntries(
+          Object.entries(result).map(([name, outcome]) => [name, restoreCount(name, outcome)])
+        ),
+      };
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+/**
+ * Backup covers every section. Restore covers the sections the bundle in hand
+ * actually carries, so an object holding one section restores only that one
+ * and a bundle that lost a section to a failed backup restores the rest.
+ *
+ * @param {object} context
+ * @returns {string[]}
+ */
+function sectionsFor(context) {
+  switch (context.operation) {
+    case 'backup': return BUNDLE_SECTIONS;
+    case 'restore': return BUNDLE_SECTIONS.filter((section) => section in context.payload);
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+/**
+ * A backup step reads the node's own payload; a restore step reads the slice
+ * of the saved bundle that its section owns.
+ *
+ * @param {object} context
+ * @param {string} section
+ * @returns {*}
+ */
+function sectionPayload(context, section) {
+  switch (context.operation) {
+    case 'backup': return context.payload;
+    case 'restore': return context.payload[section];
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+function bundleMachine(context) {
+  const options = machineOptions(context);
+  switch (context.service) {
+    case 'parameters':
+      return new parameterProtocol.ParamBackupRestore(context.operation, options);
+    case 'mission':
+    case 'fence':
+    case 'rally':
+      return missionProtocol.createMachine(MISSION_OPERATION[context.operation], options);
+    case 'files':
+      return new ftpProtocol.FtpMachine(context.operation, options);
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+/**
+ * Mission items carry the same nonfinite floats parameters do, so a saved
+ * bundle keeps NaN and negative zero through JSON (lib/param/backup.js).
+ *
+ * @param {object[]} items
+ * @returns {object[]}
+ */
+function jsonSafeItems(items) {
+  return items.map((item) => Object.fromEntries(
+    Object.entries(item).map(([key, value]) => [key, jsonSafeValue(value)])
+  ));
+}
+
+function restoreCount(section, outcome) {
+  switch (section) {
+    case 'parameters': return outcome.restored;
+    case 'mission':
+    case 'fence':
+    case 'rally': return outcome.count;
+    case 'files': return {
+      files: outcome.restoredFiles,
+      directories: outcome.restoredDirectories,
+      bytes: outcome.bytes,
+    };
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
 function protocolFor(service) {
   switch (service) {
     case 'logs': return logProtocol;
     case 'files': return ftpProtocol;
     case 'parameters': return parameterProtocol;
+    case 'mission':
+    case 'fence':
+    case 'rally': return missionProtocol;
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+/**
+ * The plan type a section transfers under, which the bundle also passes as its
+ * lock scope: mission, fence and rally share one lock registry and this value
+ * is the only thing keeping them apart. A section that is not a plan has
+ * neither, and that `undefined` carries weight — it is what makes the bundle's
+ * files step take the same lock as a standalone Files transfer, which passes
+ * no scope of its own.
+ *
+ * The switch keys on the service name, not on what missionTypeValue returns,
+ * because neither test on the result works: MAV_MISSION_TYPE_MISSION is 0, so
+ * any falsy check drops the mission's own scope, and missionTypeValue forwards
+ * a name it does not know unchanged, so 'files' would scope itself by its name
+ * and stop colliding with the transfer it must wait for.
+ *
+ * @param {string} service
+ * @returns {number|undefined}
+ */
+function missionTypeFor(service) {
+  switch (service) {
+    case 'mission':
+    case 'fence':
+    case 'rally': return missionTypeValue(service);
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
@@ -125,8 +336,12 @@ function machineOptions(context) {
     node,
   } = context;
   const shared = {
+    // Everything this node does is a transfer: log listings and downloads,
+    // file trees, and the backup bundle's own reads and replays. A restore is
+    // a saved file going back, not an operator writing a parameter, so it
+    // queues behind control traffic like the rest (§10 bands).
     send: (message) => connNode.send(message, {
-      band: bandFor(service, operation),
+      band: BAND.BULK,
       target,
       identityId,
     }),
@@ -163,6 +378,19 @@ function machineOptions(context) {
         path: msg.path === undefined ? config.path : msg.path,
         data: payload,
       };
+    case 'files|backup':
+      return {
+        ...shared,
+        source: connNode.resolveSourceIds(identityId),
+        path: msg.path === undefined ? config.path : msg.path,
+      };
+    case 'files|restore':
+      return {
+        ...shared,
+        source: connNode.resolveSourceIds(identityId),
+        path: msg.path === undefined ? config.path : msg.path,
+        entries: payload,
+      };
     case 'parameters|backup':
       return {
         ...shared,
@@ -174,22 +402,23 @@ function machineOptions(context) {
         encoding: resolvedEncoding(config, payload, connNode, target, profile),
         params: payload,
       };
-    default: break; // This space intentionally left blank (§5)
-  }
-  return undefined;
-}
-
-function bandFor(service, operation) {
-  switch (`${service}|${operation}`) {
-    case 'logs|list':
-    case 'logs|download':
-    case 'files|list':
-    case 'files|download':
-    case 'files|upload':
-    case 'parameters|backup':
-      return BAND.BULK;
-    case 'parameters|restore':
-      return BAND.CONTROL;
+    case 'mission|backup':
+    case 'fence|backup':
+    case 'rally|backup':
+      return {
+        ...shared,
+        missionType: missionTypeFor(service),
+        sourceIds: connNode.resolveSourceIds(identityId),
+      };
+    case 'mission|restore':
+    case 'fence|restore':
+    case 'rally|restore':
+      return {
+        ...shared,
+        missionType: missionTypeFor(service),
+        sourceIds: connNode.resolveSourceIds(identityId),
+        items: payload,
+      };
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
@@ -241,6 +470,10 @@ function statusFields(outcome) {
     data: _data,
     entries: _entries,
     params: _params,
+    items: _items,
+    files: _files,
+    directories: _directories,
+    bundle: _bundle,
     ...fields
   } = outcome;
   return fields;
@@ -263,11 +496,25 @@ function successMessage(service, operation, outcome, msg) {
     case 'files|upload':
       output.payload = { bytes: outcome.bytes };
       return output;
-    case 'parameters|backup':
-      output.payload = outcome.params;
+    case 'files|backup':
+      output.payload = {
+        root: outcome.root,
+        directories: outcome.directories,
+        files: outcome.files,
+      };
       return output;
-    case 'parameters|restore':
-      output.payload = { restored: outcome.restored };
+    case 'files|restore':
+      output.payload = {
+        bytes: outcome.bytes,
+        restoredFiles: outcome.restoredFiles,
+        restoredDirectories: outcome.restoredDirectories,
+      };
+      return output;
+    case 'backup|backup':
+      output.payload = outcome.bundle;
+      return output;
+    case 'backup|restore':
+      output.payload = { restored: outcome.restored, sections: outcome.sections };
       return output;
     default: break; // This space intentionally left blank (§5)
   }
@@ -281,8 +528,10 @@ function successBadge(service, operation, outcome) {
     case 'files|list': return `${outcome.count} files`;
     case 'files|download': return 'file downloaded';
     case 'files|upload': return `${outcome.bytes} bytes uploaded`;
-    case 'parameters|backup': return `${outcome.count} params backed up`;
-    case 'parameters|restore': return `${outcome.restored} params restored`;
+    case 'files|backup': return `${outcome.files.length} files backed up`;
+    case 'files|restore': return `${outcome.restoredFiles} files restored`;
+    case 'backup|backup': return 'backup complete';
+    case 'backup|restore': return 'restore complete';
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;

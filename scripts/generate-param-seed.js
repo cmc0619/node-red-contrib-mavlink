@@ -31,7 +31,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
+const { createHash } = require('node:crypto');
 const zlib = require('zlib');
 
 const { parsePdefJson, paramDocumentFromXml } = require('../lib/param/defs');
@@ -61,7 +61,7 @@ const SOURCES = [
  * @returns {string} first 7 hex characters of the sha256
  */
 function shortHash(text) {
-  return crypto.createHash('sha256').update(text).digest('hex').slice(0, 7);
+  return createHash('sha256').update(text).digest('hex').slice(0, 7);
 }
 
 /**
