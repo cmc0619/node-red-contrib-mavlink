@@ -86,9 +86,6 @@ function registerMavlinkSystem(RED) {
  */
 const BUNDLE_SECTIONS = ['parameters', 'fence', 'rally', 'files'];
 
-/** A mission engine spells the bundle's operations as transfer directions. */
-const MISSION_OPERATION = { backup: 'download', restore: 'upload' };
-
 function run(context, signal) {
   switch (context.service) {
     case 'backup': return runBundle(context, signal);
@@ -293,19 +290,32 @@ function sectionPayload(context, section) {
   return undefined;
 }
 
+/**
+ * The engine one bundle step runs. Keyed on the section and the operation
+ * together, the same pair machineOptions keys on, because that pair is what
+ * picks the engine: a fence being backed up is a mission *download*, and
+ * saying so in the case label is the whole of it. Translating `backup` into
+ * `download` through a lookup first put a word swap where the dispatch
+ * belongs, and left an unmatched operation selecting a behaviour by accident
+ * rather than matching nothing (§5).
+ *
+ * @param {object} context  the step context, service set to its section
+ * @returns {object|undefined}
+ */
 function bundleMachine(context) {
   const options = machineOptions(context);
-  switch (context.service) {
-    case 'parameters':
-      return parameterProtocol.createMachine(context.operation, options);
-    case 'fence':
-    case 'rally':
-      return missionProtocol.createMachine(MISSION_OPERATION[context.operation], options);
-    case 'files':
-      return new ftpProtocol.FtpMachine(context.operation, options);
+  switch (`${context.service}|${context.operation}`) {
+    case 'parameters|backup': return new parameterProtocol.ParamBackup(options);
+    case 'parameters|restore': return new parameterProtocol.ParamRestore(options);
+    case 'fence|backup':
+    case 'rally|backup': return new missionProtocol.MissionDownload(options);
+    case 'fence|restore':
+    case 'rally|restore': return new missionProtocol.MissionUpload(options);
+    case 'files|backup':
+    case 'files|restore': return new ftpProtocol.FtpMachine(context.operation, options);
     default: break; // This space intentionally left blank (§5)
   }
-  return undefined;
+  return undefined; // nothing matched: no behavior selected (§5)
 }
 
 /**
