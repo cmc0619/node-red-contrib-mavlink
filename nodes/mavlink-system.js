@@ -294,6 +294,23 @@ function protocolFor(service) {
   return undefined;
 }
 
+/**
+ * The plan type a section transfers under, which the bundle also passes as its
+ * lock scope: mission, fence and rally share one lock registry and this value
+ * is the only thing keeping them apart. A section that is not a plan has
+ * neither, and that `undefined` carries weight — it is what makes the bundle's
+ * files step take the same lock as a standalone Files transfer, which passes
+ * no scope of its own.
+ *
+ * The switch keys on the service name, not on what missionTypeValue returns,
+ * because neither test on the result works: MAV_MISSION_TYPE_MISSION is 0, so
+ * any falsy check drops the mission's own scope, and missionTypeValue forwards
+ * a name it does not know unchanged, so 'files' would scope itself by its name
+ * and stop colliding with the transfer it must wait for.
+ *
+ * @param {string} service
+ * @returns {number|undefined}
+ */
 function missionTypeFor(service) {
   switch (service) {
     case 'mission':
