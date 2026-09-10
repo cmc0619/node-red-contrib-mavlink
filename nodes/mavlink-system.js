@@ -167,6 +167,13 @@ async function runBundle(context, signal) {
       if (signal.aborted || outcome.result === 'cancelled') return { ...outcome, section };
       if (outcome.result === 'succeeded') done[section] = outcome;
       else failed[section] = { phase: outcome.phase, reason: outcome.reason };
+    } catch (err) {
+      // A section that craters while its engine is being built fails the same
+      // way as one that craters on the wire: against its own name, with the
+      // rest of the run still to come. Letting it escape here would take the
+      // whole bundle down over one section, which is the behaviour this loop
+      // exists to end. The reason is whatever threw — loud, not tidied (§0).
+      failed[section] = { phase: 'error', reason: err.message };
     } finally {
       release();
     }
@@ -257,9 +264,15 @@ function bundleValue(section, outcome) {
 }
 
 /**
- * Backup covers every section. Restore covers the sections the bundle in hand
- * actually carries, so an object holding one section restores only that one
- * and a bundle that lost a section to a failed backup restores the rest.
+ * Backup covers every section. Restore covers the sections the operator
+ * ticked, in the same transfer order, so a bundle can be replayed whole or a
+ * section at a time — a parameters restore that failed can be retried on its
+ * own without rewriting the fence.
+ *
+ * The ticks are read, not vetted. A section ticked but absent from the bundle
+ * hands its engine nothing and craters there, which the run records against
+ * that section and carries on; the editor cannot grey the box, because the
+ * bundle does not exist until a message arrives.
  *
  * @param {object} context
  * @returns {string[]}
@@ -267,7 +280,9 @@ function bundleValue(section, outcome) {
 function sectionsFor(context) {
   switch (context.operation) {
     case 'backup': return BUNDLE_SECTIONS;
-    case 'restore': return BUNDLE_SECTIONS.filter((section) => section in context.payload);
+    case 'restore': return BUNDLE_SECTIONS.filter(
+      (section) => context.config.sections.includes(section)
+    );
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;

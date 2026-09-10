@@ -386,7 +386,9 @@ test('a restore of one section runs that section alone, on its own band', async 
     }));
   });
   const Node = loadNode(conn);
-  const node = new Node({ ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'bytewise' });
+  const node = new Node({
+    ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'bytewise', sections: ['parameters'],
+  });
   const result = await runInput(node, { payload: { parameters: params }, topic: 'restore' });
   assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { parameters: 2 } });
   assert.equal(result.outputs.at(-1)[0].topic, 'restore');
@@ -408,12 +410,38 @@ test('a segmented restore uses the plan type its section names', async () => {
     }
   });
   const Node = loadNode(conn);
-  const node = new Node({ ...BASE, service: 'backup', operation: 'restore' });
+  const node = new Node({ ...BASE, service: 'backup', operation: 'restore', sections: ['rally'] });
   const result = await runInput(node, {
     payload: { rally: [{ frame: 3, command: 5100, current: 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: 1, y: 2, z: 3 }] },
   });
   assert.deepEqual(planTypes, [2], 'rally restores under the rally plan type');
   assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { rally: 1 } });
+});
+
+test('a ticked section the bundle does not carry fails alone', async () => {
+  const conn = new StubConnection();
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_COUNT') {
+      deliver({ name: 'MISSION_REQUEST_INT', sysid: 42, compid: 1, fields: { seq: 0, mission_type: message.fields.mission_type } });
+      return;
+    }
+    if (message.name === 'MISSION_ITEM_INT') {
+      deliver({ name: 'MISSION_ACK', sysid: 42, compid: 1, fields: { type: 0, mission_type: message.fields.mission_type } });
+    }
+  });
+  const Node = loadNode(conn);
+  // Parameters is ticked but the bundle has only a fence. The editor cannot
+  // grey the box — the bundle does not exist until this message arrives — so
+  // the section craters on its own and the fence still goes up.
+  const node = new Node({ ...BASE, service: 'backup', operation: 'restore', sections: ['parameters', 'fence'] });
+  const result = await runInput(node, {
+    payload: { fence: [{ frame: 3, command: 5001, current: 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: 1, y: 2, z: 3 }] },
+  });
+
+  const [message, record] = result.outputs.at(-1);
+  assert.equal(record.result, 'partial');
+  assert.deepEqual(message.payload.sections, { fence: 1 }, 'the fence the bundle did carry still restored');
+  assert.ok(record.failed.parameters.reason, 'the absent section is named with a reason');
 });
 
 test('a second bundle names the locked section and still tries the rest', async (t) => {
