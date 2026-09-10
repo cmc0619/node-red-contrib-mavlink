@@ -189,6 +189,12 @@ async function runBundle(context, signal) {
         },
       };
     case 'restore':
+      // An object carrying no section runs no engine. Reporting that as a
+      // restore is the false success §9 names, and the honest place to settle
+      // it is here, where the outcome is reported, not by vetting the payload.
+      if (Object.keys(result).length === 0) {
+        return { result: 'failed', phase: 'empty', reason: 'no section to restore' };
+      }
       return {
         result: 'succeeded',
         phase: 'done',
