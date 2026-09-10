@@ -368,3 +368,20 @@ test('backup and restore cancel cleanly with partial result information', async 
   assert.equal(restoreStub.subscriberCount(), 0);
   assert.equal(restoreClock.pending(), 0);
 });
+
+test('unknown operation settles through the machine failure path', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const machine = createMachine('unknown', machineOptions(stub, clock));
+  const outcome = machine && await Promise.race([
+    machine.start(),
+    new Promise((resolve) => setTimeout(() => resolve(null), 50)),
+  ]);
+
+  assert.ok(outcome, 'unknown operations must not leave start() pending');
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'aborted');
+  assert.match(outcome.reason, /begin|function/i);
+  assert.equal(stub.subscriberCount(), 0);
+  assert.equal(clock.pending(), 0);
+});
