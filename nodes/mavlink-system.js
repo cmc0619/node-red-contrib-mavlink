@@ -135,14 +135,13 @@ async function runMachine(machine, signal) {
   };
   signal.addEventListener('abort', cancel, { once: true });
   try {
-    const run = Promise.resolve().then(() => {
+    return await Promise.resolve().then(() => {
       if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
       started = true;
       const startedRun = machine.start();
       if (signal.aborted) machine.cancel();
       return startedRun;
     });
-    return await run;
   } finally {
     signal.removeEventListener('abort', cancel);
   }
