@@ -240,7 +240,7 @@ function bundleMachine(context) {
   const options = machineOptions(context);
   switch (context.service) {
     case 'parameters':
-      return new parameterProtocol.ParamBackupRestore(context.operation, options);
+      return parameterProtocol.createMachine(context.operation, options);
     case 'mission':
     case 'fence':
     case 'rally':
