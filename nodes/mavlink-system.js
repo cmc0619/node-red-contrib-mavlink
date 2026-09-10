@@ -336,8 +336,12 @@ function machineOptions(context) {
     node,
   } = context;
   const shared = {
+    // Everything this node does is a transfer: log listings and downloads,
+    // file trees, and the backup bundle's own reads and replays. A restore is
+    // a saved file going back, not an operator writing a parameter, so it
+    // queues behind control traffic like the rest (§10 bands).
     send: (message) => connNode.send(message, {
-      band: bandFor(service, operation),
+      band: BAND.BULK,
       target,
       identityId,
     }),
@@ -415,30 +419,6 @@ function machineOptions(context) {
         sourceIds: connNode.resolveSourceIds(identityId),
         items: payload,
       };
-    default: break; // This space intentionally left blank (§5)
-  }
-  return undefined;
-}
-
-function bandFor(service, operation) {
-  switch (`${service}|${operation}`) {
-    case 'logs|list':
-    case 'logs|download':
-    case 'files|list':
-    case 'files|download':
-    case 'files|upload':
-    case 'files|backup':
-    case 'files|restore':
-    case 'parameters|backup':
-    case 'mission|backup':
-    case 'fence|backup':
-    case 'rally|backup':
-    case 'mission|restore':
-    case 'fence|restore':
-    case 'rally|restore':
-      return BAND.BULK;
-    case 'parameters|restore':
-      return BAND.CONTROL;
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;

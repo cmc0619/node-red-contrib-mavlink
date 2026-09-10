@@ -356,7 +356,7 @@ test('a restore of one section runs that section alone, on its own band', async 
   const result = await runInput(node, { payload: { parameters: params }, topic: 'restore' });
   assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { parameters: 2 } });
   assert.equal(result.outputs.at(-1)[0].topic, 'restore');
-  assert.deepEqual([...bands], [2], 'a parameter restore rides the control band');
+  assert.deepEqual([...bands], [4], 'a restore is a transfer, so it rides the bulk band');
   assert.equal(conn.sentNames().filter((name) => name === 'MISSION_COUNT').length, 0, 'no plan section runs');
 });
 
