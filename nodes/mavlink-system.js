@@ -78,7 +78,7 @@ function registerMavlinkSystem(RED) {
  *
  * @type {string[]}
  */
-const BUNDLE_SECTIONS = ['parameters', 'missions', 'fences', 'rally', 'files'];
+const BUNDLE_SECTIONS = ['parameters', 'mission', 'fence', 'rally', 'files'];
 
 /** A mission engine spells the bundle's operations as transfer directions. */
 const MISSION_OPERATION = { backup: 'download', restore: 'upload' };
@@ -172,8 +172,8 @@ async function runBundle(context, signal) {
         phase: 'done',
         bundle: {
           parameters: result.parameters.params,
-          missions: jsonSafeItems(result.missions.items),
-          fences: jsonSafeItems(result.fences.items),
+          mission: jsonSafeItems(result.mission.items),
+          fence: jsonSafeItems(result.fence.items),
           rally: jsonSafeItems(result.rally.items),
           files: {
             root: result.files.root,
@@ -241,8 +241,8 @@ function bundleMachine(context) {
   switch (context.service) {
     case 'parameters':
       return new parameterProtocol.ParamBackupRestore(context.operation, options);
-    case 'missions':
-    case 'fences':
+    case 'mission':
+    case 'fence':
     case 'rally':
       return missionProtocol.createMachine(MISSION_OPERATION[context.operation], options);
     case 'files':
@@ -268,8 +268,8 @@ function jsonSafeItems(items) {
 function restoreCount(section, outcome) {
   switch (section) {
     case 'parameters': return outcome.restored;
-    case 'missions':
-    case 'fences':
+    case 'mission':
+    case 'fence':
     case 'rally': return outcome.count;
     case 'files': return {
       files: outcome.restoredFiles,
@@ -286,8 +286,8 @@ function protocolFor(service) {
     case 'logs': return logProtocol;
     case 'files': return ftpProtocol;
     case 'parameters': return parameterProtocol;
-    case 'missions':
-    case 'fences':
+    case 'mission':
+    case 'fence':
     case 'rally': return missionProtocol;
     default: break; // This space intentionally left blank (§5)
   }
@@ -296,9 +296,9 @@ function protocolFor(service) {
 
 function missionTypeFor(service) {
   switch (service) {
-    case 'missions': return missionTypeValue('mission');
-    case 'fences': return missionTypeValue('fence');
-    case 'rally': return missionTypeValue('rally');
+    case 'mission':
+    case 'fence':
+    case 'rally': return missionTypeValue(service);
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
@@ -381,16 +381,16 @@ function machineOptions(context) {
         encoding: resolvedEncoding(config, payload, connNode, target, profile),
         params: payload,
       };
-    case 'missions|backup':
-    case 'fences|backup':
+    case 'mission|backup':
+    case 'fence|backup':
     case 'rally|backup':
       return {
         ...shared,
         missionType: missionTypeFor(service),
         sourceIds: connNode.resolveSourceIds(identityId),
       };
-    case 'missions|restore':
-    case 'fences|restore':
+    case 'mission|restore':
+    case 'fence|restore':
     case 'rally|restore':
       return {
         ...shared,
@@ -413,11 +413,11 @@ function bandFor(service, operation) {
     case 'files|backup':
     case 'files|restore':
     case 'parameters|backup':
-    case 'missions|backup':
-    case 'fences|backup':
+    case 'mission|backup':
+    case 'fence|backup':
     case 'rally|backup':
-    case 'missions|restore':
-    case 'fences|restore':
+    case 'mission|restore':
+    case 'fence|restore':
     case 'rally|restore':
       return BAND.BULK;
     case 'parameters|restore':

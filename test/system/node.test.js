@@ -324,9 +324,9 @@ test('the backup bundle asks each plan section for its own type and keeps nonfin
   const result = await runInput(node, { payload: {} });
   assert.deepEqual(planTypes, [0, 1, 2], 'mission, fence and rally each ask for their own plan type');
   const bundle = JSON.parse(JSON.stringify(result.outputs.at(-1)[0].payload));
-  assert.equal(bundle.missions[0].param1, 'NaN');
-  assert.equal(bundle.missions[0].param2, '-0');
-  assert.equal(bundle.fences[0].z, 'NaN');
+  assert.equal(bundle.mission[0].param1, 'NaN');
+  assert.equal(bundle.mission[0].param2, '-0');
+  assert.equal(bundle.fence[0].z, 'NaN');
   assert.deepEqual(bundle.files, { root: '/config', directories: [], files: [] });
   assert.equal(result.outputs.at(-1)[1].bundle, undefined, 'the bundle stays off the status output');
 });
