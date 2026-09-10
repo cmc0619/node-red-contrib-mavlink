@@ -56,8 +56,7 @@ function registerMavlinkSystem(RED) {
           node,
         };
         delivery.applyActionStatus(node, 'sending', `${service} ${operation}…`);
-        const runner = createRunner(context);
-        await inFlight.track((signal) => runner(signal).then((outcome) => {
+        await inFlight.track((signal) => run(context, signal).then((outcome) => {
           finish(node, send, done, msg, service, operation, target, outcome);
           return outcome;
         }));
@@ -72,19 +71,36 @@ function registerMavlinkSystem(RED) {
   RED.nodes.registerType('mavlink-system', MavlinkSystemNode);
 }
 
-function createRunner(context) {
+/**
+ * The bundle's sections in transfer order: the key each one takes in the
+ * backup object, and the service whose protocol, mission type and lock scope
+ * it runs under.
+ *
+ * @type {Array<[string, string]>}
+ */
+const BUNDLE_SECTIONS = [
+  ['parameters', 'parameters'],
+  ['mission', 'missions'],
+  ['fence', 'fences'],
+  ['rally', 'rally'],
+  ['files', 'files'],
+];
+
+/** A mission engine spells the bundle's operations as transfer directions. */
+const MISSION_OPERATION = { backup: 'download', restore: 'upload' };
+
+function run(context, signal) {
   switch (context.service) {
-    case 'backup': return (signal) => runBundle(context, signal);
+    case 'backup': return runBundle(context, signal);
     case 'logs':
-    case 'files':
-      return (signal) => runSingle(context, signal);
+    case 'files': return runSingle(context, signal);
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
 }
 
 async function runSingle(context, signal) {
-  const { service, operation, connNode, target } = context;
+  const { service, connNode, target } = context;
   const protocol = protocolFor(service);
   const machine = createSingleMachine(context);
   const release = protocol.locks.acquire(connNode.id, target);
@@ -117,7 +133,7 @@ async function runMachine(machine, signal) {
   const cancel = () => {
     if (started) machine.cancel();
   };
-    signal.addEventListener('abort', cancel, { once: true });
+  signal.addEventListener('abort', cancel, { once: true });
   try {
     const run = Promise.resolve().then(() => {
       if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
@@ -134,27 +150,11 @@ async function runMachine(machine, signal) {
 
 async function runBundle(context, signal) {
   const { operation, connNode, target } = context;
-  const input = operation === 'restore' ? context.payload : undefined;
-  const sections = operation === 'backup'
-    ? [
-      ['parameters', 'backup'],
-      ['mission', 'backup'],
-      ['fence', 'backup'],
-      ['rally', 'backup'],
-      ['files', 'backup'],
-    ]
-    : [
-      ['parameters', 'restore'],
-      ['mission', 'restore'],
-      ['fence', 'restore'],
-      ['rally', 'restore'],
-      ['files', 'restore'],
-    ];
   const result = {};
-  for (const [section, stepOperation] of sections) {
+  for (const [section, service] of sectionsFor(context)) {
     if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
-    const step = bundleStep(context, section, stepOperation, input);
-    const release = step.protocol.locks.acquire(connNode.id, target, step.scope);
+    const stepContext = { ...context, service, payload: sectionPayload(context, section) };
+    const release = protocolFor(service).locks.acquire(connNode.id, target, missionTypeFor(service));
     if (!release) {
       return {
         result: 'failed',
@@ -164,78 +164,106 @@ async function runBundle(context, signal) {
       };
     }
     try {
-      const outcome = await runMachine(step.machine, signal);
-      if (signal.aborted || outcome.result === 'cancelled') {
-        return { ...outcome, section };
-      }
+      const outcome = await runMachine(bundleMachine(stepContext), signal);
+      if (signal.aborted || outcome.result === 'cancelled') return { ...outcome, section };
       if (outcome.result !== 'succeeded') return { ...outcome, section };
       result[section] = outcome;
     } finally {
       release();
     }
   }
-  if (operation === 'backup') {
-    return {
-      result: 'succeeded',
-      phase: 'done',
-      bundle: {
-        parameters: result.parameters.params,
-        mission: result.mission.items,
-        fence: result.fence.items,
-        rally: result.rally.items,
-        files: {
-          root: result.files.root,
-          directories: result.files.directories,
-          files: result.files.files,
+  switch (operation) {
+    case 'backup':
+      return {
+        result: 'succeeded',
+        phase: 'done',
+        bundle: {
+          parameters: result.parameters.params,
+          mission: jsonSafeItems(result.mission.items),
+          fence: jsonSafeItems(result.fence.items),
+          rally: jsonSafeItems(result.rally.items),
+          files: {
+            root: result.files.root,
+            directories: result.files.directories,
+            files: result.files.files,
+          },
         },
-      },
-    };
-  }
-  return {
-    result: 'succeeded',
-    phase: 'done',
-    restored: true,
-    sections: Object.fromEntries(Object.entries(result).map(([name, outcome]) => [name, restoreCount(name, outcome)])),
-  };
-}
-
-function bundleStep(context, section, operation, input) {
-  const missionSection = section === 'mission' || section === 'fence' || section === 'rally';
-  const service = missionSection ? 'missions' : section;
-  const payload = operation === 'restore' ? input[section] : context.payload;
-  const stepContext = { ...context, service, operation, payload };
-  let protocol;
-  let scope;
-  let machine;
-  switch (section) {
-    case 'parameters':
-      protocol = parameterProtocol;
-      machine = new parameterProtocol.ParamBackupRestore(operation, machineOptions(stepContext));
-      break;
-    case 'mission':
-    case 'fence':
-    case 'rally':
-      protocol = missionProtocol;
-      scope = missionTypeFor(section === 'mission' ? 'missions' : section);
-      machine = missionProtocol.createMachine(
-        operation === 'backup' ? 'download' : 'upload',
-        machineOptions({
-          ...stepContext,
-          service: section === 'mission' ? 'missions' : section,
-        })
-      );
-      break;
-    case 'files':
-      protocol = ftpProtocol;
-      machine = new ftpProtocol.FtpMachine(operation, machineOptions(
-        operation === 'backup'
-          ? { ...stepContext, payload: { path: context.msg.path } }
-          : stepContext
-      ));
-      break;
+      };
+    case 'restore':
+      return {
+        result: 'succeeded',
+        phase: 'done',
+        restored: true,
+        sections: Object.fromEntries(
+          Object.entries(result).map(([name, outcome]) => [name, restoreCount(name, outcome)])
+        ),
+      };
     default: break; // This space intentionally left blank (§5)
   }
-  return { protocol, scope, machine };
+  return undefined;
+}
+
+/**
+ * Backup covers every section. Restore covers the sections the bundle in hand
+ * actually carries, so an object holding one section restores only that one
+ * and a bundle that lost a section to a failed backup restores the rest.
+ *
+ * @param {object} context
+ * @returns {Array<[string, string]>}
+ */
+function sectionsFor(context) {
+  switch (context.operation) {
+    case 'backup': return BUNDLE_SECTIONS;
+    case 'restore': return BUNDLE_SECTIONS.filter(([section]) => section in context.payload);
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+/**
+ * A backup step reads the node's own payload; a restore step reads the slice
+ * of the saved bundle that its section owns.
+ *
+ * @param {object} context
+ * @param {string} section
+ * @returns {*}
+ */
+function sectionPayload(context, section) {
+  switch (context.operation) {
+    case 'backup': return context.payload;
+    case 'restore': return context.payload[section];
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+function bundleMachine(context) {
+  const options = machineOptions(context);
+  switch (context.service) {
+    case 'parameters':
+      return new parameterProtocol.ParamBackupRestore(context.operation, options);
+    case 'missions':
+    case 'fences':
+    case 'rally':
+      return missionProtocol.createMachine(MISSION_OPERATION[context.operation], options);
+    case 'files':
+      return new ftpProtocol.FtpMachine(context.operation, options);
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
+}
+
+/**
+ * Mission items carry the same nonfinite floats parameters do, so a saved
+ * bundle keeps NaN and negative zero through JSON (lib/param/backup.js).
+ *
+ * @param {object[]} items
+ * @returns {object[]}
+ */
+function jsonSafeItems(items) {
+  return items.map((item) => Object.fromEntries(
+    Object.entries(item).map(([key, value]) => [key, jsonSafeValue(value)])
+  ));
 }
 
 function restoreCount(section, outcome) {
@@ -334,7 +362,7 @@ function machineOptions(context) {
       return {
         ...shared,
         source: connNode.resolveSourceIds(identityId),
-        path: payload.path === undefined ? config.path : payload.path,
+        path: msg.path === undefined ? config.path : msg.path,
       };
     case 'files|restore':
       return {
@@ -492,24 +520,6 @@ function successMessage(service, operation, outcome, msg) {
     case 'backup|restore':
       output.payload = { restored: outcome.restored, sections: outcome.sections };
       return output;
-    case 'parameters|backup':
-      output.payload = outcome.params;
-      return output;
-    case 'parameters|restore':
-      output.payload = { restored: outcome.restored };
-      return output;
-    case 'missions|backup':
-    case 'fences|backup':
-    case 'rally|backup':
-      output.payload = outcome.items.map((item) => Object.fromEntries(
-        Object.entries(item).map(([key, value]) => [key, jsonSafeValue(value)])
-      ));
-      return output;
-    case 'missions|restore':
-    case 'fences|restore':
-    case 'rally|restore':
-      output.payload = { restored: outcome.count };
-      return output;
     default: break; // This space intentionally left blank (§5)
   }
   return output;
@@ -526,14 +536,6 @@ function successBadge(service, operation, outcome) {
     case 'files|restore': return `${outcome.restoredFiles} files restored`;
     case 'backup|backup': return 'backup complete';
     case 'backup|restore': return 'restore complete';
-    case 'parameters|backup': return `${outcome.count} params backed up`;
-    case 'parameters|restore': return `${outcome.restored} params restored`;
-    case 'missions|backup':
-    case 'fences|backup':
-    case 'rally|backup': return `${outcome.count} ${service} backed up`;
-    case 'missions|restore':
-    case 'fences|restore':
-    case 'rally|restore': return `${outcome.count} ${service} restored`;
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;

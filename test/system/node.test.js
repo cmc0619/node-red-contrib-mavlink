@@ -282,33 +282,65 @@ test('files download returns a Buffer and upload accepts msg.path plus a Buffer 
   assert.equal(create.data.toString(), '/upload.bin');
 });
 
-test('parameter backup and restore use resolved encoding, preserve metadata, and select their bands', async () => {
-  const backupConn = new StubConnection();
-  backupConn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
-  backupConn.onSend((message, deliver, options) => {
-    assert.equal(options.band, 4);
-    if (message.name !== 'PARAM_REQUEST_LIST') return;
-    deliver(paramValue({ paramId: 'B', paramType: 6, paramIndex: 1, paramCount: 2, value: 2 }));
-    deliver(paramValue({ paramId: 'A', paramType: 9, paramIndex: 0, paramCount: 2, value: 1.5 }));
+test('the backup bundle asks each plan section for its own type and keeps nonfinite item values', async () => {
+  const conn = new StubConnection();
+  conn._sourceIds = { sysid: 255, compid: 190 };
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 191 };
+  const planTypes = [];
+  conn.onSend((message, deliver) => {
+    if (message.name === 'PARAM_REQUEST_LIST') {
+      deliver(paramValue({ paramId: 'A', paramType: 9, paramIndex: 0, paramCount: 1, value: 1.5, compid: 191 }));
+      return;
+    }
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      const missionType = message.fields.mission_type;
+      planTypes.push(missionType);
+      deliver({ name: 'MISSION_COUNT', sysid: 42, compid: 191,
+        fields: { count: 1, mission_type: missionType, target_system: 255, target_component: 190 } });
+      return;
+    }
+    if (message.name === 'MISSION_REQUEST_INT') {
+      deliver({
+        name: 'MISSION_ITEM',
+        sysid: 42,
+        compid: 191,
+        fields: {
+          seq: 0, frame: 3, command: 16, current: 0, autocontinue: 1,
+          param1: NaN, param2: -0, param3: 1, param4: 2, x: NaN, y: -0, z: NaN,
+          mission_type: message.fields.mission_type,
+          target_system: 255, target_component: 190,
+        },
+      });
+      return;
+    }
+    if (message.name !== 'FILE_TRANSFER_PROTOCOL') return;
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === OPCODE.LISTDIRECTORY && request.offset === 0) {
+      deliver(ftpReply(message, OPCODE.NAK, Buffer.from([NAK_ERROR.EOF])));
+    }
   });
-  const Node = loadNode(backupConn);
-  const backupNode = new Node({ ...BASE, service: 'parameters', operation: 'backup', paramEncoding: 'c-cast' });
-  const backup = await runInput(backupNode, { payload: {}, filename: 'params.json' });
-  assert.deepEqual(backup.outputs.at(-1)[0].payload, [
-    { paramId: 'A', paramType: 9, value: 1.5 },
-    { paramId: 'B', paramType: 6, value: 2 },
-  ]);
-  assert.equal(backup.outputs.at(-1)[0].filename, 'params.json');
-  assert.equal(backup.outputs.at(-1)[1].params, undefined, 'large backup payload stays off status output');
+  const Node = loadNode(conn);
+  const node = new Node({ ...BASE, service: 'backup', operation: 'backup', path: '/config', targetComponent: 191 });
+  const result = await runInput(node, { payload: {} });
+  assert.deepEqual(planTypes, [0, 1, 2], 'mission, fence and rally each ask for their own plan type');
+  const bundle = JSON.parse(JSON.stringify(result.outputs.at(-1)[0].payload));
+  assert.equal(bundle.mission[0].param1, 'NaN');
+  assert.equal(bundle.mission[0].param2, '-0');
+  assert.equal(bundle.fence[0].z, 'NaN');
+  assert.deepEqual(bundle.files, { root: '/config', directories: [], files: [] });
+  assert.equal(result.outputs.at(-1)[1].bundle, undefined, 'the bundle stays off the status output');
+});
 
-  const restoreConn = new StubConnection();
-  restoreConn.vehicle = { firmware: 'px4', targetSystem: 42, targetComponent: 1 };
+test('a restore of one section runs that section alone, on its own band', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'px4', targetSystem: 42, targetComponent: 1 };
+  const bands = new Set();
   const params = [
     { paramId: 'I', paramType: 6, value: -4 },
     { paramId: 'U', paramType: 5, value: 12 },
   ];
-  restoreConn.onSend((message, deliver, options) => {
-    assert.equal(options.band, 2);
+  conn.onSend((message, deliver, options) => {
+    bands.add(options.band);
     if (message.name !== 'PARAM_SET') return;
     const sent = params.find((param) => param.paramId === message.fields.param_id);
     deliver(paramValue({
@@ -319,89 +351,51 @@ test('parameter backup and restore use resolved encoding, preserve metadata, and
       value: paramValueToWire(sent.value, sent.paramType),
     }));
   });
-  const RestoreNode = loadNode(restoreConn);
-  const restoreNode = new RestoreNode({ ...BASE, service: 'parameters', operation: 'restore', paramEncoding: 'bytewise' });
-  const restored = await runInput(restoreNode, { payload: params, topic: 'restore' });
-  assert.deepEqual(restored.outputs.at(-1)[0].payload, { restored: 2 });
-  assert.equal(restored.outputs.at(-1)[0].topic, 'restore');
-  assert.equal(restored.outputs.at(-1)[1].params, undefined);
-  assert.equal(restored.outputs.at(-1)[1].restored, 2);
+  const Node = loadNode(conn);
+  const node = new Node({ ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'bytewise' });
+  const result = await runInput(node, { payload: { parameters: params }, topic: 'restore' });
+  assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { parameters: 2 } });
+  assert.equal(result.outputs.at(-1)[0].topic, 'restore');
+  assert.deepEqual([...bands], [2], 'a parameter restore rides the control band');
+  assert.equal(conn.sentNames().filter((name) => name === 'MISSION_COUNT').length, 0, 'no plan section runs');
 });
 
-test('mission services backup and restore use the matching mission type', async () => {
-  const backupConn = new StubConnection();
-  backupConn.onSend((message, deliver, options) => {
-    assert.equal(options.band, 4);
-    if (message.name === 'MISSION_REQUEST_LIST') {
-      assert.equal(message.fields.mission_type, 1);
-      deliver({ name: 'MISSION_COUNT', sysid: 42, compid: 1, fields: { count: 0, mission_type: 1 } });
-    }
-  });
-  const Node = loadNode(backupConn);
-  const backupNode = new Node({ ...BASE, service: 'fences', operation: 'backup' });
-  const backup = await runInput(backupNode, { payload: {} });
-  assert.deepEqual(backup.outputs.at(-1)[0].payload, []);
-  assert.equal(backup.outputs.at(-1)[1].missionType, 1);
-
-  const restoreConn = new StubConnection();
-  restoreConn.onSend((message, deliver, options) => {
-    assert.equal(options.band, 4);
-    if (message.name === 'MISSION_COUNT') {
-      assert.equal(message.fields.mission_type, 2);
-      deliver({ name: 'MISSION_REQUEST_INT', sysid: 42, compid: 1, fields: { seq: 0, mission_type: 2 } });
-    } else if (message.name === 'MISSION_ITEM_INT') {
-      assert.equal(message.fields.mission_type, 2);
-      deliver({ name: 'MISSION_ACK', sysid: 42, compid: 1, fields: { type: 0, mission_type: 2 } });
-    }
-  });
-  const RestoreNode = loadNode(restoreConn);
-  const restoreNode = new RestoreNode({ ...BASE, service: 'rally', operation: 'restore' });
-  const restored = await runInput(restoreNode, {
-    payload: [{ frame: 3, command: 5100, current: 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: 1, y: 2, z: 3 }],
-  });
-  assert.equal(restored.outputs.at(-1)[0].payload.restored, 1);
-  assert.equal(restored.outputs.at(-1)[1].missionType, 2);
-});
-
-test('mission backup keeps NaN and negative zero item values through JSON round trips', async () => {
+test('a segmented restore uses the plan type its section names', async () => {
   const conn = new StubConnection();
+  const planTypes = [];
   conn.onSend((message, deliver) => {
-    if (message.name === 'MISSION_REQUEST_LIST') {
-      deliver({ name: 'MISSION_COUNT', sysid: 42, compid: 1, fields: { count: 1, mission_type: 0 } });
-    } else if (message.name === 'MISSION_REQUEST_INT') {
-      deliver({
-        name: 'MISSION_ITEM',
-        sysid: 42,
-        compid: 1,
-        fields: {
-          seq: 0, frame: 3, command: 16, current: 0, autocontinue: 1,
-          param1: NaN, param2: -0, param3: 1, param4: 2, x: NaN, y: -0, z: NaN,
-          mission_type: 0,
-        },
-      });
+    if (message.name === 'MISSION_COUNT') {
+      planTypes.push(message.fields.mission_type);
+      deliver({ name: 'MISSION_REQUEST_INT', sysid: 42, compid: 1, fields: { seq: 0, mission_type: message.fields.mission_type } });
+      return;
+    }
+    if (message.name === 'MISSION_ITEM_INT') {
+      deliver({ name: 'MISSION_ACK', sysid: 42, compid: 1, fields: { type: 0, mission_type: message.fields.mission_type } });
     }
   });
   const Node = loadNode(conn);
-  const node = new Node({ ...BASE, service: 'missions', operation: 'backup' });
-  const result = await runInput(node, { payload: {} });
-  const roundTripped = JSON.parse(JSON.stringify(result.outputs.at(-1)[0].payload));
-  assert.equal(roundTripped[0].param1, 'NaN');
-  assert.equal(roundTripped[0].param2, '-0');
-  assert.equal(roundTripped[0].z, 'NaN');
+  const node = new Node({ ...BASE, service: 'backup', operation: 'restore' });
+  const result = await runInput(node, {
+    payload: { rally: [{ frame: 3, command: 5100, current: 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: 1, y: 2, z: 3 }] },
+  });
+  assert.deepEqual(planTypes, [2], 'rally restores under the rally plan type');
+  assert.deepEqual(result.outputs.at(-1)[0].payload, { restored: true, sections: { rally: 1 } });
 });
 
-test('mission service locks include the selected plan type', async (t) => {
+test('a second bundle on the same target reports the lock', async (t) => {
   const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
   conn.onSend(() => {});
   const Node = loadNode(conn);
-  const first = new Node({ ...BASE, service: 'fences', operation: 'backup', id: 'first-fence-backup' });
-  const second = new Node({ ...BASE, service: 'fences', operation: 'backup', id: 'second-fence-backup' });
+  const first = new Node({ ...BASE, service: 'backup', operation: 'backup', id: 'first-bundle' });
+  const second = new Node({ ...BASE, service: 'backup', operation: 'backup', id: 'second-bundle' });
   t.after(() => first.emit('close', () => {}));
 
   first.emit('input', { payload: {} }, () => {}, () => {});
+  await new Promise((resolve) => setImmediate(resolve));
   const result = await runInput(second, { payload: {} });
   assert.equal(result.outputs.at(-1)[1].phase, 'locked');
-  assert.equal(conn.sentNames().filter((name) => name === 'MISSION_REQUEST_LIST').length, 1);
+  assert.equal(conn.sentNames().filter((name) => name === 'PARAM_REQUEST_LIST').length, 1);
 });
 
 test('files backup and restore use the FTP bundle contract and preserve metadata', async () => {
