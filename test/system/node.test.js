@@ -362,7 +362,6 @@ test('a backup keeps the sections that transferred when one fails', async () => 
   assert.equal(record.result, 'partial');
   assert.deepEqual(Object.keys(message.payload).sort(), ['fence', 'parameters', 'rally']);
   assert.equal(message.payload.parameters[0].paramId, 'A');
-  assert.equal(message.payload.files, undefined);
   assert.ok(record.failed.files.reason, 'the outcome names why the files section did not make it');
 });
 
