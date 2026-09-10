@@ -523,17 +523,20 @@ test('restore creates recorded directories and uploads base64 file data below th
   const bundle = {
     version: 1,
     root: '/config',
-    directories: ['folder'],
+    // '..' entries are rooted, not obeyed: a bundle is not a way to write
+    // outside the directory the operator chose. Backup never writes one.
+    directories: ['folder', '../escape'],
     files: [
       { path: 'root.bin', data: 'YWJj' },
       { path: 'folder/inner.bin', data: 'ZGU=' },
+      { path: '../../etc/passwd', data: 'Zg==' },
     ],
   };
   let nextSession = 20;
   stub.onSend((message, deliver) => {
     const request = decodePayload(message.fields.payload);
     if (request.opcode === 9) {
-      assert.ok(['/restore', '/restore/folder'].includes(request.data.toString()));
+      assert.ok(['/restore', '/restore/folder', '/restore/escape'].includes(request.data.toString()));
       deliver(nack(message, NAK_ERROR.FILEEXISTS));
     } else if (request.opcode === 3) {
       deliver(nack(message, NAK_ERROR.EOF));
@@ -554,15 +557,16 @@ test('restore creates recorded directories and uploads base64 file data below th
   })).start();
 
   assert.equal(outcome.result, 'succeeded');
-  assert.equal(outcome.bytes, 5);
-  assert.equal(outcome.restoredFiles, 2);
-  assert.equal(outcome.restoredDirectories, 1);
+  assert.equal(outcome.bytes, 6);
+  assert.equal(outcome.restoredFiles, 3);
+  assert.equal(outcome.restoredDirectories, 2);
   const requests = stub.sent.map(({ message }) => decodePayload(message.fields.payload));
   assert.deepEqual(requests.filter((request) => request.opcode === 6).map((request) => request.data.toString()), [
     '/restore/root.bin',
     '/restore/folder/inner.bin',
+    '/restore/etc/passwd',
   ]);
-  assert.deepEqual(requests.filter((request) => request.opcode === 7).map((request) => request.data.toString()), ['abc', 'de']);
+  assert.deepEqual(requests.filter((request) => request.opcode === 7).map((request) => request.data.toString()), ['abc', 'de', 'f']);
 });
 
 test('backup and restore surface child failures with partial progress', async () => {
