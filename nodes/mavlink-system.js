@@ -72,19 +72,13 @@ function registerMavlinkSystem(RED) {
 }
 
 /**
- * The bundle's sections in transfer order: the key each one takes in the
- * backup object, and the service whose protocol, mission type and lock scope
- * it runs under.
+ * The bundle's sections in transfer order. Each is the service that owns it,
+ * so the same word is the key in the backup object, the protocol, the mission
+ * type and the lock scope.
  *
- * @type {Array<[string, string]>}
+ * @type {string[]}
  */
-const BUNDLE_SECTIONS = [
-  ['parameters', 'parameters'],
-  ['mission', 'missions'],
-  ['fence', 'fences'],
-  ['rally', 'rally'],
-  ['files', 'files'],
-];
+const BUNDLE_SECTIONS = ['parameters', 'missions', 'fences', 'rally', 'files'];
 
 /** A mission engine spells the bundle's operations as transfer directions. */
 const MISSION_OPERATION = { backup: 'download', restore: 'upload' };
@@ -150,10 +144,10 @@ async function runMachine(machine, signal) {
 async function runBundle(context, signal) {
   const { operation, connNode, target } = context;
   const result = {};
-  for (const [section, service] of sectionsFor(context)) {
+  for (const section of sectionsFor(context)) {
     if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
-    const stepContext = { ...context, service, payload: sectionPayload(context, section) };
-    const release = protocolFor(service).locks.acquire(connNode.id, target, missionTypeFor(service));
+    const stepContext = { ...context, service: section, payload: sectionPayload(context, section) };
+    const release = protocolFor(section).locks.acquire(connNode.id, target, missionTypeFor(section));
     if (!release) {
       return {
         result: 'failed',
@@ -178,8 +172,8 @@ async function runBundle(context, signal) {
         phase: 'done',
         bundle: {
           parameters: result.parameters.params,
-          mission: jsonSafeItems(result.mission.items),
-          fence: jsonSafeItems(result.fence.items),
+          missions: jsonSafeItems(result.missions.items),
+          fences: jsonSafeItems(result.fences.items),
           rally: jsonSafeItems(result.rally.items),
           files: {
             root: result.files.root,
@@ -214,12 +208,12 @@ async function runBundle(context, signal) {
  * and a bundle that lost a section to a failed backup restores the rest.
  *
  * @param {object} context
- * @returns {Array<[string, string]>}
+ * @returns {string[]}
  */
 function sectionsFor(context) {
   switch (context.operation) {
     case 'backup': return BUNDLE_SECTIONS;
-    case 'restore': return BUNDLE_SECTIONS.filter(([section]) => section in context.payload);
+    case 'restore': return BUNDLE_SECTIONS.filter((section) => section in context.payload);
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
@@ -274,8 +268,8 @@ function jsonSafeItems(items) {
 function restoreCount(section, outcome) {
   switch (section) {
     case 'parameters': return outcome.restored;
-    case 'mission':
-    case 'fence':
+    case 'missions':
+    case 'fences':
     case 'rally': return outcome.count;
     case 'files': return {
       files: outcome.restoredFiles,
