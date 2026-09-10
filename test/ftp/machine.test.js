@@ -517,14 +517,15 @@ test('backup recursively lists a selected directory, skips dot traversal records
   assert.equal(stub.subscriberCount(), 0);
 });
 
-test('restore creates recorded directories and uploads base64 file data below the destination root', async () => {
+test('restore creates recorded directories and uploads base64 file data where each entry joins the root', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
   const bundle = {
     version: 1,
     root: '/config',
-    // '..' entries are rooted, not obeyed: a bundle is not a way to write
-    // outside the directory the operator chose. Backup never writes one.
+    // Each entry joins the destination as written, `..` included: backup never
+    // emits one, so this shape only reaches here from a hand-edited bundle and
+    // rides to its natural reading (§0).
     directories: ['folder', '../escape'],
     files: [
       { path: 'root.bin', data: 'YWJj' },
@@ -536,7 +537,7 @@ test('restore creates recorded directories and uploads base64 file data below th
   stub.onSend((message, deliver) => {
     const request = decodePayload(message.fields.payload);
     if (request.opcode === 9) {
-      assert.ok(['/restore', '/restore/folder', '/restore/escape'].includes(request.data.toString()));
+      assert.ok(['/restore', '/restore/folder', '/escape'].includes(request.data.toString()));
       deliver(nack(message, NAK_ERROR.FILEEXISTS));
     } else if (request.opcode === 3) {
       deliver(nack(message, NAK_ERROR.EOF));
@@ -564,7 +565,7 @@ test('restore creates recorded directories and uploads base64 file data below th
   assert.deepEqual(requests.filter((request) => request.opcode === 6).map((request) => request.data.toString()), [
     '/restore/root.bin',
     '/restore/folder/inner.bin',
-    '/restore/etc/passwd',
+    '/etc/passwd',
   ]);
   assert.deepEqual(requests.filter((request) => request.opcode === 7).map((request) => request.data.toString()), ['abc', 'de', 'f']);
 });
