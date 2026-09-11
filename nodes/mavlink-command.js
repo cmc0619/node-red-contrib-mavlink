@@ -41,6 +41,7 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
+  MAV_FRAME,
   intCoordKinds,
   resolveFrame,
 } = require('../lib/command/carrier');
@@ -406,11 +407,17 @@ module.exports = function registerMavlinkCommand(RED) {
           return;
         }
 
-        // Completion's TAKEOFF datum is frame-aware, but only COMMAND_INT carries
-        // a frame on the wire — COMMAND_LONG has none: pass it for INT, withhold
-        // it for LONG so completion uses the relative datum instead of AMSL math
-        // against a frame the vehicle never saw.
-        const completionFrame = configuredCarrier === CARRIER.INT ? frame : undefined;
+        // Completion's TAKEOFF datum is frame-aware. ArduPilot reads a takeoff
+        // altitude relative to home on both carriers and denies any INT frame
+        // but 3 (§14.74), so the INT frame is the datum there and COMMAND_LONG
+        // (no frame on the wire) reads as relative. PX4 reads param7 as AMSL
+        // on both carriers — `mavlink_receiver` copies `z` to `param7` with no
+        // frame conversion and `navigator` takes it as the loiter altitude AMSL
+        // — so completion compares against what that vehicle actually flies
+        // to, whatever frame the operator saved (471#49).
+        const completionFrame = profile.firmware === 'px4'
+          ? MAV_FRAME.GLOBAL
+          : (configuredCarrier === CARRIER.INT ? frame : undefined);
 
         // Timeout: check peer table for completion condition.
         if (ackOutcome.result === 'timeout') {
