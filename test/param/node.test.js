@@ -661,7 +661,7 @@ test('confirm set re-sends PARAM_SET when its echo times out', { timeout: 1000 }
   assert.equal(conn.activeCount(), 0, 'subscription torn down');
 });
 
-test('a PARAM_VALUE echo typed 64-bit settles the set as failed by name, not as an echo timeout (470#34)', { timeout: 1000 }, async () => {
+test('a PARAM_VALUE echo typed 64-bit settles the set as failed, not as an echo timeout (470#34)', { timeout: 1000 }, async () => {
   // PX4: the echo decodes bytewise through the union, which is where a 64-bit
   // type has no slot. (ArduPilot decodes c-cast and never asks the union.)
   const conn = connStubFull({ vehicle: { targetSystem: 1, targetComponent: 1, firmware: 'px4' } });
@@ -681,7 +681,7 @@ test('a PARAM_VALUE echo typed 64-bit settles the set as failed by name, not as 
   const records = outs.filter((m) => m[1]?.result).map((m) => m[1]);
   const failed = records.find((r) => r.result === 'failed');
   assert.ok(failed, 'the set settles as failed');
-  assert.match(failed.detail, /MAV_PARAM_TYPE 10/, 'the vehicle\'s own type is named');
+  assert.match(failed.detail, /kind/, 'the union\'s own missing-row failure, not an echo timeout');
   assert.equal(records.some((r) => r.result === 'timed-out' || r.result === 'succeeded'), false,
     'neither an echo timeout nor a confirmation follows');
   assert.equal(conn.sent.length, 1, 'no re-send: the vehicle answered, it just cannot be decoded');

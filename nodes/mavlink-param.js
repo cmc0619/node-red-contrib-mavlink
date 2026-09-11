@@ -359,7 +359,7 @@ module.exports = function registerMavlinkParam(RED) {
               case 'confirm-set': {
                 // The echo decodes with the vehicle's own param_type (§14.80).
                 // A type the 4-byte slot cannot hold is the vehicle refusing the
-                // shape of this transaction, so it settles now, by name (§9).
+                // shape of this transaction, so it settles now (§9).
                 try {
                   if (!matchesParamEcho(request, decoded)) return;
                 } catch (err) {

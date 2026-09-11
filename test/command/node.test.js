@@ -1286,4 +1286,8 @@ test('a PX4 takeoff completes against the AMSL datum on COMMAND_LONG; ArduPilot 
   const ap = await fly('ardupilot');
   assert.equal(ap.result, 'timeout', 'ArduPilot: 10 m relative is a climb this telemetry never shows');
   assert.equal(ap.confirmedBy, undefined);
+
+  const custom = await fly('custom');
+  assert.equal(custom.result, 'timeout', 'custom: no measured datum, the carrier rule stands');
+  assert.equal(custom.confirmedBy, undefined);
 });
