@@ -57,7 +57,6 @@ module.exports = function registerMavlinkPayload(RED) {
     const captureSequences = new Map();
     /** @param {number} compid @returns {number} */
     function nextCaptureSequence(compid) {
-      if (compid === 0) return 0;
       const next = captureSequences.has(compid) ? captureSequences.get(compid) + 1 : 1;
       captureSequences.set(compid, next);
       return next;

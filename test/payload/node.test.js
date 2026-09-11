@@ -675,5 +675,5 @@ test('single photos carry a per-camera capture sequence starting at 1; anything 
   assert.equal(shoot(second, { count: 1 }), 1, 'another camera keeps its own count');
   assert.equal(shoot(first, { count: 1 }), 3, 'the first camera resumes where it left off');
   assert.equal(shoot(first, { count: 3 }), 0, 'a burst is not a single capture: sequence 0');
-  assert.equal(shoot(camera(0), { count: 1 }), 0, 'component 0 is every camera at once: no single stream');
+  assert.equal(shoot(camera(0), { count: 1 }), 1, 'component 0 is a key like any other');
 });
