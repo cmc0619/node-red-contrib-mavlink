@@ -4,7 +4,7 @@
  * Remaining verification-debt SITL probes (docs/verification-debt.md):
  *   14.79-SITL  — takeoff completion at non-zero home elevation
  *   14.79-px4   — PX4 NAV_TAKEOFF param7 datum, LONG and INT carriers (opt-in:
- *                 VDEBT_PROBE=14.79-px4; restarts px4-11 before each carrier)
+ *                 VDEBT_PROBE=14.79-px4; restarts nrc-px4-11 before each carrier)
  *   14.98.5     — commanded yaw rate near target (not a speed limit)
  *   14.108-loiter — PX4 DO_REPOSITION flag-clear from Hold (AUTO_LOITER)
  *   14.108-heading — goto param4 yaw honour (opt-in: VDEBT_PROBE=14.108-heading)
@@ -241,7 +241,7 @@ async function probeTakeoffCompletion(results) {
  */
 async function probeTakeoffDatumPx4(results, carrier) {
   const name = `takeoff-datum-px4-${carrier}`;
-  restartContainer('px4-11');
+  restartContainer('nrc-px4-11');
   await sleep(15000);
   const conn = makeConn({
     bindPort: 14560,
