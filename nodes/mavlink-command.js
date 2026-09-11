@@ -41,6 +41,7 @@ const {
   buildCommandLong,
   buildCommandInt,
   CARRIER,
+  MAV_FRAME,
   intCoordKinds,
   resolveFrame,
 } = require('../lib/command/carrier');
@@ -406,11 +407,14 @@ module.exports = function registerMavlinkCommand(RED) {
           return;
         }
 
-        // Completion's TAKEOFF datum is frame-aware, but only COMMAND_INT carries
-        // a frame on the wire — COMMAND_LONG has none: pass it for INT, withhold
-        // it for LONG so completion uses the relative datum instead of AMSL math
-        // against a frame the vehicle never saw.
-        const completionFrame = configuredCarrier === CARRIER.INT ? frame : undefined;
+        // Completion's TAKEOFF datum is frame-aware. COMMAND_INT carries a frame
+        // on the wire; COMMAND_LONG has none, so the relative datum is the
+        // default. PX4 is the exception: it treats NAV_TAKEOFF param7/z as AMSL
+        // on both carriers (§14.79, SITL 2026-09-11), so completion must compare
+        // AMSL regardless of what the INT frame claimed.
+        const completionFrame = profile && profile.firmware === 'px4'
+          ? MAV_FRAME.GLOBAL
+          : (configuredCarrier === CARRIER.INT ? frame : undefined);
 
         // Timeout: check peer table for completion condition.
         if (ackOutcome.result === 'timeout') {

@@ -145,6 +145,32 @@ test('TAKEOFF completion stays pending on an absolute frame until the AMSL targe
   assert.equal(res.done, false);
 });
 
+// ── PX4 NAV_TAKEOFF AMSL datum (§14.79, SITL 2026-09-11) ───────────────────────
+// PX4 treats param7/z as AMSL on LONG and INT frame 3. At lab home ~489 m AMSL,
+// a "10 m" takeoff is already above that AMSL: no climb, STATUSTEXT "Already
+// higher…", and relative completion times out. AMSL completion (GLOBAL) settles.
+
+test('TAKEOFF AMSL completion settles when PX4 is already above a low AMSL target', () => {
+  // Measured shape: home ~489 m AMSL, param7=10, relative ≈ 0. Relative datum
+  // would wait for a 10 m climb that never starts; AMSL datum is already met.
+  const params = [0, 0, 0, 0, 0, 0, 10];
+  const pt = peerWithAlts(1, 1, 489_423, -11);
+  const relative = checkCompletion(COMPLETION.TAKEOFF, params, pt, 1, 1); // LONG / absent
+  const amsl = checkCompletion(COMPLETION.TAKEOFF, params, pt, 1, 1, 0); // GLOBAL
+  assert.equal(relative.done, false, 'relative datum still wants a 10 m climb');
+  assert.equal(amsl.done, true, 'AMSL 489 m already clears a 10 m AMSL target');
+  assert.match(amsl.detail, /AMSL/);
+});
+
+test('TAKEOFF AMSL completion stays pending until PX4 climbs to a high AMSL target', () => {
+  // Operator typed a real AMSL altitude (home 489 + 10 m AGL ≈ 499).
+  const params = [0, 0, 0, 0, 0, 0, 499];
+  const before = peerWithAlts(1, 1, 489_430, -9);
+  const after = peerWithAlts(1, 1, 499_000, 9_570);
+  assert.equal(checkCompletion(COMPLETION.TAKEOFF, params, before, 1, 1, 0).done, false);
+  assert.equal(checkCompletion(COMPLETION.TAKEOFF, params, after, 1, 1, 0).done, true);
+});
+
 // ── LAND/RTL completion: MAV_LANDED_STATE over altitude (mavlink-audit-20260905 #4) ──
 
 const LAND_PARAMS = [0, 0, 0, 0, 0, 0, 0];

@@ -1238,3 +1238,48 @@ test('a completion timeout keeps the accepted ack\'s result_param2 (CodeRabbit)'
   assert.equal(output[1].resultParam2, 7, 'the ack that did arrive is not erased by the state timeout');
   node.emit('close', () => {});
 });
+
+test('PX4 takeoff Complete uses AMSL datum on COMMAND_LONG (§14.79)', async () => {
+  // Measured 2026-09-11: PX4 treats NAV_TAKEOFF param7 as AMSL on both carriers.
+  // At home ~489 m AMSL, param7=10 is already cleared — relative completion
+  // would time out; AMSL completion (forced for firmware=px4) settles.
+  const conn = connStubWithInject({
+    id: 'vehicleProfile',
+    targetSystem: 1,
+    targetComponent: 1,
+    firmware: 'px4',
+  });
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, {
+    position: { alt: 489_423, relativeAlt: -11 },
+  });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: JSON.stringify({ 7: 10 }),
+    connection: 'conn',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'takeoff',
+    delivery: 'complete',
+    targetSystem: '1',
+    targetComponent: '1',
+    timeoutMs: '60000',
+    maxRetries: '0',
+    completionTimeout: '2000',
+  });
+  node.status = () => {};
+  let output;
+
+  node.emit('input', { payload: {} }, (messages) => { output = messages; }, () => {});
+  await tick();
+  conn.injectAck({ command: 22, result: 0 }, 1, 1);
+  await tick();
+  await tick();
+
+  assert.equal(output[1].result, 'accepted');
+  assert.equal(output[1].confirmedBy, 'state');
+  assert.match(output[1].detail, /AMSL/);
+  node.emit('close', () => {});
+});

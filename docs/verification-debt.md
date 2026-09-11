@@ -81,6 +81,7 @@ These are the gaps the external audit flagged on **shipped paths**. Each is name
 | 14.100-stream | 2026-08-22 | AP Copter-4.7: 5 Hz `LOCAL_OFFSET_NED` z=+2 m climbed ~7.3 m in 3 s — Stream withhold validated (`sitl/measure-offset-stream.js`) |
 | 14.98.6 | 2026-08-22 | One-shot yaw+rate parks after ~GUID_TIMEOUT (`sitl/measure-move-179.js` `ap-guid-yaw-park`) |
 | 14.79-SITL | 2026-08-22 | Takeoff completion at home AMSL ~584 m, 10 m relative climb (`sitl/measure-verification-debt.js`) |
+| 14.79-PX4 | 2026-09-11 | PX4 NAV_TAKEOFF param7/z is AMSL on LONG and INT frame 3; home ~489 m AMSL, param7=10 → "Already higher…", no climb, relative completion timeout (`sitl/measure-px4-takeoff-datum.js`) |
 | 14.98.5 | 2026-08-22 | Mid-error yaw slew ~44°/s vs 20°/s commanded — not a speed limit (`sitl/measure-verification-debt.js`) |
 | 14.108-loiter | 2026-08-22 | PX4 Hold + `changeMode=false` → DO_REPOSITION ACCEPTED (`sitl/measure-verification-debt.js`) |
 | 14.108-heading | 2026-08-22 | PX4 honours goto yaw (Δ20°); AP ignores param4; completion tier ack-only (`VDEBT_PROBE=14.108-heading`) |
