@@ -45,22 +45,6 @@ module.exports = function registerMavlinkPayload(RED) {
 
     // At most one COMMAND_ACK wait in flight per node (lib/command cancelSlot).
     const waiterSlot = cancelSlot();
-    /**
-     * IMAGE_START_CAPTURE sequence numbers, one counter per camera component
-     * (lib/payload captureSequence). The dialect starts a camera's count at 1
-     * and a re-transmission carries the same number as the command it repeats,
-     * so a redeploy restarting from 1 is the same exposure MAVSDK accepts.
-     * Component 0 addresses every camera at once and has no single stream.
-     *
-     * @type {Map<number, number>}
-     */
-    const captureSequences = new Map();
-    /** @param {number} compid @returns {number} */
-    function nextCaptureSequence(compid) {
-      const next = captureSequences.has(compid) ? captureSequences.get(compid) + 1 : 1;
-      captureSequences.set(compid, next);
-      return next;
-    }
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
 
@@ -98,7 +82,6 @@ module.exports = function registerMavlinkPayload(RED) {
           // craters at the tier that touches it.
           carrier: valueFrom(payload, config, 'sendAs'),
           frame: resolveFrame(payload.mavFrame, config.frame),
-          bookkeeping: { captureSequence: nextCaptureSequence },
         });
 
         /**

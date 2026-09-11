@@ -28,7 +28,7 @@ test('recipeFor camera photo maps Sequence to IMAGE_START_CAPTURE param4', () =>
 test('fieldMetaFromBundle renders no control for the driver-owned Sequence slot', () => {
   const bundle = loadBundled('ardupilotmega');
   const meta = fieldMetaFromBundle(bundle, 'camera', 'photo', '');
-  // The sequence number is bookkeeping the node stamps per camera (471#115);
+  // The sequence number is bookkeeping the driver stamps per camera;
   // an operator control would only ever be a second, contradictory source.
   assert.equal(meta.sequence, undefined, 'sequence is not an operator field');
   assert.ok(meta.cameraId.description);
@@ -114,7 +114,6 @@ test('buildPayloadMessage and field tips share the photo recipe param order', ()
     verb: 'photo',
     target: { sysid: 1, compid: 1 },
     values: { cameraId: 4, interval: 1.5, count: 3, sequence: 7 },
-    bookkeeping: { captureSequence: () => 9 },
   });
   assert.equal(built.message.fields.param1, 4);
   assert.equal(built.message.fields.param2, 1.5);
