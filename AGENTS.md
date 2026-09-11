@@ -172,6 +172,8 @@ logic, create a parallel helper, or add an abstraction when an existing function
 Comments describe the code as it exists. Do not leave archaeology such as what changed, what
 used to happen, why an old approach was removed, or which PR caused the current implementation.
 That history belongs in Git and repository documentation, not source comments.
+A PR or tracker-row reference (`471#49`) is not archaeology: it is a permanent, concrete
+pointer to the measurement or ruling behind the code, and stays (owner ruling, 2026-09-11).
 
 ## 4. Wire ingress and operational specifics
 
