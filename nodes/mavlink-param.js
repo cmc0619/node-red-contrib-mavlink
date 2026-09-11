@@ -361,14 +361,12 @@ module.exports = function registerMavlinkParam(RED) {
                 // A type the 4-byte slot cannot hold is the vehicle refusing the
                 // shape of this transaction, so it settles now, by name — not as
                 // an "echo timeout" a deadline later with the cause in a log (§9).
-                let matched;
                 try {
-                  matched = matchesParamEcho(request, decoded);
+                  if (!matchesParamEcho(request, decoded)) return;
                 } catch (err) {
                   settle((finishDone) => failInput(node, send, err, finishDone));
                   return;
                 }
-                if (!matched) return;
                 settle((finishDone) => {
                   completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
                   finishDone();

@@ -678,7 +678,7 @@ test('a PARAM_VALUE echo typed 64-bit settles the set as failed by name, not as 
   conn.inject({ name: 'PARAM_VALUE', sysid: 1, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 10 } });
   await finished;
 
-  const records = outs.filter((m) => m[1] && m[1].result).map((m) => m[1]);
+  const records = outs.filter((m) => m[1]?.result).map((m) => m[1]);
   const failed = records.find((r) => r.result === 'failed');
   assert.ok(failed, 'the set settles as failed');
   assert.match(failed.detail, /MAV_PARAM_TYPE 10/, 'the vehicle\'s own type is named');

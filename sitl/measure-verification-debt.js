@@ -296,7 +296,7 @@ async function probeTakeoffDatumPx4(results, carrier) {
       await sleep(500);
     }
     const said = texts.slice(textsBefore).filter((t) => /takeoff|altitude|higher/i.test(t));
-    const relative = checkCompletion(COMPLETION.TAKEOFF, params, conn.peerTable, 11, 1, undefined);
+    const relative = checkCompletion(COMPLETION.TAKEOFF, params, conn.peerTable, 11, 1);
     const amsl = checkCompletion(COMPLETION.TAKEOFF, params, conn.peerTable, 11, 1, MAV_FRAME.GLOBAL);
     let datum = 'unclear';
     if (maxRelMm >= 9000) datum = 'relative';
