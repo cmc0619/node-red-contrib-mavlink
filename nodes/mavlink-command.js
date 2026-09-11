@@ -414,7 +414,7 @@ module.exports = function registerMavlinkCommand(RED) {
         // param7 as AMSL on both carriers — `mavlink_receiver` copies `z` to
         // `param7` with no frame conversion and `navigator` takes it as the
         // loiter altitude AMSL (§14.79) — so completion compares against what
-        // that vehicle flies to, whatever frame the operator saved.
+        // that vehicle flies to, whatever frame the operator saved (471#49).
         let completionFrame;
         switch (profile.firmware) {
           case 'px4': completionFrame = MAV_FRAME.GLOBAL; break;
