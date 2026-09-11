@@ -551,13 +551,19 @@ deliberately stays unclassified/pass-through.
 *Check:* `lib/command/carrier.js` `LOCAL_FRAMES`; probe recipe in the entry's history
 (send before reading — `px4-listener` prints the retained previous value on start).
 
-**14.79 Takeoff completion compares climb height; the takeoff param's datum is frame-dependent.** ✔ 🧪 (unit-tested; SITL 2026-08-22)
+**14.79 Takeoff completion compares climb height; the takeoff param's datum is frame-dependent.** ✔ 🧪 (unit-tested; SITL 2026-08-22 AP, 2026-09-11 PX4)
 In an absolute frame the param is AMSL — comparing it to `relative_alt` never satisfies
 at non-zero home elevation. Completion converts absolute frames via
-`param − (alt − relative_alt)`; only the effective-INT carrier passes a frame.
-AP Copter-4.7 at home AMSL ~584 m: 10 m relative takeoff completes at ~10 m
-`relative_alt` (`node sitl/measure-verification-debt.js`).
-*Check:* `node --test test/command/completion.test.js`; rig probe `takeoff-14.79-sitl`.
+`param − (alt − relative_alt)`; only the effective-INT carrier passes a frame —
+except PX4, which treats NAV_TAKEOFF param7/z as AMSL on **both** carriers (LONG and
+INT frame 3; no frame conversion). Measured on `nrc-px4-11` at home AMSL ~489 m:
+COMMAND_LONG param7=10 and COMMAND_INT frame=3 z=10 both ACCEPTED, STATUSTEXT
+"Already higher than takeoff altitude", climb ≈ 0 m, and relative product completion
+timed out (~25 s). AMSL completion settles. AP Copter-4.7 at home AMSL ~584 m: 10 m
+relative takeoff completes at ~10 m `relative_alt` (`node sitl/measure-verification-debt.js`).
+PX4 probe: `node sitl/measure-px4-takeoff-datum.js`.
+*Check:* `node --test test/command/completion.test.js test/command/node.test.js`;
+rig probes `takeoff-14.79-sitl`, `sitl/measure-px4-takeoff-datum.js`.
 
 **14.80 A `PARAM_VALUE` echo is decoded by the frame's own `param_type`; the request's type only encodes the outbound set.** 🧪 (re-measured 2026-08-18)
 ArduPilot stores by its own table type and *ignores* the wire type (a REAL32-labeled set
