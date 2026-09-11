@@ -1224,8 +1224,9 @@
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the
         vehicle state satisfies the command's completion condition (Arm, Takeoff, Land, Set Mode).
         The takeoff altitude's datum follows the stack: ArduPilot reads it relative to home
-        on either carrier; PX4 reads it as AMSL on either carrier, so a value below the
-        current altitude does not climb and completes where the vehicle already is.</li>
+        on either carrier and denies a <code>COMMAND_INT</code> takeoff in any frame but
+        <code>GLOBAL_RELATIVE_ALT</code>; PX4 reads it as AMSL on either carrier, so a value
+        below the current altitude does not climb and completes where the vehicle already is.</li>
   </ul>
   <p><b>Run Prearm Checks</b> sends <code>MAV_CMD_RUN_PREARM_CHECKS</code>; an accepted acknowledgement means the checks will run, not that they passed or the vehicle is armable.</p>
   <p>A broadcast target (sysid 0) is refused on <b>Send &amp; confirm</b> and

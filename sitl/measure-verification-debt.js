@@ -276,6 +276,9 @@ async function probeTakeoffDatumPx4(results, carrier) {
     // the zeros the ArduPilot probe above can afford.
     const params = [0, 0, 0, NaN, NaN, NaN, 10];
     const textsBefore = texts.length;
+    // Armed before the send: a takeoff PX4 rejected or never received must
+    // not read as "AMSL" just because nothing climbed.
+    const ackWait = waitCommandAck(conn, 11, 22);
     if (carrier === 'int') {
       const withHere = [0, 0, 0, NaN, Number(before.lat) / 1e7, Number(before.lon) / 1e7, 10];
       conn.send(
@@ -295,17 +298,20 @@ async function probeTakeoffDatumPx4(results, carrier) {
       if (pos?.alt != null) lastAltMm = Number(pos.alt);
       await sleep(500);
     }
+    const ack = await ackWait;
     const said = texts.slice(textsBefore).filter((t) => /takeoff|altitude|higher/i.test(t));
     const relative = checkCompletion(COMPLETION.TAKEOFF, params, conn.peerTable, 11, 1);
     const amsl = checkCompletion(COMPLETION.TAKEOFF, params, conn.peerTable, 11, 1, MAV_FRAME.GLOBAL);
+    const accepted = ack?.result === 0;
     let datum = 'unclear';
     if (maxRelMm >= 9000) datum = 'relative';
-    else if (/already higher/i.test(said.join(' ')) || maxRelMm < 1000) datum = 'AMSL';
+    else if (accepted && (/already higher/i.test(said.join(' ')) || maxRelMm < 1000)) datum = 'AMSL';
     note(results, name, datum !== 'unclear',
-      `param7=10 read as ${datum}: home ${(homeAmslMm / 1000).toFixed(1)} m AMSL, `
+      `param7=10 read as ${datum}: ack ${ack ? ack.result : 'none'}, `
+      + `home ${(homeAmslMm / 1000).toFixed(1)} m AMSL, `
       + `climbed ${(maxRelMm / 1000).toFixed(2)} m rel; `
       + `our completion relative=${relative.done} AMSL=${amsl.done}`,
-      { carrier, homeAmslMm, maxRelMm, lastAltMm, said, relative, amsl });
+      { carrier, ack, homeAmslMm, maxRelMm, lastAltMm, said, relative, amsl });
   } catch (err) {
     note(results, name, false, err.message);
   }
