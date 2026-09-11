@@ -51,3 +51,13 @@ test('a corrupt int-vs-cast mistake is observable end to end', () => {
   assert.notEqual(reinterpret, numericCast);
   assert.equal(paramValueFromWire(reinterpret, INT32), 100);
 });
+
+test('a MAV_PARAM_TYPE the float slot cannot hold is refused by name, not by TypeError (470#34)', () => {
+  // INT64 (7), UINT64 (8), REAL64 (10): the union is four bytes. The editor
+  // never offers these; a vehicle echoing its own 64-bit parameter is the one
+  // path here, and it must read as that, not as "reading 'kind' of undefined".
+  for (const type of [7, 8, 10]) {
+    assert.throws(() => paramValueFromWire(0, type), new RegExp(`MAV_PARAM_TYPE ${type} does not fit`));
+    assert.throws(() => paramValueToWire(0, type), /PARAM_EXT/);
+  }
+});

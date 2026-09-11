@@ -952,7 +952,7 @@
   within the configured timeout; a missing index ends in a list timeout. A
   vehicle advertising zero parameters completes as an empty list.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
-  <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast.</p>
+  <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast. 64-bit and real64 types do not fit that slot and are not offered; a vehicle that answers a set with one of them fails the set by name rather than timing out &mdash; those parameters travel via <code>PARAM_EXT</code>, which this node does not speak.</p>
   <p><b>Param id</b> searches shipped parameter definitions — type any part of a
   <i>name or description</i> and pick from the results. "minimum" finds
   <code>RC1_MIN</code>; you do not have to know the name first. Each result shows
