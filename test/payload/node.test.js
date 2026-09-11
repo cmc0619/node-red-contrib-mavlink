@@ -647,3 +647,33 @@ function redStub(nodesById) {
     },
   };
 }
+
+test('single photos carry a per-camera capture sequence starting at 1; anything else sends 0 (471#115)', () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const camera = (targetComponent) => new Node({
+    sendAs: 'long',
+    delivery: 'build',
+    dialect: 'common',
+    topic: 'camera',
+    verb: 'photo',
+    targetSystem: 7,
+    targetComponent,
+  });
+  const shoot = (node, values) => {
+    let sent;
+    node.emit('input', { payload: { values } }, (m) => { sent = m; }, () => {});
+    return sent[0].payload.fields.param4;
+  };
+
+  // Two genuine photos to one camera must not look like one re-sent command.
+  const first = camera(100);
+  const second = camera(101);
+  assert.equal(shoot(first, { count: 1 }), 1, 'the dialect starts a camera at 1');
+  assert.equal(shoot(first, { count: 1 }), 2, 'the next photo counts up');
+  assert.equal(shoot(second, { count: 1 }), 1, 'another camera keeps its own count');
+  assert.equal(shoot(first, { count: 1 }), 3, 'the first camera resumes where it left off');
+  assert.equal(shoot(first, { count: 3 }), 0, 'a burst is not a single capture: sequence 0');
+  assert.equal(shoot(camera(0), { count: 1 }), 1, 'component 0 is a key like any other');
+});

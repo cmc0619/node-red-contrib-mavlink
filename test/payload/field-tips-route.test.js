@@ -63,8 +63,10 @@ test('deployed Vehicle Profile serves field tips from its dialect bundle', () =>
   handler({ query: { topic: 'camera', verb: 'photo', vehicle: 'veh1' } }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.dialect, 'ardupilotmega');
-  assert.ok(res.body.fields.sequence);
-  assert.match(res.body.fields.sequence.description, /sequence/i);
+  // The capture sequence is stamped by the node, not typed (471#115): no tip.
+  assert.equal(res.body.fields.sequence, undefined);
+  assert.ok(res.body.fields.count);
+  assert.match(res.body.fields.count.description, /images/i);
 });
 
 test('missing Vehicle Profile with bundled dialect serves that dialect', () => {

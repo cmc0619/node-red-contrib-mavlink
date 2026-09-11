@@ -356,13 +356,22 @@ module.exports = function registerMavlinkParam(RED) {
           const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
             if (!pending || pending.gen !== myGen) return;
             switch (mode) {
-              case 'confirm-set':
-                if (!matchesParamEcho(request, decoded)) return;
+              case 'confirm-set': {
+                // The echo decodes with the vehicle's own param_type (§14.80).
+                // A type the 4-byte slot cannot hold is the vehicle refusing the
+                // shape of this transaction, so it settles now (§9).
+                try {
+                  if (!matchesParamEcho(request, decoded)) return;
+                } catch (err) {
+                  settle((finishDone) => failInput(node, send, err, finishDone));
+                  return;
+                }
                 settle((finishDone) => {
                   completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
                   finishDone();
                 });
                 break;
+              }
               case 'confirm-read':
                 if (!matchesParamReadReply(request, decoded)) return;
                 settle((finishDone) => {

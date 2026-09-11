@@ -3,6 +3,8 @@
 /**
  * Remaining verification-debt SITL probes (docs/verification-debt.md):
  *   14.79-SITL  — takeoff completion at non-zero home elevation
+ *   14.79-px4   — PX4 NAV_TAKEOFF param7 datum, LONG and INT carriers (opt-in:
+ *                 VDEBT_PROBE=14.79-px4; restarts nrc-px4-11 before each carrier)
  *   14.98.5     — commanded yaw rate near target (not a speed limit)
  *   14.108-loiter — PX4 DO_REPOSITION flag-clear from Hold (AUTO_LOITER)
  *   14.108-heading — goto param4 yaw honour (opt-in: VDEBT_PROBE=14.108-heading)
@@ -18,13 +20,12 @@ const { spawnSync } = require('child_process');
 const { Connection } = require('../lib/connection/runtime');
 const { BAND } = require('../lib/connection/bands');
 const { loadBundled } = require('../lib/metadata/bundled');
-const { buildCommandLong } = require('../lib/command/carrier');
-const { waitForCompletion } = require('../lib/command/completion');
+const { buildCommandLong, buildCommandInt, MAV_FRAME } = require('../lib/command/carrier');
+const { waitForCompletion, checkCompletion } = require('../lib/command/completion');
 const { COMPLETION } = require('../lib/command/presets');
 const {
   buildMoveMessage,
   createMoveStream,
-  MAV_FRAME,
 } = require('../lib/move');
 const { buildRepositionMessage, DO_REPOSITION } = require('../lib/move/reposition');
 
@@ -222,6 +223,99 @@ async function probeTakeoffCompletion(results) {
   } catch (err) {
     note(results, 'takeoff-14.79-sitl', false, err.message);
   }
+  await new Promise((resolve) => conn.close(() => resolve()));
+}
+
+/**
+ * 471#49: which datum PX4 reads NAV_TAKEOFF param7 in, per carrier. Source
+ * says AMSL on both — mavlink_receiver copies COMMAND_INT z to param7 with
+ * no frame conversion, and navigator takes param7 as the loiter altitude
+ * AMSL, falling back to MIS_TAKEOFF_ALT only when it is NaN. The lab's home
+ * sits well above 10 m AMSL, so a "10 m" takeoff read as AMSL is "Already
+ * higher than takeoff altitude" and no climb; read as relative it is a 10 m
+ * climb. Both readings of our own completion are recorded alongside, so the
+ * §14 row can say which one agrees with the vehicle.
+ *
+ * @param {object[]} results
+ * @param {'long'|'int'} carrier
+ */
+async function probeTakeoffDatumPx4(results, carrier) {
+  const name = `takeoff-datum-px4-${carrier}`;
+  restartContainer('nrc-px4-11');
+  await sleep(15000);
+  const conn = makeConn({
+    bindPort: 14560,
+    remotePort: 14560,
+    sysid: 11,
+    firmware: 'px4',
+    autopilot: 12,
+    dialect: 'common',
+  });
+  const texts = [];
+  await conn.start();
+  const unsub = conn.subscribe({ message: 'STATUSTEXT', sysid: 11 }, (decoded) => {
+    texts.push(String(decoded.fields.text).replace(/\0+$/, ''));
+  });
+  try {
+    await waitPeer(conn, 11);
+    requestTelemetry(conn, 11);
+    await sleep(2000);
+    const armDeadline = Date.now() + 60000;
+    while (Date.now() < armDeadline) {
+      if (conn.peerTable.getComponent(11, 1)?.armed) break;
+      sendCmd(conn, 11, 400, [1, 0, 0, 0, 0, 0, 0]);
+      await sleep(1500);
+    }
+    if (!conn.peerTable.getComponent(11, 1)?.armed) throw new Error('PX4 did not arm');
+
+    const before = conn.peerTable.getComponent(11, 1)?.position;
+    if (!before || before.alt == null || before.relativeAlt == null) throw new Error('no position before takeoff');
+    const homeAmslMm = Number(before.alt) - Number(before.relativeAlt);
+    // Yaw NaN = current heading; lat/lon NaN = here. PX4 takes a *finite*
+    // param5/6 as the target, so zeros would fly to 0°,0° — hence NaN, not
+    // the zeros the ArduPilot probe above can afford.
+    const params = [0, 0, 0, NaN, NaN, NaN, 10];
+    const textsBefore = texts.length;
+    // Armed before the send: a takeoff PX4 rejected or never received must
+    // not read as "AMSL" just because nothing climbed.
+    const ackWait = waitCommandAck(conn, 11, 22);
+    if (carrier === 'int') {
+      const withHere = [0, 0, 0, NaN, Number(before.lat) / 1e7, Number(before.lon) / 1e7, 10];
+      conn.send(
+        buildCommandInt(22, 11, 1, withHere, { frame: MAV_FRAME.GLOBAL_RELATIVE_ALT }),
+        { band: BAND.CONTROL, target: { sysid: 11, compid: 1 } }
+      );
+    } else {
+      sendCmd(conn, 11, 22, params);
+    }
+
+    const t0 = Date.now();
+    let maxRelMm = 0;
+    let lastAltMm = null;
+    while (Date.now() - t0 < 30000) {
+      const pos = conn.peerTable.getComponent(11, 1)?.position;
+      if (pos?.relativeAlt != null) maxRelMm = Math.max(maxRelMm, Number(pos.relativeAlt));
+      if (pos?.alt != null) lastAltMm = Number(pos.alt);
+      await sleep(500);
+    }
+    const ack = await ackWait;
+    const said = texts.slice(textsBefore).filter((t) => /takeoff|altitude|higher/i.test(t));
+    const relative = checkCompletion(COMPLETION.TAKEOFF, params, conn.peerTable, 11, 1);
+    const amsl = checkCompletion(COMPLETION.TAKEOFF, params, conn.peerTable, 11, 1, MAV_FRAME.GLOBAL);
+    const accepted = ack?.result === 0;
+    let datum = 'unclear';
+    if (maxRelMm >= 9000) datum = 'relative';
+    else if (accepted && (/already higher/i.test(said.join(' ')) || maxRelMm < 1000)) datum = 'AMSL';
+    note(results, name, datum !== 'unclear',
+      `param7=10 read as ${datum}: ack ${ack ? ack.result : 'none'}, `
+      + `home ${(homeAmslMm / 1000).toFixed(1)} m AMSL, `
+      + `climbed ${(maxRelMm / 1000).toFixed(2)} m rel; `
+      + `our completion relative=${relative.done} AMSL=${amsl.done}`,
+      { carrier, ack, homeAmslMm, maxRelMm, lastAltMm, said, relative, amsl });
+  } catch (err) {
+    note(results, name, false, err.message);
+  }
+  unsub();
   await new Promise((resolve) => conn.close(() => resolve()));
 }
 
@@ -493,6 +587,11 @@ async function main() {
   const results = [];
   const ran = [];
   if (wantProbe('14.79')) { ran.push('14.79-SITL'); await probeTakeoffCompletion(results); }
+  if (wantProbe('14.79-px4')) {
+    ran.push('14.79-px4');
+    await probeTakeoffDatumPx4(results, 'long');
+    await probeTakeoffDatumPx4(results, 'int');
+  }
   if (wantProbe('14.98.5')) { ran.push('14.98.5'); await probeYawRateNearTarget(results); }
   if (wantProbe('14.108-loiter')) { ran.push('14.108-loiter'); await probePx4LoiterReposition(results); }
   if (wantProbe('14.108-heading')) {

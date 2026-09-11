@@ -1238,3 +1238,56 @@ test('a completion timeout keeps the accepted ack\'s result_param2 (CodeRabbit)'
   assert.equal(output[1].resultParam2, 7, 'the ack that did arrive is not erased by the state timeout');
   node.emit('close', () => {});
 });
+
+test('a PX4 takeoff completes against the AMSL datum on COMMAND_LONG; ArduPilot keeps the relative one (471#49)', async () => {
+  // PX4 reads NAV_TAKEOFF param7 as AMSL whatever the carrier — mavlink_receiver
+  // copies z straight to param7 and navigator takes it as the loiter altitude
+  // AMSL. Home here sits at 600 m AMSL, so a "10 m" takeoff is already below
+  // the vehicle: PX4 does not climb ("Already higher than takeoff altitude")
+  // and the command's condition is met where it stands. Comparing that same 10
+  // against a relative climb would wait out the deadline for a climb the
+  // vehicle was never going to make.
+  async function fly(firmware) {
+    const conn = connStubWithInject({ id: 'veh', targetSystem: 1, targetComponent: 1, firmware });
+    conn.peerTable = new StubPeerTable();
+    conn.peerTable.setComponent(1, 1, { position: { relativeAlt: 0, alt: 600000 } });
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-command')(RED);
+    const Node = RED.nodes.types['mavlink-command'];
+    const node = new Node({
+      params: '{"7": 10}',
+      connection: 'conn',
+      sendAs: 'long',
+      mode: 'preset',
+      preset: 'takeoff',
+      delivery: 'complete',
+      targetSystem: '1',
+      targetComponent: '1',
+      timeoutMs: '60000',
+      maxRetries: '0',
+      completionTimeout: '60',
+    });
+    node.status = () => {};
+    let output;
+    node.emit('input', { payload: {} }, (messages) => { output = messages; }, () => {});
+    await tick();
+    conn.injectAck({ command: 22, result: 0 }, 1, 1);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    node.emit('close', () => {});
+    return output[1];
+  }
+
+  // A completed wait keeps the ack's `accepted` and adds what confirmed it.
+  const px4 = await fly('px4');
+  assert.equal(px4.result, 'accepted');
+  assert.equal(px4.confirmedBy, 'state', 'PX4: the AMSL condition is already satisfied');
+  assert.match(String(px4.detail), /AMSL/, 'the record names the datum it compared against');
+
+  const ap = await fly('ardupilot');
+  assert.equal(ap.result, 'timeout', 'ArduPilot: 10 m relative is a climb this telemetry never shows');
+  assert.equal(ap.confirmedBy, undefined);
+
+  const custom = await fly('custom');
+  assert.equal(custom.result, 'timeout', 'custom: no measured datum, the carrier rule stands');
+  assert.equal(custom.confirmedBy, undefined);
+});

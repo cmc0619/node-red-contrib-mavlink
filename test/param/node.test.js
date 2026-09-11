@@ -661,6 +661,32 @@ test('confirm set re-sends PARAM_SET when its echo times out', { timeout: 1000 }
   assert.equal(conn.activeCount(), 0, 'subscription torn down');
 });
 
+test('a PARAM_VALUE echo typed 64-bit settles the set as failed, not as an echo timeout (470#34)', { timeout: 1000 }, async () => {
+  // PX4: the echo decodes bytewise through the union, which is where a 64-bit
+  // type has no slot. (ArduPilot decodes c-cast and never asks the union.)
+  const conn = connStubFull({ vehicle: { targetSystem: 1, targetComponent: 1, firmware: 'px4' } });
+  const node = confirmSetNode(redStub({ conn }), conn, 200);
+
+  const outs = [];
+  const finished = new Promise((resolve) => {
+    node.emit('input', { payload: { paramId: 'FOO', value: 1 } },
+      (m) => outs.push(m), () => resolve());
+  });
+  // The vehicle answers with its own type — REAL64 (10) does not fit the float
+  // slot. That is its answer, and the set ends on it rather than waiting out
+  // the deadline and re-sending into a parameter it can never confirm.
+  conn.inject({ name: 'PARAM_VALUE', sysid: 1, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 10 } });
+  await finished;
+
+  const records = outs.filter((m) => m[1]?.result).map((m) => m[1]);
+  const failed = records.find((r) => r.result === 'failed');
+  assert.ok(failed, 'the set settles as failed');
+  assert.match(failed.detail, /kind/, 'the union\'s own missing-row failure, not an echo timeout');
+  assert.equal(records.some((r) => r.result === 'timed-out' || r.result === 'succeeded'), false,
+    'neither an echo timeout nor a confirmation follows');
+  assert.equal(conn.sent.length, 1, 'no re-send: the vehicle answered, it just cannot be decoded');
+});
+
 test('closing the node mid-set stops the re-send timer and releases done', async () => {
   const conn = connStubFull();
   const node = confirmSetNode(redStub({ conn }), conn, 15);

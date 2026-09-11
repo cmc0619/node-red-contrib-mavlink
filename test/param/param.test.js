@@ -534,6 +534,8 @@ test('the echo decodes by the vehicle-declared type alone; one the codec cannot 
     capabilities: CAP_PARAM_ENCODE_BYTEWISE,
   };
 
+  // The refusal is the union's own, by name (470#34): the slot cannot hold
+  // that type, and the reason says so instead of "reading 'kind' of undefined".
   assert.throws(() => matchesParamEcho(request, echo), TypeError);
   assert.throws(
     () => matchesParamEcho(request, { ...echo, fields: { ...echo.fields, param_type: 0 } }),

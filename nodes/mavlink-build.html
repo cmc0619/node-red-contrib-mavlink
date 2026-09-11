@@ -106,13 +106,33 @@
           // coerced truthy (§14).
           validate(v, _opt) {
             if (RED.mavlink.isBlank(v)) return true;
+            let parsed;
             try {
-              const parsed = JSON.parse(v);
+              parsed = JSON.parse(v);
               if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
                 return 'must be a JSON object';
               }
             } catch {
               return 'is not valid JSON';
+            }
+            // An array literal longer than the field's declared length would
+            // be cut to fit at pack time and the frame would still report sent
+            // — the runtime refuses it, and this ring is where an operator
+            // hears it first (§0 step 2). The dialect is only in hand once
+            // the dialog has loaded it; before that there is nothing to
+            // measure against, the same posture as liveOr.
+            const catalog = _currentMsgCatalog;
+            if (!catalog) return true;
+            const msgName = RED.mavlink.liveOr(this, '#node-input-messageName', this.messageName);
+            const msg = (catalog.messages || []).find((m) => m.name === msgName);
+            if (!msg) return true;
+            for (const spec of msg.fields || []) {
+              if (!spec.arrayLength) continue;
+              const value = parsed[spec.name];
+              if (value === undefined || value === null) continue;
+              if (value.length > spec.arrayLength) {
+                return `${spec.name} has ${value.length} entries — ${spec.arrayLength} fit`;
+              }
             }
             return true;
           },
@@ -602,7 +622,11 @@
   are text. <code>COMMAND_LONG</code> / <code>COMMAND_INT</code> use a MAV_CMD
   dropdown and that command's named params — never a Param 1–7 grid. Bitmask
   fields use native multi-selects; Ctrl/Cmd-click multiple flags. Every field
-  saves as its wire number; the blank option leaves a field out.</p>
+  saves as its wire number; the blank option leaves a field out. Array fields
+  are comma-separated; fewer entries than the field's length pad with zeros
+  (the shape every <code>data</code>/<code>len</code> pair relies on), and more
+  entries than fit are refused rather than cut &mdash; here as a red ring, and
+  at send time for a <code>msg.payload</code> array.</p>
   <p><b>Dialect</b> (Build delivery): pick a bundled dialect from the dropdown.
   Choose <i>from Vehicle Profile…</i> to use a custom XML dialect; the Vehicle
   Profile field then appears. On wire deliveries the connection's profile
