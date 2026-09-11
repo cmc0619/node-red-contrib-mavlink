@@ -36,7 +36,9 @@ test('camera photo builds a command-backed IMAGE_START_CAPTURE payload action', 
   assert.equal(built.message.fields.param1, 4);
   assert.equal(built.message.fields.param2, 1.5);
   assert.equal(built.message.fields.param3, 3);
-  assert.equal(built.message.fields.param4, 7);
+  // Sequence is driver-owned (471#115): a burst of 3 is not a single capture,
+  // so the dialect's value is 0 whatever the caller put in `values`.
+  assert.equal(built.message.fields.param4, 0);
 });
 
 test('camera photo does not invent recipe defaults for blank slots', () => {
@@ -52,7 +54,9 @@ test('camera photo does not invent recipe defaults for blank slots', () => {
   assert.equal(built.message.fields.param1, undefined, 'blank cameraId rides unset — the wire writes NaN for an unset float');
   assert.equal(built.message.fields.param2, 2);
   assert.equal(built.message.fields.param3, undefined, 'blank count');
-  assert.equal(built.message.fields.param4, undefined, 'blank sequence');
+  // Not an operator slot: a blank count is not a single capture, so the
+  // sequence is the dialect's 0 — its own value, not an invented default.
+  assert.equal(built.message.fields.param4, 0, 'sequence follows the count');
 });
 
 test('camera stop-photo builds IMAGE_STOP_CAPTURE with command-ack confirmation (#259)', () => {

@@ -25,11 +25,12 @@ test('recipeFor camera photo maps Sequence to IMAGE_START_CAPTURE param4', () =>
   assert.equal(recipe.params[3].field, 'sequence');
 });
 
-test('fieldMetaFromBundle sources Sequence tip from dialect via the shared recipe', () => {
+test('fieldMetaFromBundle renders no control for the driver-owned Sequence slot', () => {
   const bundle = loadBundled('ardupilotmega');
   const meta = fieldMetaFromBundle(bundle, 'camera', 'photo', '');
-  assert.ok(meta.sequence.description, 'sequence must have a dialect description');
-  assert.match(meta.sequence.description, /sequence/i);
+  // The sequence number is bookkeeping the node stamps per camera (471#115);
+  // an operator control would only ever be a second, contradictory source.
+  assert.equal(meta.sequence, undefined, 'sequence is not an operator field');
   assert.ok(meta.cameraId.description);
   assert.ok(meta.interval.description);
   assert.ok(meta.count.description);
@@ -100,7 +101,7 @@ test('fieldMetaFromBundle blanks Empty / Reserved param descriptions', () => {
     },
   };
   const meta = fieldMetaFromBundle(bundle, 'camera', 'photo', '');
-  assert.equal(meta.sequence.description, 'Capture sequence number');
+  assert.equal(meta.sequence, undefined, 'the driver-owned slot renders nothing');
   assert.equal(meta.cameraId.description, '');
   assert.equal(meta.count.description, '');
   assert.equal(meta.interval.description, '');
@@ -113,11 +114,14 @@ test('buildPayloadMessage and field tips share the photo recipe param order', ()
     verb: 'photo',
     target: { sysid: 1, compid: 1 },
     values: { cameraId: 4, interval: 1.5, count: 3, sequence: 7 },
+    bookkeeping: { captureSequence: () => 9 },
   });
   assert.equal(built.message.fields.param1, 4);
   assert.equal(built.message.fields.param2, 1.5);
   assert.equal(built.message.fields.param3, 3);
-  assert.equal(built.message.fields.param4, 7);
+  // count 3 is not a single capture: the dialect says sequence 0, whatever the
+  // operator or the counter would have said.
+  assert.equal(built.message.fields.param4, 0);
   const recipe = recipeFor('camera', 'photo', '');
   assert.deepEqual(
     recipe.params.map((s) => s.field),
@@ -141,7 +145,9 @@ test('fieldMetaFromBundle surfaces dialect units for Interval (not baked HTML)',
 test('every recipe derives exactly the fields the dialog shows', () => {
   const bundle = loadBundled('ardupilotmega');
   const expected = {
-    'camera|photo|': ['cameraId', 'count', 'interval', 'sequence'],
+    // Sequence is driver-owned (471#115): the recipe carries the slot, the
+    // dialog does not.
+    'camera|photo|': ['cameraId', 'count', 'interval'],
     'camera|start-video|': ['statusFrequency', 'streamId'],
     'camera|stop-video|': ['streamId'],
     'camera|start-stream|': ['cameraId', 'streamId'],
