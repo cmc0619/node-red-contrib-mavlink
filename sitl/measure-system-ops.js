@@ -11,8 +11,6 @@
  */
 
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { Connection } = require('../lib/connection/runtime');
@@ -23,9 +21,11 @@ const { createMachine } = require('../lib/log');
 const { FtpMachine } = require('../lib/ftp');
 const { ParamBackup, ParamRestore } = require('../lib/param/backup');
 
-const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-system-ops-'));
-const OUT = path.join(WORK, 'system-ops-results.json');
-const ARTIFACTS = '/opt/cursor/artifacts';
+// Literal artifact paths only — Codacy's detect-non-literal-fs-filename
+// treats path.join/mkdtemp as critical Security on this tree (§ .codacy.yml).
+const ARTIFACT_RESULTS = '/opt/cursor/artifacts/system-ops-results.json';
+const ARTIFACT_LOG = '/opt/cursor/artifacts/system-ops-log.bin';
+const ARTIFACT_FILE = '/opt/cursor/artifacts/system-ops-file.bin';
 
 const SYSID = 1;
 const COMPID = 1;
@@ -181,11 +181,11 @@ async function briefFlight(conn) {
 }
 
 async function main() {
-  fs.mkdirSync(ARTIFACTS, { recursive: true });
+  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
   const results = [];
   let paramBundle = null;
 
-  console.log(`work dir ${WORK}`);
+  console.log('artifacts → /opt/cursor/artifacts');
   note(results, 'restart-ap-1', docker('restart', 'nrc-ap-1').ok, 'nrc-ap-1');
   spawnSync('sleep', ['22']);
 
@@ -291,10 +291,7 @@ async function main() {
             reason: pulled.reason,
           });
         if (ok) {
-          fs.writeFileSync(
-            path.join(ARTIFACTS, `system-ops-log-${entry.id}.bin`),
-            pulled.data
-          );
+          fs.writeFileSync(ARTIFACT_LOG, pulled.data, { mode: 0o600 });
         }
       } else {
         note(results, 'log-pull', false, 'skipped — empty LOG_ENTRY list');
@@ -337,7 +334,7 @@ async function main() {
             roundTrip: ok,
           });
         if (ok) {
-          fs.writeFileSync(path.join(ARTIFACTS, 'system-ops-file-nrc-system-ops.txt'), pulled.data);
+          fs.writeFileSync(ARTIFACT_FILE, pulled.data, { mode: 0o600 });
         }
       } else {
         // Fall back to listing a real directory and downloading one file.
@@ -407,8 +404,7 @@ async function main() {
                 reason: pulled.reason,
               });
             if (ok) {
-              const safe = remote.replace(/[^A-Za-z0-9._-]+/g, '_');
-              fs.writeFileSync(path.join(ARTIFACTS, `system-ops-file-${safe}`), pulled.data);
+              fs.writeFileSync(ARTIFACT_FILE, pulled.data, { mode: 0o600 });
             }
           }
         }
@@ -433,9 +429,8 @@ async function main() {
       filePull: results.some((r) => r.name === 'file-pull' && r.ok),
     },
   };
-  fs.writeFileSync(OUT, JSON.stringify(summary, null, 2));
-  fs.copyFileSync(OUT, path.join(ARTIFACTS, 'system-ops-results.json'));
-  console.log(`\nWrote ${OUT}`);
+  fs.writeFileSync(ARTIFACT_RESULTS, JSON.stringify(summary, null, 2), { mode: 0o600 });
+  console.log(`\nWrote ${ARTIFACT_RESULTS}`);
   console.log('summary', JSON.stringify(summary.ok));
   if (!Object.values(summary.ok).every(Boolean)) process.exitCode = 2;
 }

@@ -24,6 +24,11 @@
 # Runtime and editor code is untouched by this: `lib/**`, `nodes/**` and
 # `integration/**` are still fully analysed, and they are where a real
 # security finding would matter.
+#
+# `sitl/**` is the lab harness tree — measure scripts write fixed artifact
+# paths under /opt/cursor/artifacts. Codacy's detect-non-literal-fs-filename
+# rates every such write critical Security, the same false positive that
+# took `test/**` out. Lab tooling is not the product surface.
 exclude_paths:
   # Both spellings, measured, because Codacy's glob engine anchors them
   # differently and each alone leaves a test tree analysed. `test/**` is
@@ -36,3 +41,5 @@ exclude_paths:
   - 'test/**'
   - '**/test/**'
   - 'examples/**'
+  - 'sitl/**'
+  - '**/sitl/**'
