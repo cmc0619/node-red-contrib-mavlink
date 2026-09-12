@@ -4,6 +4,49 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [0.7.0] "Backups, Logging, and Files. Oh, my!" - 2026-09-12
+
+### Added
+
+- **System node for onboard logs, files, and parameters.** One node runs the
+  bounded log, MAVFTP, and parameter services that used to live as separate
+  surfaces — list and download logs, transfer files and directory trees, and
+  back up or restore parameters with echo confirmation.
+- **MAVFTP directory tree backup and restore.** Remote directories round-trip
+  through FTP as trees, not only single-file pulls, with paths that cannot be
+  represented refused before they reach the wire.
+- **Unified backup bundles.** Plan, directory, parameter, and log sections
+  pack into one bundle; restore picks sections from tick boxes, reports one
+  result, and keeps successful sections when another section fails.
+- **Payload gimbal-manager discovery and explicit controls.** Gimbal manager
+  discovery and concrete payload controls land beside the existing camera
+  recipes; rectangle tracking keeps its camera IDs on `COMMAND_INT`.
+- **Vehicle and mission state on the State node.** Dialect version constants
+  are corrected and vehicle/mission state is exposed for flows that need it.
+
+### Changed
+
+- **Parameter backup and restore are separate machines.** Backup and restore
+  no longer share one path with a mode flag; each owns its own transfer.
+- **System transfers ride the bulk band.** Log, file, and parameter work share
+  the bulk transfer path instead of a per-service band helper.
+- **PX4 `NAV_TAKEOFF` completion uses AMSL on both carriers.** Takeoff
+  completion compares against the AMSL datum for `COMMAND_LONG` and
+  `COMMAND_INT`, matching the measured PX4 behaviour.
+- **64-bit `PARAM_VALUE` echoes fail the set by name.** A union echo the
+  decoder cannot represent fails the parameter set by parameter id rather than
+  waiting out an echo timeout.
+- **Arrays longer than their field refuse to pack.** Over-long array fields
+  error at encode time instead of silently truncating to fit the wire slot.
+
+### Fixed
+
+- Capture sequence counters stamp per camera component.
+- Restore that moved nothing reports that outcome instead of looking successful.
+- Known log lengths are not overridden by a short read.
+- Parameter wire observation and FTP session teardown settle before transfer
+  completion.
+
 ## [0.6.1] "Cleaning house" - 2026-09-06
 
 ### Removed
