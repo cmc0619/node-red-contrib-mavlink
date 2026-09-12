@@ -43,6 +43,12 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-fanout` | Fan-out one action across selected vehicles, with optional per-member offsets |
 | `mavlink-formation` | Position a group into a geometric formation around an anchor |
 
+Every node reads its setup from the edit box, and many fields can also be set at
+run time from the incoming message.
+[`docs/msg-payload-overrides.md`](docs/msg-payload-overrides.md) lists which keys
+each node accepts, the ones whose names differ from the field, and the fields
+that cannot be set from a message at all.
+
 ### Payload control and discovery
 
 The Payload node offers camera streaming, point/rectangle tracking, storage formatting,
