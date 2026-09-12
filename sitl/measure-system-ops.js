@@ -373,10 +373,12 @@ async function main() {
           const entries = listOutcome.entries || [];
           const files = entries.filter((e) => {
             const name = e.name || e.path || '';
-            if (!name || name === '.' || name === '..' || name.endsWith('/')) return false;
-            if (e.type && /dir/i.test(String(e.type))) return false;
-            if (e.isDir) return false;
-            return true;
+            return Boolean(name)
+              && name !== '.'
+              && name !== '..'
+              && !name.endsWith('/')
+              && !e.isDir
+              && !(e.type && /dir/i.test(String(e.type)));
           });
           const pick = files.find((e) => Number(e.size) > 0 && Number(e.size) < 64 * 1024)
             || files[0];
@@ -413,7 +415,7 @@ async function main() {
       }
     }
   } catch (err) {
-    note(results, 'fatal', false, String(err && err.message ? err.message : err));
+    note(results, 'fatal', false, String(err?.message || err));
   } finally {
     await new Promise((resolve) => conn.close(() => resolve()));
   }
@@ -425,10 +427,10 @@ async function main() {
     sysid: SYSID,
     results,
     ok: {
-      backup: !!results.find((r) => r.name === 'backup-parameters' && r.ok),
-      restore: !!results.find((r) => r.name === 'restore-parameters' && r.ok),
-      logPull: !!results.find((r) => r.name === 'log-pull' && r.ok),
-      filePull: !!results.find((r) => r.name === 'file-pull' && r.ok),
+      backup: results.some((r) => r.name === 'backup-parameters' && r.ok),
+      restore: results.some((r) => r.name === 'restore-parameters' && r.ok),
+      logPull: results.some((r) => r.name === 'log-pull' && r.ok),
+      filePull: results.some((r) => r.name === 'file-pull' && r.ok),
     },
   };
   fs.writeFileSync(OUT, JSON.stringify(summary, null, 2));
@@ -440,5 +442,5 @@ async function main() {
 
 main().catch((err) => {
   console.error(err);
-  process.exit(1);
+  process.exitCode = 1;
 });
