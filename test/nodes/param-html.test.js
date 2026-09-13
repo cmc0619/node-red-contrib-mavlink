@@ -680,3 +680,13 @@ test('param id search uses the stock autoComplete widget, not a hand-rolled resu
   assert.match(html, /#node-input-paramId'\)\.autoComplete\(\{/);
   assert.doesNotMatch(html, /mav-param-results/);
 });
+
+test('mavlink-param keeps a 10 s window: one deadline over the whole PARAM_VALUE stream', () => {
+  // A read and a list are bounded once, never re-armed, so the 2 s command
+  // ack default the waiting nodes share is not this node's number. The
+  // rings are the shared ones.
+  const { loadNodeDefaults } = require('./html-assert');
+  const defaults = loadNodeDefaults('mavlink-param');
+  assert.equal(defaults.timeoutMs.value, 10000);
+  assert.match(String(defaults.timeoutMs.validate.call({ delivery: 'confirm', action: 'list' }, '', {})), />= 1/, 'blank reds by the shared rule');
+});

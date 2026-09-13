@@ -294,9 +294,15 @@
   requests meant for this component arrive. A target of 0 (broadcast /
   <code>MAV_COMP_ID_ALL</code>) always passes; a message that carries no target
   field at all (<code>HEARTBEAT</code>, telemetry) is addressed to no one and
-  does not. The sender's ids ride out as <code>msg.sysid</code> /
-  <code>msg.compid</code> — a reply's <code>target_system</code> /
-  <code>target_component</code> come from there (example 28).</p>
+  does not; one that names a system but has no component field
+  (<code>SET_MODE</code>, <code>SET_HOME_POSITION</code>) is for every
+  component of that system and passes the component filter. The sender's ids
+  ride out as <code>msg.sysid</code> / <code>msg.compid</code> — a reply's
+  <code>target_system</code> / <code>target_component</code> come from there
+  (example 28). The reply itself goes out through the connection's
+  <b>configured remote</b>: a ground station's endpoint is never learned
+  (sysids 250–255, §8), so a listen-only link has no return route and the
+  companion inbox needs the remote pointed at the GCS.</p>
   <p>The status badge names the message that most recently arrived. It is
   written at most four times a second, so on a faster stream it samples the
   traffic rather than ticking every frame.</p>

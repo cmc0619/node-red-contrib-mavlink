@@ -128,11 +128,15 @@
       },
       // The wait window; a negative one expires before the vehicle can answer
       // and reads as vehicle silence.
-      // Timeout and Max retries: the shared ack definition (the echo is the
-      // acknowledgement here). Timeout hides with its row on Build; Max
-      // retries belongs to the echo-confirmed set alone — the one mode that
-      // re-sends on silence — so its row and its ring follow that mode.
-      ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire),
+      // Timeout and Max retries: the shared ack rings (the echo is the
+      // acknowledgement here), Timeout with its own value — for a read and a
+      // list it is one deadline over the whole PARAM_VALUE stream, never
+      // re-armed, and a 1000-parameter table over a radio needs the 10 s the
+      // 2 s command-ack window does not. Timeout hides with its row on
+      // Build; Max retries belongs to the echo-confirmed set alone — the one
+      // mode that re-sends on silence — so its row and its ring follow that
+      // mode.
+      timeoutMs: { ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire).timeoutMs, value: 10000 },
       maxRetries: RED.mavlink.ackDefaults(confirmSetShown).maxRetries,
     ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   };
@@ -935,7 +939,7 @@
     <input type="number" id="node-input-value">
   </div>
   <div class="form-row" id="row-paramType"><label for="node-input-paramType">Type</label><select id="node-input-paramType"></select><span id="mav-param-type-display" style="display:none"></span></div>
-  <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Timeout (ms)</label><input type="number" id="node-input-timeoutMs" min="1" placeholder="2000"></div>
+  <div class="form-row" id="row-timeoutMs"><label for="node-input-timeoutMs">Timeout (ms)</label><input type="number" id="node-input-timeoutMs" min="1" placeholder="10000"></div>
   <div class="form-row" id="row-maxRetries"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" style="width:60px"></div>
 </script>
 

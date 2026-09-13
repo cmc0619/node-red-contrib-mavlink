@@ -1756,9 +1756,10 @@
    * negative and fractional keep their own reasons. 2 s × (1 + 3) at the
    * defaults is the whole wait before a missing ack is classified, the
    * shape MAVSDK and the command protocol both use (0.5 s × 4 there; a
-   * telemetry radio earns the longer window). Mission and System spread
-   * these descriptors with their own `value` — a mission step and a
-   * transfer step are not a command ack, and their windows are theirs.
+   * telemetry radio earns the longer window). Mission, System and Param
+   * spread these descriptors with their own `value` — a mission step, a
+   * transfer step and a parameter stream are not a command ack, and their
+   * windows are theirs.
    *
    * `shown(node)` says whether the two rows are on screen in the dialog's
    * live state — the tiers that actually wait. A row the operator cannot

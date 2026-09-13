@@ -163,8 +163,8 @@ function makeConnectionStub() {
     const to = decoded.fields;
     if (filter.toSysid !== undefined && to.target_system !== 0
       && to.target_system !== filter.toSysid) return false;
-    if (filter.toCompid !== undefined && to.target_component !== 0
-      && to.target_component !== filter.toCompid) return false;
+    if (filter.toCompid !== undefined && to.target_component !== undefined
+      && to.target_component !== 0 && to.target_component !== filter.toCompid) return false;
     return true;
   }
 

@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "28 Companion command ack",
     "disabled": false,
-    "info": "The companion role's inbox. A GCS commands this component (sysid 1 / compid 191) rather than the autopilot; the In node's To sysid / To compid filters admit only COMMAND_LONG / COMMAND_INT addressed here, the function decides, and every such command gets a COMMAND_ACK back so the sender's retry loop stops. MAV_CMD_USER_1 (31010) is accepted; anything else answers UNSUPPORTED (3). Bind 127.0.0.1:14550, remote 14551; signing off for local SITL only.",
+    "info": "The companion role's inbox. A GCS commands this component (sysid 1 / compid 191) rather than the autopilot; the In node's To sysid / To compid filters admit only COMMAND_LONG / COMMAND_INT addressed here, the function decides, and every such command gets a COMMAND_ACK back so the sender's retry loop stops. MAV_CMD_USER_1 (31010) is accepted; anything else answers UNSUPPORTED (3). Bind 127.0.0.1:14550, remote 14551; signing off for local SITL only. The ack rides the connection's configured remote (14551 here): a ground station's endpoint is never learned (sysids 250–255, §8), so the remote must be the GCS — on a listen-only link the reply has no route.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "ex28-tab",
     "name": "Companion inbox: answer commands addressed to this component",
-    "info": "In [COMMAND_LONG, COMMAND_INT; To sysid 1, To compid 191] → decide → Out [COMMAND_ACK]. The ack's target_system / target_component are the sender's ids, which mavlink-in put on msg.sysid / msg.compid. This is MAVSDK's command receiver expressed as a flow — the handler table is the wires.",
+    "info": "In [COMMAND_LONG, COMMAND_INT; To sysid 1, To compid 191] → decide → Out [COMMAND_ACK]. The ack's target_system / target_component are the sender's ids, which mavlink-in put on msg.sysid / msg.compid. This is MAVSDK's command receiver expressed as a flow — the handler table is the wires. The ack rides the connection's configured remote (14551 here): a ground station's endpoint is never learned (sysids 250–255, §8), so the remote must be the GCS — on a listen-only link the reply has no route.",
     "x": 290,
     "y": 40,
     "wires": []
@@ -97,7 +97,7 @@
     "type": "function",
     "z": "ex28-tab",
     "name": "decide → COMMAND_ACK",
-    "func": "// A command addressed to this companion. Decide, then answer: every\n// command earns a COMMAND_ACK, so the sender's retry loop stops.\n\n// Never act on a frame admitted despite a bad signature.\nif (msg.trusted === false) return null;\n\nconst MAV_CMD_USER_1 = 31010;\nconst ACCEPTED = 0;\nconst UNSUPPORTED = 3;\n\nconst command = msg.payload.command;\nconst result = command === MAV_CMD_USER_1 ? ACCEPTED : UNSUPPORTED;\nnode.status({ text: `cmd ${command} → ${result === ACCEPTED ? 'accepted' : 'unsupported'}` });\n\nreturn {\n    topic: 'COMMAND_ACK',\n    payload: {\n        command,\n        result,\n        progress: 0,\n        result_param2: 0,\n        // The ack's own target is whoever sent the command — mavlink-in put\n        // the sender's ids on the message. MAVLink 2 extension fields; a\n        // MAVLink 1 peer never sees them and matches on `command` alone.\n        target_system: msg.sysid,\n        target_component: msg.compid,\n    },\n};\n",
+    "func": "// A command addressed to this companion. Decide, then answer: every\n// command earns a COMMAND_ACK, so the sender's retry loop stops.\n\n// Never act on a frame admitted despite a bad signature.\nif (msg.trusted === false) return null;\n\nconst MAV_CMD_USER_1 = 31010;\nconst ACCEPTED = 0;\nconst UNSUPPORTED = 3;\n\nconst command = msg.payload.command;\nconst result = command === MAV_CMD_USER_1 ? ACCEPTED : UNSUPPORTED;\nnode.status({ text: `cmd ${command} → ${result === ACCEPTED ? 'accepted' : 'unsupported'}` });\n\nreturn {\n    topic: 'COMMAND_ACK',\n    payload: {\n        command,\n        result,\n        progress: 0,\n        result_param2: 0,\n        // The ack's own target is whoever sent the command — mavlink-in put\n        // the sender's ids on the message. MAVLink 2 extension fields; a\n        // MAVLink 1 peer never sees them and matches on `command` alone.\n        // The frame itself rides the connection's configured remote — a\n        // GCS endpoint is never learned (§8) — so that remote must be the GCS.\n        target_system: msg.sysid,\n        target_component: msg.compid,\n    },\n};\n",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,

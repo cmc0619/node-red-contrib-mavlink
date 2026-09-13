@@ -75,8 +75,13 @@ test('addressed-to filters read the target fields: own id and broadcast pass, ot
   reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 1, target_component: 1 } }));
   reg.dispatch(decoded({ name: 'OTHER_SYSTEM', fields: { target_system: 2, target_component: 191 } }));
   reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
+  // A system-scoped message (SET_MODE shape: target_system, no component
+  // field) is addressed to every component of that system — mine included —
+  // and to no component of another.
+  reg.dispatch(decoded({ name: 'SET_MODE_MINE', fields: { target_system: 1, base_mode: 1 } }));
+  reg.dispatch(decoded({ name: 'SET_MODE_OTHER', fields: { target_system: 2, base_mode: 1 } }));
 
-  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS']);
+  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS', 'SET_MODE_MINE']);
 });
 
 test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {

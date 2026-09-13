@@ -464,7 +464,10 @@ importable tab per file with shared config nodes inline.
 - **Key config:** the In node's `toSysid`/`toCompid` equal the identity's own
   ids. The function drops `msg.trusted === false` before acting (§7). The ack's
   `target_system`/`target_component` are the *sender's* — MAVLink 2 extension
-  fields a MAVLink 1 peer simply never sees.
+  fields a MAVLink 1 peer simply never sees. **The ack rides the connection's
+  configured remote** (`14551` here): a ground station's endpoint is never
+  learned (sysids 250–255, §8), so the remote must be the GCS — a listen-only
+  link has no return route and the transport drops the reply quietly.
 - **Try it:** from any GCS, send `MAV_CMD_USER_1` to sysid 1 / compid 191 and
   watch the ack; send any other command and watch `UNSUPPORTED` come back
   instead of silence.
