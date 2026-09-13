@@ -173,6 +173,8 @@
     ],
     "sysid": "",
     "compid": "",
+    "toSysid": "",
+    "toCompid": "",
     "changedOnly": false,
     "showUnknown": false,
     "changedFields": "",

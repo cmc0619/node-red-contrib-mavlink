@@ -620,9 +620,12 @@ test('a hand-edited garbage Command mode resolves no command — nothing is buil
   assert.equal(conn.sent.length, 0, 'nothing reached the wire');
 });
 
-test('a silent ACK window sends once, then settles the unconfirmed record', async (t) => {
-  // The harness fires the 1000 ms window timer via microtask, so the window
-  // drains before the setImmediate below.
+test('a silent ACK window spends the retry budget on re-sends, then settles the unconfirmed record', async (t) => {
+  // The harness fires the 1000 ms window timer via microtask, so every window
+  // — the first send's and each re-send's — drains before the setImmediate
+  // below. Silence is a dropped frame until the budget says otherwise: three
+  // retries is four sends with the confirmation byte counting up, and only
+  // then does the §9 classification run.
   installAckTimerHarness(t);
   const conn = connStubWithInject();
   const RED = redStub({ conn });
@@ -646,14 +649,18 @@ test('a silent ACK window sends once, then settles the unconfirmed record', asyn
   node.emit('input', { payload: {} }, (messages) => { output = messages; }, (err) => { doneErr = err; });
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(conn.sent.length, 1, 'the command is sent exactly once');
-  // The §9 classification after the window: peer-table check (no table here)
-  // → the unconfirmed record.
+  assert.deepEqual(
+    conn.sent.map((s) => s.message.fields.confirmation),
+    [0, 1, 2, 3],
+    'first transmission, then three confirmation transmissions'
+  );
+  // The §9 classification after the last window: peer-table check (no table
+  // here) → the unconfirmed record, carrying the re-send count.
   assert.equal(output[0], null, 'output 0 must not fire');
   assert.equal(output[1].result, 'unconfirmed');
   assert.equal(output[1].resultCode, null);
   assert.equal(output[1].confirmedBy, undefined);
-  assert.equal(output[1].retries, 0);
+  assert.equal(output[1].retries, 3);
   assert.equal(output[1].detail, 'no terminal COMMAND_ACK received within timeout');
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   node.emit('close', () => {});

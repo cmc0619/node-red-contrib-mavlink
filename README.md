@@ -86,7 +86,7 @@ from status records. Timeout and retry settings are explicit in the editor.
 
 ## Examples
 
-Importable flows ship with the package — 23 of them, plus 43 more for a live SITL rig. In
+Importable flows ship with the package — 24 of them, plus 43 more for a live SITL rig. In
 the Node-RED editor: **Import → Examples → @cmc0619/node-red-contrib-mavlink**.
 
 A few to start with; every flow is indexed in

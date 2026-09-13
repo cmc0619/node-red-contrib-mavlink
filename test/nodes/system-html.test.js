@@ -27,6 +27,17 @@ test('mavlink-system editor registers closed service and operation selectors', (
   assert.match(String(defaults.targetComponent.validate(0, {})), /between 1 and 255/);
 });
 
+test('mavlink-system keeps a 10 s step window: the shared ack ring, its own value', () => {
+  // System's timeout is a transfer step — log chunk, FTP burst, parameter
+  // echo — not a command ack, so the 2 s default the six waiting nodes share
+  // is not its number. The validators are the shared ones.
+  const defaults = loadNodeDefaults('mavlink-system');
+  assert.equal(defaults.timeoutMs.value, 10000);
+  assert.equal(defaults.maxRetries.value, 3);
+  assert.match(String(defaults.timeoutMs.validate.call({}, '', {})), />= 1/, 'blank reds by the shared rule');
+  assert.match(String(defaults.maxRetries.validate.call({}, 256, {})), /between 0 and 255/, 'the shared ceiling applies');
+});
+
 test('mavlink-system conditionally validates log id, FTP path, and parameter encoding', () => {
   const defaults = loadNodeDefaults('mavlink-system', {
     connection: { vehicle: 'vehicle' },

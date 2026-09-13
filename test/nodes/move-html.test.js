@@ -418,7 +418,7 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
   // whole retry count >= 0 — the same rule Command, Payload, Fan-out and
   // Formation carry.
   const defaults = loadNodeDefaults('mavlink-move');
-  assert.equal(defaults.timeoutMs.value, 10000, 'timeoutMs defaults to the 10 s window');
+  assert.equal(defaults.timeoutMs.value, 2000, 'timeoutMs defaults to the 2 s per-send window');
   assert.equal(defaults.maxRetries.value, 3, 'maxRetries defaults to three re-sends');
   // The rows exist on the command-path actions' Send & confirm tier, and
   // the shared validators ring only there: a value cleared on that tier must
@@ -430,6 +430,12 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
   for (const bad of ['', 0, -1, 'abc']) {
     assert.match(String(ackVerdict(bad)), />= 1/, `${JSON.stringify(bad)} is not a valid timeout`);
   }
+  // The LONG carrier's confirmation byte counts the re-sends — a uint8 — so
+  // the budget rings past 255: the derived wire range, checked at deploy.
+  const retryVerdict = (v) => defaults.maxRetries.validate.call(onConfirm, v, {});
+  assert.equal(retryVerdict(255), true, 'the confirmation-byte ceiling');
+  assert.match(String(retryVerdict(256)), /between 0 and 255/, 'past the byte reds');
+  assert.match(String(retryVerdict(1.5)), /whole number/, 'the floor check still speaks first');
   for (const hidden of [{ id: 'm1', action: 'goto', delivery: 'build' }, { id: 'm1', action: 'steer', delivery: 'confirm' }]) {
     assert.equal(defaults.timeoutMs.validate.call(hidden, '', {}), true, `a hidden row never reds (${JSON.stringify(hidden)})`);
     assert.equal(defaults.maxRetries.validate.call(hidden, '', {}), true);

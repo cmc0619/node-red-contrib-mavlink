@@ -61,6 +61,46 @@ test('filter narrows by message, sysid, and compid', () => {
   assert.deepEqual(hits.sort(), ['by-compid', 'by-message']);
 });
 
+test('addressed-to filters read the target fields: own id and broadcast pass, others and unaddressed do not', () => {
+  // The companion role's inbox: a message names its recipient in its own
+  // target_system / target_component fields. 0 is broadcast and passes; a
+  // message with no target field at all is addressed to no one and does not.
+  const reg = new SubscriptionRegistry();
+  const hits = [];
+  reg.subscribe({ toSysid: 1, toCompid: 191 }, (m) => hits.push(m.name));
+
+  reg.dispatch(decoded({ name: 'MINE', fields: { target_system: 1, target_component: 191 } }));
+  reg.dispatch(decoded({ name: 'BROADCAST', fields: { target_system: 0, target_component: 0 } }));
+  reg.dispatch(decoded({ name: 'ALL_COMPONENTS', fields: { target_system: 1, target_component: 0 } }));
+  reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 1, target_component: 1 } }));
+  reg.dispatch(decoded({ name: 'OTHER_SYSTEM', fields: { target_system: 2, target_component: 191 } }));
+  reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
+  // A system-scoped message (SET_MODE shape: target_system, no component
+  // field) is addressed to every component of that system — mine included —
+  // and to no component of another.
+  reg.dispatch(decoded({ name: 'SET_MODE_MINE', fields: { target_system: 1, base_mode: 1 } }));
+  reg.dispatch(decoded({ name: 'SET_MODE_OTHER', fields: { target_system: 2, base_mode: 1 } }));
+
+  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS', 'SET_MODE_MINE']);
+});
+
+test('a component-only addressed-to filter still keeps out messages that name no recipient', () => {
+  // To compid alone reads "for component 191 on any system". HEARTBEAT names
+  // no one and stays out; a system-scoped message (no component field) is
+  // for every component of its system and comes in; an explicit other
+  // component stays out.
+  const reg = new SubscriptionRegistry();
+  const hits = [];
+  reg.subscribe({ toCompid: 191 }, (m) => hits.push(m.name));
+
+  reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
+  reg.dispatch(decoded({ name: 'MINE', fields: { target_system: 7, target_component: 191 } }));
+  reg.dispatch(decoded({ name: 'SET_MODE', fields: { target_system: 7, base_mode: 1 } }));
+  reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 7, target_component: 1 } }));
+
+  assert.deepEqual(hits, ['MINE', 'SET_MODE']);
+});
+
 test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {
   const reg = new SubscriptionRegistry();
   const received = [];

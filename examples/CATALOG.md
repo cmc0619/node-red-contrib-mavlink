@@ -9,7 +9,7 @@ note from when the set was assembled — the JSON files and
 Contents:
 
 1. [Node/preset cheat-sheet](#0-cheat-sheet) — the exact strings the flows must use
-2. [Regular examples (10–27)](#1-regular-examples-1027)
+2. [Regular examples (10–28)](#1-regular-examples-1028)
 3. [SITL folder (`examples/sitl/`)](#2-sitl-folder-examplessitl) — see also [`examples/sitl/README.md`](sitl/README.md)
 4. [`examples/sitl/README.md` outline](#3-examplessitlreadmemd-outline)
 
@@ -107,7 +107,7 @@ Standard first-ArduPilot binding is **bind `127.0.0.1:14550` → remote `127.0.0
 
 ---
 
-## 1. Regular examples (10–27)
+## 1. Regular examples (10–28)
 
 Product demos that exercise every palette node. They assume *a* link (SITL or a real
 vehicle) but are not firmware pain-tests — those live in `examples/sitl/`. Prefer a single
@@ -443,6 +443,34 @@ importable tab per file with shared config nodes inline.
   never auto-continue a chain and force-disarm rides the Emergency band that is never
   coalesced or dropped (§7).
 - **Inject buttons:** **`⚠ Force disarm (21196)`**, **`⚠⚠ Flight termination`**.
+
+### 28 — Companion inbox: answer a command addressed to this component
+
+- **File:** `examples/28-companion-command-ack.json`
+- **Tab label:** `28 Companion command ack`
+- **Story:** The companion role's other half. A GCS commands the companion — not
+  the autopilot — and every such command must earn a `COMMAND_ACK`, or the
+  sender's retry loop runs out and reports it unconfirmed. The In node's
+  **To sysid / To compid** filters are the inbox: only `COMMAND_LONG` /
+  `COMMAND_INT` whose target fields name this component (or broadcast) arrive.
+  A function node decides — `MAV_CMD_USER_1` (31010) is accepted, anything
+  else is `UNSUPPORTED` (3) — and builds the ack with the sender's ids from
+  `msg.sysid` / `msg.compid`; an Out node sends it. That is MAVSDK's command
+  receiver expressed as a flow: the handler table is the wires.
+- **Nodes:** `local-identity` (companion, sysid 1 / compid 191,
+  `MAV_TYPE_ONBOARD_CONTROLLER`), `vehicle`, `connection`, `in`
+  (`COMMAND_LONG`, `COMMAND_INT`; To sysid 1, To compid 191), `function`
+  (decide + build `COMMAND_ACK`), `out` (Control band), 2× `debug`.
+- **Key config:** the In node's `toSysid`/`toCompid` equal the identity's own
+  ids. The function drops `msg.trusted === false` before acting (§7). The ack's
+  `target_system`/`target_component` are the *sender's* — MAVLink 2 extension
+  fields a MAVLink 1 peer simply never sees. **The ack rides the connection's
+  configured remote** (`14551` here): a ground station's endpoint is never
+  learned (sysids 250–255, §8), so the remote must be the GCS — a listen-only
+  link has no return route and the transport drops the reply quietly.
+- **Try it:** from any GCS, send `MAV_CMD_USER_1` to sysid 1 / compid 191 and
+  watch the ack; send any other command and watch `UNSUPPORTED` come back
+  instead of silence.
 
 ---
 

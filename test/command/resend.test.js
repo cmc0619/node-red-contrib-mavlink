@@ -52,10 +52,10 @@ function makeWaiter(conn, opts) {
   });
 }
 
-test('a silent window sends once, then settles the timeout shape', async () => {
+test('a silent window with no retry budget sends once, then settles the timeout shape', async () => {
   const conn = stubConn();
   let sends = 0;
-  const waiter = makeWaiter(conn, { timeoutMs: 10, sendFn: () => { sends += 1; } });
+  const waiter = makeWaiter(conn, { timeoutMs: 10, maxRetries: 0, sendFn: () => { sends += 1; } });
 
   const outcome = await waiter.start();
 
@@ -114,8 +114,11 @@ test('IN_PROGRESS under the ceiling still extends the window; a late terminal ac
 test('IN_PROGRESS then silence settles timeout at the ceiling with a single send', async () => {
   const conn = stubConn();
   let sends = 0;
+  // A retry budget is on the table and must go unspent: the vehicle answered,
+  // so the frame did not drop, and re-commanding it would restart the work.
   const waiter = makeWaiter(conn, {
     timeoutMs: 30,
+    maxRetries: 3,
     sendFn: () => { sends += 1; },
   });
   const p = waiter.start();
@@ -126,4 +129,90 @@ test('IN_PROGRESS then silence settles timeout at the ceiling with a single send
   assert.equal(sends, 1, 'a vehicle that answered is never re-commanded');
   assert.equal(outcome.result, 'timeout');
   assert.equal(outcome.retries, 0);
+});
+
+test('silence re-sends with the confirmation byte bumped until the budget is spent, then settles timeout', async () => {
+  // The command protocol's confirmation transmissions: 0 is the first send,
+  // 1–255 mark re-sends of a frame taken as dropped. Three retries is four
+  // sends, then the §9 classification runs on the caller's side.
+  const conn = stubConn();
+  const confirmations = [];
+  const waiter = makeWaiter(conn, {
+    timeoutMs: 10,
+    maxRetries: 3,
+    sendFn: (confirmation) => { confirmations.push(confirmation); },
+  });
+
+  const outcome = await waiter.start();
+
+  assert.deepEqual(confirmations, [0, 1, 2, 3]);
+  assert.equal(outcome.result, 'timeout');
+  assert.equal(outcome.retries, 3, 'the record counts every re-send');
+  assert.equal(outcome.detail, 'no terminal COMMAND_ACK received within timeout');
+});
+
+test('an ack that answers a silence re-send settles with that retry count', async () => {
+  const conn = stubConn();
+  let sends = 0;
+  const waiter = makeWaiter(conn, {
+    timeoutMs: 20,
+    maxRetries: 3,
+    sendFn: () => { sends += 1; },
+  });
+  const p = waiter.start();
+
+  // First window passes in silence → one re-send at ~20 ms; the vehicle
+  // answers that one.
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  conn.injectAck({ command: 400, result: MAV_RESULT.ACCEPTED }, 1, 1);
+
+  const outcome = await p;
+  assert.equal(sends, 2);
+  assert.equal(outcome.result, 'accepted');
+  assert.equal(outcome.retries, 1);
+  assert.equal(outcome.confirmedBy, 'ack');
+});
+
+test('a silence re-send that throws settles the transaction instead of escaping the timer', async () => {
+  // Same rule as the TEMPORARILY_REJECTED retry: the re-send runs in timer
+  // context with nothing above it to catch, and Connection.send throws by
+  // design on a saturated band or dead link.
+  const conn = stubConn();
+  let sends = 0;
+  const waiter = makeWaiter(conn, {
+    timeoutMs: 10,
+    maxRetries: 3,
+    sendFn: () => {
+      sends += 1;
+      if (sends === 2) throw new Error('queue full');
+    },
+  });
+
+  const outcome = await waiter.start();
+
+  assert.equal(sends, 2);
+  assert.equal(outcome.result, 'send failed');
+  assert.equal(outcome.retries, 1);
+  assert.equal(outcome.detail, 'retry send failed: queue full');
+});
+
+test('a TEMPORARILY_REJECTED retry is a fresh transmission: silence after it spends the remaining budget', async () => {
+  // The rejection answered the first frame, not the retry. The retry can
+  // drop on the way out like any first send, so silence after it re-sends
+  // from what is left of the budget instead of settling on one retry.
+  const conn = stubConn();
+  const confirmations = [];
+  const waiter = makeWaiter(conn, {
+    timeoutMs: 10,
+    maxRetries: 2,
+    sendFn: (confirmation) => { confirmations.push(confirmation); },
+  });
+  const p = waiter.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+
+  const outcome = await p;
+
+  assert.deepEqual(confirmations, [0, 1, 2], 'the rejection retry, then one silence re-send');
+  assert.equal(outcome.result, 'timeout');
+  assert.equal(outcome.retries, 2);
 });

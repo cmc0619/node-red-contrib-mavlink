@@ -92,6 +92,24 @@ test('compid filter validates as uint8 0..255 via the shared helper; blank = any
   assert.match(String(validate(-1)), /between 0 and 255/);
 });
 
+test('to-sysid / to-compid filters validate as uint8 via the shared helper; blank = any recipient', () => {
+  // The addressed-to pair mirrors the source pair: an id outside the uint8
+  // range can never match a target field, so the editor reds it.
+  for (const [key, floor] of [['toSysid', 1], ['toCompid', 0]]) {
+    const match = html.match(new RegExp(`${key}:\\s*(\\{[^}]*\\})`));
+    assert.ok(match, `${key} descriptor not found`);
+    const context = { RED: { mavlink: {} }, $: () => ({ length: 0, val: () => undefined }) };
+    installEditorHelpers(context);
+    const descriptor = vm.runInNewContext(`(${match[1]})`, context);
+    const validate = (v) => descriptor.validate.call({}, v, {});
+
+    assert.equal(validate(''), true, `${key}: blank means any recipient`);
+    assert.equal(validate(floor), true, `${key}: the floor is legal`);
+    assert.equal(validate(255), true, `${key}: the uint8 ceiling`);
+    assert.match(String(validate(256)), /between/, `${key}: out of range reds the node`);
+  }
+});
+
 test('messages red-rings anything but a list of non-blank names (walled garden)', () => {
   // The runtime subscribes straight off this array, so the editor guarantees
   // the shape oneditsave produces.
