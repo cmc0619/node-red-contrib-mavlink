@@ -141,8 +141,16 @@ async function waitPeer(conn, timeoutMs = 60000) {
 }
 
 function requestTelemetry(conn) {
+  // 66 is the REQUEST_DATA_STREAM *message* id, not a MAV_CMD, so this loop
+  // asks for nothing — it is carried here only to match the five sibling
+  // measure scripts, which all send it and all follow it with the interval
+  // requests below. SET_MESSAGE_INTERVAL (511) is the half that works, and
+  // 33 (GLOBAL_POSITION_INT) is what the climb check reads.
   for (const streamId of [0, 1, 2, 3, 4, 6, 10, 11, 12]) {
     sendCmd(conn, 66, [streamId, 100000, 1, 0, 0, 0, 0]);
+  }
+  for (const [id, us] of [[1, 500000], [24, 200000], [30, 100000], [32, 100000], [33, 100000]]) {
+    sendCmd(conn, 511, [id, us, 0, 0, 0, 0, 0]);
   }
 }
 
