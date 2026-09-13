@@ -11,6 +11,8 @@
  */
 
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { Connection } = require('../lib/connection/runtime');
@@ -21,11 +23,12 @@ const { createMachine } = require('../lib/log');
 const { FtpMachine } = require('../lib/ftp');
 const { ParamBackup, ParamRestore } = require('../lib/param/backup');
 
-// Literal artifact paths only — Codacy's detect-non-literal-fs-filename
-// treats path.join/mkdtemp as critical Security on this tree (§ .codacy.yml).
-const ARTIFACT_RESULTS = '/opt/cursor/artifacts/system-ops-results.json';
-const ARTIFACT_LOG = '/opt/cursor/artifacts/system-ops-log.bin';
-const ARTIFACT_FILE = '/opt/cursor/artifacts/system-ops-file.bin';
+// Private mkdtemp directory, mode 0600 — the same shape every other measure
+// script in this tree uses (measure-peer-table, measure-swarm-mcast, …).
+const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'nrc-system-ops-'));
+const ARTIFACT_RESULTS = path.join(WORK, 'system-ops-results.json');
+const ARTIFACT_LOG = path.join(WORK, 'system-ops-log.bin');
+const ARTIFACT_FILE = path.join(WORK, 'system-ops-file.bin');
 
 const SYSID = 1;
 const COMPID = 1;
@@ -181,13 +184,12 @@ async function briefFlight(conn) {
 }
 
 async function main() {
-  fs.mkdirSync('/opt/cursor/artifacts', { recursive: true });
   const results = [];
   let paramBundle = null;
 
-  console.log('artifacts → /opt/cursor/artifacts');
+  console.log(`artifacts → ${WORK}`);
   note(results, 'restart-ap-1', docker('restart', 'nrc-ap-1').ok, 'nrc-ap-1');
-  spawnSync('sleep', ['22']);
+  await sleep(22000);
 
   const conn = makeConn();
   await conn.start();

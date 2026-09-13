@@ -124,7 +124,7 @@ test('list paginates by wire entry index and skips unsupported directory records
   assert.equal(requests[2].seq, (requests[1].seq + 2) & 0xffff);
 });
 
-test('download reads sequential chunks, finishes at the advertised size, and terminates the session', async () => {
+test('download reads sequential chunks, accepts EOF, and terminates the session', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
   stub.onSend((message, deliver) => {
@@ -139,6 +139,8 @@ test('download reads sequential chunks, finishes at the advertised size, and ter
       deliver(reply(message, 128, { session: 7, data: Buffer.from('abc') }));
     } else if (request.opcode === 5 && request.offset === 3) {
       deliver(reply(message, 128, { session: 7, data: Buffer.from('de') }));
+    } else if (request.opcode === 5 && request.offset === 5) {
+      deliver(nack(message, 6, { session: 7 }));
     } else if (request.opcode === 1) {
       deliver(reply(message, 128, { session: 7 }));
     }
@@ -153,10 +155,11 @@ test('download reads sequential chunks, finishes at the advertised size, and ter
     'FILE_TRANSFER_PROTOCOL',
     'FILE_TRANSFER_PROTOCOL',
     'FILE_TRANSFER_PROTOCOL',
+    'FILE_TRANSFER_PROTOCOL',
   ]);
   const requests = stub.sent.map(({ message }) => decodePayload(message.fields.payload));
-  assert.deepEqual(requests.map((request) => request.opcode), [4, 5, 5, 1]);
-  assert.equal(requests[3].session, 7);
+  assert.deepEqual(requests.map((request) => request.opcode), [4, 5, 5, 5, 1]);
+  assert.equal(requests[4].session, 7);
 });
 
 test('download accepts authoritative EOF after the file shrinks', async () => {
@@ -187,7 +190,7 @@ test('download accepts authoritative EOF after the file shrinks', async () => {
   assert.deepEqual(outcome.data, Buffer.from('abc'));
 });
 
-test('download accepts ArduPilot EOF NAK that leaves offset at zero', async () => {
+test('download accepts an ArduPilot EOF NAK that leaves the offset at zero', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
   stub.onSend((message, deliver) => {
@@ -201,7 +204,9 @@ test('download accepts ArduPilot EOF NAK that leaves offset at zero', async () =
     } else if (request.opcode === 5 && request.offset === 0) {
       deliver(reply(message, 128, { session: 9, data: Buffer.from('xyz') }));
     } else if (request.opcode === 5 && request.offset === 3) {
-      // ArduPilot GCS_FTP::error() memsets the reply, so EOF NAKs carry offset 0.
+      // ArduPilot's GCS_FTP::error() memsets the reply, so an EOF NAK carries
+      // offset 0 rather than echoing the request. Requiring offset equality
+      // discarded it and the download never terminated.
       deliver(nack(message, 6, { session: 9, offset: 0 }));
     } else if (request.opcode === 1) {
       deliver(reply(message, 128, { session: 9 }));
@@ -214,6 +219,39 @@ test('download accepts ArduPilot EOF NAK that leaves offset at zero', async () =
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.data, Buffer.from('xyz'));
+});
+
+test('download reads past an advertised size of zero instead of truncating', async () => {
+  // ArduPilot's generated files (@SYS, @PARAM) answer OpenFileRO with size 0
+  // and stream until EOF. Completion follows the EOF, never the advertised
+  // length, or the transfer succeeds carrying one chunk of a longer file.
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    const request = decodePayload(message.fields.payload);
+    if (request.opcode === 4) {
+      deliver(reply(message, 128, {
+        session: 5,
+        size: 4,
+        data: Buffer.from([0, 0, 0, 0]),
+      }));
+    } else if (request.opcode === 5 && request.offset === 0) {
+      deliver(reply(message, 128, { session: 5, data: Buffer.from('abc') }));
+    } else if (request.opcode === 5 && request.offset === 3) {
+      deliver(reply(message, 128, { session: 5, data: Buffer.from('def') }));
+    } else if (request.opcode === 5 && request.offset === 6) {
+      deliver(nack(message, 6, { session: 5, offset: 0 }));
+    } else if (request.opcode === 1) {
+      deliver(reply(message, 128, { session: 5 }));
+    }
+  });
+
+  const outcome = await new FtpMachine('download', machineOptions(stub, clock, {
+    path: '/@SYS/threads.txt',
+  })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(outcome.data, Buffer.from('abcdef'));
 });
 
 test('download reports termination timeout instead of false success when cleanup is dropped', async () => {
