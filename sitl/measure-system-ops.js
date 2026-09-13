@@ -208,10 +208,14 @@ async function main() {
   await sleep(22000);
 
   const conn = makeConn();
-  await conn.start();
-  await sleep(1500);
 
   try {
+    // start() belongs inside the guarded lifecycle: a terminal UDP failure has
+    // to close the connection and land in the results file like any other
+    // failure, not escape past the finally and leave the run unrecorded.
+    await conn.start();
+    await sleep(1500);
+
     await waitPeer(conn);
     note(results, 'peer', true, `sysid ${SYSID} learned`);
 
@@ -328,7 +332,9 @@ async function main() {
       })).start();
       note(results, 'ftp-upload-probe', up.result === 'succeeded',
         `${up.result}: ${probePath} ${probeBody.length} bytes`,
-        { result: up.result, phase: up.phase, reason: up.reason });
+        // A failed upload is not a failed run: it is the branch that sends the
+        // measurement down the list-and-pull fallback below.
+        { result: up.result, phase: up.phase, reason: up.reason, nonGating: true });
 
       if (up.result === 'succeeded') {
         const t0 = Date.now();
@@ -375,6 +381,9 @@ async function main() {
               sample: (outcome.entries || []).slice(0, 10),
               phase: outcome.phase,
               reason: outcome.reason,
+              // This loop is a search for a root that exists; the roots that
+              // do not are expected misses, not failures of the measurement.
+              nonGating: true,
             });
           if (outcome.result === 'succeeded' && count > 0) {
             listedRoot = root;
@@ -445,6 +454,12 @@ async function main() {
       restore: results.some((r) => r.name === 'restore-parameters' && r.ok),
       logPull: results.some((r) => r.name === 'log-pull' && r.ok),
       filePull: results.some((r) => r.name === 'file-pull' && r.ok),
+      // Everything else recorded false is a failed measurement, including the
+      // ones no named gate above covers: a brief flight that never climbed, a
+      // container that would not restart, and any 'fatal' thrown after the
+      // last named gate already passed. A harness that reports success while
+      // carrying an ok:false row is reporting a run that did not happen.
+      noFailures: results.every((r) => r.ok || r.nonGating),
     },
   };
   fs.writeFileSync(ARTIFACT_RESULTS, JSON.stringify(summary, null, 2), { mode: 0o600 });
