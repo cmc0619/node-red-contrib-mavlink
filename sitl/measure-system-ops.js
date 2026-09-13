@@ -174,13 +174,21 @@ async function briefFlight(conn) {
   }
   sendCmd(conn, 22, [0, 0, 0, 0, 0, 0, 5]);
   const climbDeadline = Date.now() + 25000;
+  let climbed = false;
   while (Date.now() < climbDeadline) {
     const rel = conn.peerTable.getComponent(SYSID, COMPID)?.position?.relativeAlt;
-    if (rel != null && Number(rel) > 1500) break;
+    if (rel != null && Number(rel) > 1500) {
+      climbed = true;
+      break;
+    }
     await sleep(500);
   }
+  // Disarm first either way, then fail: the mode and arm phases above both
+  // throw when they miss, and a takeoff that never left the ground must not
+  // record brief-flight as a pass.
   sendCmd(conn, 400, [0, 21196, 0, 0, 0, 0, 0]);
   await sleep(2500);
+  if (!climbed) throw new Error('AP did not climb');
 }
 
 async function main() {
