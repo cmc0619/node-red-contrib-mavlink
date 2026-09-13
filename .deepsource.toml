@@ -6,7 +6,12 @@ version = 1
 # eslint.config.mjs is ESM tooling, not shipped code, and does not parse under
 # the commonjs `module_system` below. It is named with a `**/` glob because that
 # is the form these patterns match a single file by.
-exclude_patterns = ["seed/**", "examples/**", "**/eslint.config.mjs"]
+# `sitl/` is the lab harness — measure scripts run by hand against the Compose
+# rig, never shipped. Tagging it under `test_patterns` was tried first and does
+# not hold: the tag relaxes the no-op-stub family but leaves JS-0067
+# (global-scope function) firing on every top-level probe declaration, measured
+# on this PR after the tag landed. `.codacy.yml` excludes the same tree.
+exclude_patterns = ["seed/**", "examples/**", "sitl/**", "**/eslint.config.mjs"]
 
 # Tagged as tests so analyzer rules meant for shipped code (no-op stubs,
 # assert-shaped "redundant" literals) stop grading the harness files.
