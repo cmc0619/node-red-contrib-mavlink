@@ -418,7 +418,7 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
   // whole retry count >= 0 — the same rule Command, Payload, Fan-out and
   // Formation carry.
   const defaults = loadNodeDefaults('mavlink-move');
-  assert.equal(defaults.timeoutMs.value, 10000, 'timeoutMs defaults to the 10 s window');
+  assert.equal(defaults.timeoutMs.value, 2000, 'timeoutMs defaults to the 2 s per-send window');
   assert.equal(defaults.maxRetries.value, 3, 'maxRetries defaults to three re-sends');
   // The rows exist on the command-path actions' Send & confirm tier, and
   // the shared validators ring only there: a value cleared on that tier must
