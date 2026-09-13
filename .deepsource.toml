@@ -10,8 +10,14 @@ exclude_patterns = ["seed/**", "examples/**", "**/eslint.config.mjs"]
 
 # Tagged as tests so analyzer rules meant for shipped code (no-op stubs,
 # assert-shaped "redundant" literals) stop grading the harness files.
-# `integration/` is the Node-RED smoke harness and belongs here too.
-test_patterns = ["test/**", "lib/**/test/**", "integration/**"]
+# `integration/` is the Node-RED smoke harness and belongs here too, and so
+# does `sitl/` — the lab measure scripts are run by hand against the Compose
+# rig, never shipped. Left out, every one of them draws the same harness
+# findings: silenced `logger.info/warn/error` stubs read as empty methods, the
+# top-level probe declarations read as global-scope pollution, and single-letter
+# loop bindings read as too-short names. `.codacy.yml` excludes the same tree
+# for the same reason.
+test_patterns = ["test/**", "lib/**/test/**", "integration/**", "sitl/**"]
 
 [[analyzers]]
 name = "javascript"
