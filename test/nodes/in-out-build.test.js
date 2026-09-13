@@ -161,6 +161,8 @@ function makeConnectionStub() {
     if (filter.sysid !== undefined && filter.sysid !== decoded.sysid) return false;
     if (filter.compid !== undefined && filter.compid !== decoded.compid) return false;
     const to = decoded.fields;
+    if ((filter.toSysid !== undefined || filter.toCompid !== undefined)
+      && to.target_system === undefined) return false;
     if (filter.toSysid !== undefined && to.target_system !== 0
       && to.target_system !== filter.toSysid) return false;
     if (filter.toCompid !== undefined && to.target_component !== undefined

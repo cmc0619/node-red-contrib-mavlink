@@ -84,6 +84,23 @@ test('addressed-to filters read the target fields: own id and broadcast pass, ot
   assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS', 'SET_MODE_MINE']);
 });
 
+test('a component-only addressed-to filter still keeps out messages that name no recipient', () => {
+  // To compid alone reads "for component 191 on any system". HEARTBEAT names
+  // no one and stays out; a system-scoped message (no component field) is
+  // for every component of its system and comes in; an explicit other
+  // component stays out.
+  const reg = new SubscriptionRegistry();
+  const hits = [];
+  reg.subscribe({ toCompid: 191 }, (m) => hits.push(m.name));
+
+  reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
+  reg.dispatch(decoded({ name: 'MINE', fields: { target_system: 7, target_component: 191 } }));
+  reg.dispatch(decoded({ name: 'SET_MODE', fields: { target_system: 7, base_mode: 1 } }));
+  reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 7, target_component: 1 } }));
+
+  assert.deepEqual(hits, ['MINE', 'SET_MODE']);
+});
+
 test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {
   const reg = new SubscriptionRegistry();
   const received = [];

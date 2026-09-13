@@ -688,5 +688,5 @@ test('mavlink-param keeps a 10 s window: one deadline over the whole PARAM_VALUE
   const { loadNodeDefaults } = require('./html-assert');
   const defaults = loadNodeDefaults('mavlink-param');
   assert.equal(defaults.timeoutMs.value, 10000);
-  assert.match(String(defaults.timeoutMs.validate.call({ delivery: 'confirm', action: 'list' }, '', {})), />= 1/, 'blank reds by the shared rule');
+  assert.match(String(defaults.timeoutMs.validate.call({ delivery: 'collect', action: 'request-list' }, '', {})), />= 1/, 'blank reds by the shared rule');
 });
