@@ -195,3 +195,24 @@ test('a silence re-send that throws settles the transaction instead of escaping 
   assert.equal(outcome.retries, 1);
   assert.equal(outcome.detail, 'retry send failed: queue full');
 });
+
+test('a TEMPORARILY_REJECTED retry is a fresh transmission: silence after it spends the remaining budget', async () => {
+  // The rejection answered the first frame, not the retry. The retry can
+  // drop on the way out like any first send, so silence after it re-sends
+  // from what is left of the budget instead of settling on one retry.
+  const conn = stubConn();
+  const confirmations = [];
+  const waiter = makeWaiter(conn, {
+    timeoutMs: 10,
+    maxRetries: 2,
+    sendFn: (confirmation) => { confirmations.push(confirmation); },
+  });
+  const p = waiter.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+
+  const outcome = await p;
+
+  assert.deepEqual(confirmations, [0, 1, 2], 'the rejection retry, then one silence re-send');
+  assert.equal(outcome.result, 'timeout');
+  assert.equal(outcome.retries, 2);
+});

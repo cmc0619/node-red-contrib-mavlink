@@ -430,6 +430,12 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
   for (const bad of ['', 0, -1, 'abc']) {
     assert.match(String(ackVerdict(bad)), />= 1/, `${JSON.stringify(bad)} is not a valid timeout`);
   }
+  // The LONG carrier's confirmation byte counts the re-sends — a uint8 — so
+  // the budget rings past 255: the derived wire range, checked at deploy.
+  const retryVerdict = (v) => defaults.maxRetries.validate.call(onConfirm, v, {});
+  assert.equal(retryVerdict(255), true, 'the confirmation-byte ceiling');
+  assert.match(String(retryVerdict(256)), /between 0 and 255/, 'past the byte reds');
+  assert.match(String(retryVerdict(1.5)), /whole number/, 'the floor check still speaks first');
   for (const hidden of [{ id: 'm1', action: 'goto', delivery: 'build' }, { id: 'm1', action: 'steer', delivery: 'confirm' }]) {
     assert.equal(defaults.timeoutMs.validate.call(hidden, '', {}), true, `a hidden row never reds (${JSON.stringify(hidden)})`);
     assert.equal(defaults.maxRetries.validate.call(hidden, '', {}), true);

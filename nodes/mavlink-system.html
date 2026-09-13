@@ -94,7 +94,11 @@
         validate: RED.mavlink.validateTargetSystem(['confirm'], 'delivery', 'confirm'),
       },
       targetComponent: { value: 1, required: true, validate: RED.mavlink.validateUint8(1) },
-      ...RED.mavlink.ackDefaults(() => true),
+      // System's window is a transfer step — a log chunk, an FTP burst, a
+      // parameter echo — not a command ack, so the shared 2 s ack default is
+      // not its number. The ring is the shared one; the value is its own.
+      timeoutMs: { ...RED.mavlink.ackDefaults(() => true).timeoutMs, value: 10000 },
+      maxRetries: RED.mavlink.ackDefaults(() => true).maxRetries,
     };
 
     RED.nodes.registerType('mavlink-system', {

@@ -1748,11 +1748,17 @@
    * dialog's `defaults` so the six cannot drift. `timeoutMs`: whole
    * milliseconds >= 1, the window armed after every send, because a 0 ms
    * wait reports every ack unconfirmed before it could arrive. `maxRetries`:
-   * whole re-sends >= 0 — on TEMPORARILY_REJECTED or silence for a
+   * whole re-sends 0–255 — on TEMPORARILY_REJECTED or silence for a
    * COMMAND_ACK, on silence for a PARAM_VALUE echo; the runtime reads both
-   * as saved. 2 s × (1 + 3) at the defaults is the whole wait before a
-   * missing ack is classified, the shape MAVSDK and the command protocol
-   * both use (0.5 s × 4 there; a telemetry radio earns the longer window).
+   * as saved. The ceiling is the LONG carrier's confirmation byte, a wire
+   * uint8 that counts the re-sends: the ring covers the derived wire range
+   * at deploy (AGENTS.md §2), and the floor check speaks first so blank,
+   * negative and fractional keep their own reasons. 2 s × (1 + 3) at the
+   * defaults is the whole wait before a missing ack is classified, the
+   * shape MAVSDK and the command protocol both use (0.5 s × 4 there; a
+   * telemetry radio earns the longer window). Mission and System spread
+   * these descriptors with their own `value` — a mission step and a
+   * transfer step are not a command ack, and their windows are theirs.
    *
    * `shown(node)` says whether the two rows are on screen in the dialog's
    * live state — the tiers that actually wait. A row the operator cannot
@@ -1767,9 +1773,13 @@
     const whenShown = (validate) => function (v, opt) {
       return shown(this) ? validate.call(this, v, opt) : true;
     };
+    const retryBudget = function (v, opt) {
+      const floor = RED.mavlink.validateAtLeast(0, { integer: true }).call(this, v, opt);
+      return floor === true ? RED.mavlink.validateIntRange(0, 255).call(this, v, opt) : floor;
+    };
     return {
       timeoutMs: { value: 2000, validate: whenShown(RED.mavlink.validateAtLeast(1, { integer: true })) },
-      maxRetries: { value: 3, validate: whenShown(RED.mavlink.validateAtLeast(0, { integer: true })) },
+      maxRetries: { value: 3, validate: whenShown(retryBudget) },
     };
   };
 
