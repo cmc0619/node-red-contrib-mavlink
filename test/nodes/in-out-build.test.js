@@ -125,6 +125,8 @@ function inConfig(overrides = {}) {
     messages: [],
     sysid: '',
     compid: '',
+    toSysid: '',
+    toCompid: '',
     showUnknown: false,
     changedOnly: false,
     changedFields: '',
@@ -158,6 +160,11 @@ function makeConnectionStub() {
     if (filter.message !== undefined && filter.message !== decoded.name) return false;
     if (filter.sysid !== undefined && filter.sysid !== decoded.sysid) return false;
     if (filter.compid !== undefined && filter.compid !== decoded.compid) return false;
+    const to = decoded.fields;
+    if (filter.toSysid !== undefined && to.target_system !== 0
+      && to.target_system !== filter.toSysid) return false;
+    if (filter.toCompid !== undefined && to.target_component !== 0
+      && to.target_component !== filter.toCompid) return false;
     return true;
   }
 
@@ -533,6 +540,33 @@ test('mavlink-in: sysid filter drops messages from other systems', () => {
 
   stub._deliver({ name: 'HEARTBEAT', sysid: 2, compid: 1, fields: { type: 6 }, trusted: true });
   assert.equal(node._sends.length, 1, 'sysid 2 should pass through');
+});
+
+test('mavlink-in: to-sysid / to-compid filters admit only messages addressed to those ids or broadcast', () => {
+  // The companion role's inbox (§9): the filter reads the message's own
+  // target fields, so a GCS command aimed at this component arrives and one
+  // aimed at the autopilot does not. The sender's ids ride out on the
+  // message — a reply's target comes from there.
+  const RED = makeRED();
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-in')(RED);
+  const Constructor = RED._nodeTypes['mavlink-in'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, inConfig({ connection: 'conn-1', toSysid: '1', toCompid: '191' }));
+
+  const from = { sysid: 255, compid: 190, trusted: true };
+  stub._deliver({ ...from, name: 'COMMAND_LONG', fields: { command: 31010, target_system: 1, target_component: 1 } });
+  assert.equal(node._sends.length, 0, 'a command for the autopilot is not mine');
+
+  stub._deliver({ ...from, name: 'HEARTBEAT', fields: { type: 6 } });
+  assert.equal(node._sends.length, 0, 'a message with no target field is addressed to no one');
+
+  stub._deliver({ ...from, name: 'COMMAND_LONG', fields: { command: 31010, target_system: 1, target_component: 191 } });
+  stub._deliver({ ...from, name: 'COMMAND_INT', fields: { command: 512, target_system: 0, target_component: 0 } });
+  assert.equal(node._sends.length, 2, 'addressed to me, and broadcast, both arrive');
+  assert.equal(node._sends[0].sysid, 255, 'the sender rides out as msg.sysid');
+  assert.equal(node._sends[0].compid, 190, 'the sender rides out as msg.compid');
 });
 
 test('mavlink-in: an unknown id is dropped unless Show unknown ids is ticked', () => {

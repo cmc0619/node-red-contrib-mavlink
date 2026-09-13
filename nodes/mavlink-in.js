@@ -99,6 +99,10 @@ module.exports = function registerMavlinkIn(RED) {
     const filterMessages = config.messages;
     const filterSysid = isBlank(config.sysid) ? undefined : Number(config.sysid);
     const filterCompid = isBlank(config.compid) ? undefined : Number(config.compid);
+    // Addressed-to filters read the message's own target fields — the
+    // companion role's "commands for me" (§9). Blank is every recipient.
+    const filterToSysid = isBlank(config.toSysid) ? undefined : Number(config.toSysid);
+    const filterToCompid = isBlank(config.toCompid) ? undefined : Number(config.toCompid);
 
     // Unknown frames are opt-in. A msgid the dialect does not carry arrives as
     // UNKNOWN_<id>; that is a diagnostic, not traffic a working flow
@@ -223,7 +227,9 @@ module.exports = function registerMavlinkIn(RED) {
     // sharing one handler — no change to the matcher, and a name can never
     // match twice. An empty list is a single unfiltered subscription, which is
     // what a blank message filter always meant.
-    const target = { sysid: filterSysid, compid: filterCompid };
+    const target = {
+      sysid: filterSysid, compid: filterCompid, toSysid: filterToSysid, toCompid: filterToCompid,
+    };
     const unsubscribes = filterMessages.length
       ? filterMessages.map((name) => connectionNode.subscribe({ ...target, message: name }, onDecoded))
       : [connectionNode.subscribe(target, onDecoded)];

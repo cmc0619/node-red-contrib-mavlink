@@ -61,6 +61,24 @@ test('filter narrows by message, sysid, and compid', () => {
   assert.deepEqual(hits.sort(), ['by-compid', 'by-message']);
 });
 
+test('addressed-to filters read the target fields: own id and broadcast pass, others and unaddressed do not', () => {
+  // The companion role's inbox: a message names its recipient in its own
+  // target_system / target_component fields. 0 is broadcast and passes; a
+  // message with no target field at all is addressed to no one and does not.
+  const reg = new SubscriptionRegistry();
+  const hits = [];
+  reg.subscribe({ toSysid: 1, toCompid: 191 }, (m) => hits.push(m.name));
+
+  reg.dispatch(decoded({ name: 'MINE', fields: { target_system: 1, target_component: 191 } }));
+  reg.dispatch(decoded({ name: 'BROADCAST', fields: { target_system: 0, target_component: 0 } }));
+  reg.dispatch(decoded({ name: 'ALL_COMPONENTS', fields: { target_system: 1, target_component: 0 } }));
+  reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 1, target_component: 1 } }));
+  reg.dispatch(decoded({ name: 'OTHER_SYSTEM', fields: { target_system: 2, target_component: 191 } }));
+  reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
+
+  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS']);
+});
+
 test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {
   const reg = new SubscriptionRegistry();
   const received = [];
