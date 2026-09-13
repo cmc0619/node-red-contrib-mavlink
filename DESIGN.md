@@ -1236,6 +1236,24 @@ when `secret_key` is configured.
 *Check:* `test/connection/signing.test.js`; `test/connection/runtime.test.js`;
 [pymavlink `mavgen_python.py` signature validation](https://github.com/ArduPilot/pymavlink/blob/master/generator/mavgen_python.py#L941-L966).
 
+## 14.147 Companion reply route
+
+**14.147 A companion's reply rides the configured remote; a ground station's endpoint stays unlearned.** ✔ 📖 (owner ruling, 2026-09-13, 495)
+The companion inbox — `mavlink-in`'s To sysid / To compid, example 28 — delivers a
+GCS's command and the flow answers with a `COMMAND_ACK` through `mavlink-out`. That
+reply has exactly one route: the connection's configured remote. `peer-table.js`
+never records an endpoint for sysids 250–255 (§8: a GCS is never a destination for
+vehicle-directed traffic, and a learned GCS endpoint would receive every
+`target_system = 0` broadcast), and a listen-only UDP link drops a frame with no
+destination quietly by design (`transport/udp.js`). Codex asked for a return-endpoint
+mechanism — learning a GCS endpoint from a command it sends, for directed replies
+only. Ruled against: companion links have a fixed remote in practice, and a carve-out
+to §8 for one reply path is machinery no measured setup needs. The rule stands as
+documentation: the help text, catalog entry and example say the remote must be the
+GCS. Not to be re-raised as a bot finding; reopen only with a listen-only companion
+setup that needs it.
+*Check:* `rg "GCS_SYSID_MIN" lib/connection/peer-table.js`; `examples/CATALOG.md` entry 28.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
