@@ -4,6 +4,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [0.7.1] "EOF, silence, and companions" - 2026-09-15
+
+### Added
+
+- **`mavlink-in` To sysid / To compid filters.** Companion flows can keep
+  only frames addressed to this system or component (including broadcast
+  targets), matching how a companion server is expected to listen.
+- **Command re-send on ack silence.** While the ack window is still open, a
+  silent command is re-sent with the confirmation byte bumped before the
+  waiter classifies the outcome; `IN_PROGRESS` still stops further sends.
+  Default per-send ack timeout is 2 s (saved flows keep their value).
+
+### Fixed
+
+- **ArduPilot MAVFTP download EOF.** A ReadFile NAK whose offset is zeroed
+  (ArduPilot's FTP error path) no longer has to echo the request offset, so
+  downloads finish after the last data chunk instead of hanging.
+- **System ops measured on SITL.** Parameter backup/restore, log pull, and
+  MAVFTP file round-trip are exercised against lab ArduPilot.
+
+### Changed
+
+- **Companion replies stay on the configured remote (§14.147).** A companion
+  link does not learn a GCS return endpoint from an inbound command; replies
+  use the configured remote. Documented on `mavlink-in` help and the example.
+
 ## [0.7.0] "Backups, Logging, and Files. Oh, my!" - 2026-09-12
 
 ### Added
