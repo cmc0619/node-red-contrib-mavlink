@@ -45,7 +45,7 @@ function stubSource(tree, roots = Object.keys(tree)) {
   return {
     sha,
     requested,
-    resolveCommit: async () => sha,
+    resolveCommit: () => Promise.resolve(sha),
     fetchFile: async (_repo, commit, file) => {
       requested.push({ commit, file });
       if (!(file in tree)) {
@@ -53,7 +53,7 @@ function stubSource(tree, roots = Object.keys(tree)) {
       }
       return tree[file];
     },
-    listFiles: async () => roots,
+    listFiles: () => Promise.resolve(roots),
   };
 }
 
