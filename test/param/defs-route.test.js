@@ -146,43 +146,6 @@ test('GET returns an error response for a corrupt local holding file', async (t)
   assert.match(res.body.error, /parameter definitions/i);
 });
 
-test('POST rejects an empty URL without altering the profile holding file', async (t) => {
-  const userDir = tempUserDir(t);
-  writeHoldingFile(userDir, 'profile-existing', {
-    Vehicle: {
-      GOOD: { humanName: 'Good', documentation: 'Last good.', fields: {} },
-    },
-  });
-  const { routes } = captureRoutes(userDir);
-  const res = mockRes();
-
-  await routes.get('POST /mavlink/param/defs/update').handler(
-    { body: { vehicle: 'profile-existing', url: '' } },
-    res
-  );
-
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body.error, /URL is required/i);
-  const stored = JSON.parse(fs.readFileSync(
-    path.join(userDir, 'mavlink', 'param-defs', 'profile-existing.json'),
-    'utf8'
-  ));
-  assert.ok(stored.Vehicle.GOOD);
-});
-
-test('POST rejects a missing Vehicle Profile ID', async (t) => {
-  const { routes } = captureRoutes(tempUserDir(t));
-  const res = mockRes();
-
-  await routes.get('POST /mavlink/param/defs/update').handler(
-    { body: { vehicle: '', url: 'https://example.test/params.json' } },
-    res
-  );
-
-  assert.equal(res.statusCode, 400);
-  assert.match(res.body.error, /Vehicle Profile ID is required/i);
-});
-
 test('POST explicitly downloads and returns the validated definition count', async (t) => {
   const userDir = tempUserDir(t);
   const { routes } = captureRoutes(userDir);
@@ -334,7 +297,7 @@ test('a downloaded definition overrides the seeded one for the same id', async (
   );
 });
 
-test('a corrupt holding file is reported without also costing the shipped seed', async (t) => {
+test('a corrupt holding file is reported, not papered over with the seed', async (t) => {
   const userDir = tempUserDir(t);
   const file = path.join(userDir, 'mavlink', 'param-defs', 'profile-copter.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -349,9 +312,9 @@ test('a corrupt holding file is reported without also costing the shipped seed',
     res
   );
 
-  assert.equal(res.statusCode, 200, 'the seed still answers');
-  assert.ok(res.body.defs.RC1_MIN);
-  assert.match(res.body.notice, /unreadable/i, 'but the operator is told their download is broken');
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body.defs, {});
+  assert.match(res.body.error, /invalid/i);
 });
 
 test('an unknown firmware yields nothing rather than another firmware s parameters', async (t) => {

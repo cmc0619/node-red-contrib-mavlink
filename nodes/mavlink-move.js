@@ -17,7 +17,7 @@ const {
 } = require('../lib/move');
 const { streamLocks } = require('../lib/delivery/lock');
 const { valueFrom } = require('../lib/addressing/resolve');
-const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { awaitAckWithBadge, ackRecordFields, cancelSlot } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
@@ -68,20 +68,13 @@ module.exports = function registerMavlinkMove(RED) {
     // terminal — COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included
     // — is a failure with its MAV_RESULT name, never silence.
     async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
-      applyActionStatus(node, 'sending', `${label}…`);
-      const outcome = await waiterSlot.run(ackWaiterFor(connectionNode, message, {
-        band: BAND.CONTROL,
+      const outcome = await awaitAckWithBadge(node, waiterSlot, connectionNode, message, label, {
         target,
         identityId,
         // The editor owns the defaults and the number rings (RED.mavlink.ackDefaults).
         timeoutMs: Number(config.timeoutMs),
         maxRetries: Number(config.maxRetries),
-        // A long reposition answers IN_PROGRESS repeatedly (§9); the badge
-        // follows the vehicle's own progress instead of standing still.
-        onInProgress: (progress) => {
-          applyActionStatus(node, 'sending', progress === null ? `${label}…` : `${label} ${progress}%…`);
-        },
-      }));
+      });
       if (outcome.result === 'cancelled') {
         // A redeploy cancelled the wait (close() below): the node is being
         // torn down, so finish quietly — same rule as mavlink-command.
@@ -359,14 +352,12 @@ module.exports = function registerMavlinkMove(RED) {
                 // One-shot guided goto: DO_REPOSITION as COMMAND_INT, the acked
                 // path. The altitude reference is the one frame choice that exists.
                 const message = buildRepositionMessage({
-                  mode: 'position',
                   frame: frameForAltRef(valueFrom(payload, config, 'altRef')),
                   target,
                   position: payload.position === undefined ? positionFrom(config) : payload.position,
                   speed: valueFrom(payload, config, 'speed'),
                   radius: valueFrom(payload, config, 'radius'),
                   yaw: valueFrom(payload, config, 'yaw'),
-                  yawRate: payload.yawRate,
                   // CHANGE_MODE flies the vehicle into guided — an explicit boolean
                   // opt-in (editor checkbox, payload override), never a truthy token.
                   // Measured (§14 2026-08-12): the flag is the gate on both stacks;

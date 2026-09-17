@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata/bundled');
 const { catalogFromBundle } = require('../../lib/metadata/commands-list');
-const { commandLabel, isHiddenParam, enumOptionLabel } = require('../../lib/metadata/commands-list');
+const { commandLabel, isHiddenParam } = require('../../lib/metadata/commands-list');
 
 test('commandLabel shows the full command name and value in parentheses (§6)', () => {
   assert.equal(commandLabel('MAV_CMD_NAV_TAKEOFF', 22), 'MAV_CMD_NAV_TAKEOFF (22)');
@@ -20,11 +20,8 @@ test('isHiddenParam follows the §6 reserved / Empty / Reserved cases', () => {
   assert.equal(isHiddenParam({ reserved: false, description: 'Minimum pitch' }), false);
 });
 
-test('enumOptionLabel shows the enum entry name and value in parentheses (§6)', () => {
-  assert.equal(
-    enumOptionLabel({ name: 'SPEED_TYPE_AIRSPEED', value: 0, description: 'Airspeed' }),
-    'SPEED_TYPE_AIRSPEED (0)'
-  );
+test('an enum option label is the entry name and value in parentheses (§6)', () => {
+  assert.equal(commandLabel('SPEED_TYPE_AIRSPEED', 0), 'SPEED_TYPE_AIRSPEED (0)');
 });
 
 test('the ardupilotmega command catalog includes params and referenced enums for Advanced UI', () => {

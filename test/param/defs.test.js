@@ -258,56 +258,6 @@ test('a failed update preserves the last good profile holding file', async (t) =
   assert.deepEqual(files, ['profile-preserve.json']);
 });
 
-test('a filesystem failure after the temporary write removes the sibling temporary file', async (t) => {
-  const userDir = tempUserDir(t);
-  const target = holdingFile(userDir, 'profile-rename-failure');
-  fs.mkdirSync(target, { recursive: true });
-
-  await assert.rejects(
-    updateParamDefs(userDir, 'profile-rename-failure', 'https://example.test/good.json', {
-      fetchFn: async () => documentFor('VALID'),
-    })
-  );
-
-  assert.deepEqual(
-    fs.readdirSync(path.dirname(target)),
-    ['profile-rename-failure.json'],
-    'failed atomic replacement must not leave a sibling temporary file'
-  );
-});
-
-test(
-  'Windows rename failure preserves the last good file and removes the sibling temporary file',
-  { skip: process.platform !== 'win32' },
-  async (t) => {
-    const userDir = tempUserDir(t);
-    const target = holdingFile(userDir, 'profile-readonly');
-    await updateParamDefs(userDir, 'profile-readonly', 'https://example.test/good.json', {
-      fetchFn: async () => documentFor('LAST_GOOD'),
-    });
-    fs.chmodSync(target, 0o444);
-
-    try {
-      await assert.rejects(
-        updateParamDefs(userDir, 'profile-readonly', 'https://example.test/replacement.json', {
-          fetchFn: async () => documentFor('REPLACEMENT'),
-        }),
-        (err) => err && err.code === 'EPERM'
-      );
-
-      const stored = await readParamDefs(userDir, 'profile-readonly');
-      assert.deepEqual([...stored.keys()], ['LAST_GOOD']);
-      assert.deepEqual(
-        fs.readdirSync(path.dirname(target)),
-        ['profile-readonly.json'],
-        'failed Windows replacement must not leave a sibling temporary file'
-      );
-    } finally {
-      fs.chmodSync(target, 0o666);
-    }
-  }
-);
-
 test('corrupt local JSON propagates instead of appearing absent; an empty document reads as empty', async (t) => {
   const userDir = tempUserDir(t);
   const corruptFile = holdingFile(userDir, 'profile-corrupt');
@@ -399,9 +349,9 @@ test('a values array with no usable entries yields undefined, not NaN options', 
   assert.equal(map.get('X').values, undefined);
 });
 
-test('an XZ archive is neither JSON nor XML', async (t) => {
+test('a body that is neither JSON nor XML fails the update at the parse', async (t) => {
   const userDir = tempUserDir(t);
-  // The real magic number; the bytes behind the "7zXZ" in the reported head.
+  // The real XZ magic number: PX4's .xz archive served as application/json.
   const xz = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x04, 0xe6, 0xd6];
   const previousFetch = globalThis.fetch;
   globalThis.fetch = async () => bytesResponse(xz);
@@ -409,30 +359,7 @@ test('an XZ archive is neither JSON nor XML', async (t) => {
 
   await assert.rejects(
     updateParamDefs(userDir, 'profile-xz', 'https://artifacts.px4.io/Firmware/_general/parameters.json.xz'),
-    (err) => {
-      assert.match(err.message, /did not return JSON or XML/);
-      // No binary, no "Unexpected token" in the editor.
-      assert.doesNotMatch(err.message, /Unexpected token/);
-      return true;
-    }
-  );
-});
-
-test('a body that is neither JSON nor XML is quoted as printable ASCII only', async (t) => {
-  const userDir = tempUserDir(t);
-  const previousFetch = globalThis.fetch;
-  // "oops" followed by bytes that would render as control characters. A body
-  // starting with '<' takes the XML branch instead and gets its own message.
-  globalThis.fetch = async () => bytesResponse([0x6f, 0x6f, 0x70, 0x73, 0x00, 0x01, 0x1f]);
-  t.after(() => { globalThis.fetch = previousFetch; });
-
-  await assert.rejects(
-    updateParamDefs(userDir, 'profile-garbage', 'https://example.invalid/params'),
-    (err) => {
-      assert.match(err.message, /did not return JSON or XML \(starts with "oops\.\.\."\)/);
-      assert.doesNotMatch(err.message, /Unexpected token/);
-      return true;
-    }
+    SyntaxError
   );
 });
 

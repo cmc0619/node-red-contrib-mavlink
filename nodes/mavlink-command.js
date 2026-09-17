@@ -35,7 +35,7 @@
 const { makeStatusRecord } = require('../lib/command/status-record');
 const { getPreset, presetGroups, buildParamArray } = require('../lib/command/presets');
 const { mergeParams } = require('../lib/command/merge-params');
-const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { awaitAckWithBadge, ackRecordFields, cancelSlot } = require('../lib/command/ack');
 const { checkCompletion, waitForCompletion } = require('../lib/command/completion');
 const {
   buildCommandLong,
@@ -373,30 +373,15 @@ module.exports = function registerMavlinkCommand(RED) {
         // slot.run below cancels whatever wait the previous input left.
         const myGen = ++_generation;
 
-        applyActionStatus(node, 'sending', `${displayName}\u2026`);
-
         // The operator's configured carrier (§9): a required choice, so the
         // wire format is stated intent — never a guess. The ack it earns,
         // wrong-carrier codes included, is the result.
-        const ackOutcome = await slot.run(ackWaiterFor(connNode, buildCarrierMessage(configuredCarrier), {
-          band: BAND.CONTROL,
+        const ackOutcome = await awaitAckWithBadge(node, slot, connNode, buildCarrierMessage(configuredCarrier), displayName, {
           target,
           identityId,
           timeoutMs,
           maxRetries: noAutoRetry ? 0 : maxRetries,
-          noAutoRetry,
-          // Same badge channel: a takeoff answers IN_PROGRESS for seconds (§9),
-          // and without this the operator watches an unchanging wait.
-          onInProgress: (progress) => {
-            applyActionStatus(
-              node,
-              'sending',
-              progress === null
-                ? `in progress ${displayName}\u2026`
-                : `in progress ${progress}% ${displayName}\u2026`
-            );
-          },
-        }));
+        });
 
         // A redeploy cancelled the wait (close() cancels the waiter slot).
         // The node is being torn down, so finish quietly: emitting or raising

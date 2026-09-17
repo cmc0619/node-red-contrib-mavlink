@@ -35,7 +35,6 @@ const {
 const {
   defsFor: seedDefsFor,
   seedStamp,
-  seedError,
   catalogLabel,
 } = require('../lib/param/seed');
 const { BAND } = require('../lib/connection/bands');
@@ -110,10 +109,9 @@ module.exports = function registerMavlinkParam(RED) {
           }
           return res.json({
             defs: {},
-            notice: seedError()
-              || (firmware
-                ? `No parameter definitions for firmware "${firmware}".`
-                : 'Pick a firmware, or a Vehicle Profile, to load parameter definitions.'),
+            notice: firmware
+              ? `No parameter definitions for firmware "${firmware}".`
+              : 'Pick a firmware, or a Vehicle Profile, to load parameter definitions.',
           });
         }
 
@@ -126,19 +124,8 @@ module.exports = function registerMavlinkParam(RED) {
             downloaded.size ? 'profile' : 'seed'
           );
         } catch (err) {
-          // A corrupt holding file is the operator's own download and must be
-          // reported — but it should not also cost them the shipped baseline.
-          if (seeded.size > 0) {
-            return res.json({
-              defs: Object.fromEntries(seeded),
-              source: 'seed',
-              stamp: seedStamp(),
-              catalog: catalogLabel({
-                firmware, vehicleFamily, count: seeded.size, source: 'seed',
-              }),
-              notice: `Downloaded definitions are unreadable, showing the shipped seed: ${err.message}`,
-            });
-          }
+          // A corrupt holding file is the operator's own download: reported,
+          // not papered over with the seed (§0). The fix is deleting the file.
           return res.status(500).json({
             defs: {},
             error: `Local parameter definitions are invalid: ${err.message}`,
@@ -151,17 +138,8 @@ module.exports = function registerMavlinkParam(RED) {
       PARAM_DEFS_UPDATE_ROUTE,
       RED.auth.needsPermission('mavlink.write'),
       async (req, res) => {
-        const body = req.body;
-        const profileId = body.vehicle;
-        const url = body.url;
-        if (!profileId) {
-          return res.status(400).json({ ok: false, error: 'Vehicle Profile ID is required' });
-        }
-        if (!url) {
-          return res.status(400).json({ ok: false, error: 'Parameter definitions URL is required' });
-        }
         try {
-          const result = await updateParamDefs(RED.settings.userDir, profileId, url);
+          const result = await updateParamDefs(RED.settings.userDir, req.body.vehicle, req.body.url);
           return res.json({ ok: true, count: result.count });
         } catch (err) {
           return res.status(500).json({ ok: false, error: err.message });
