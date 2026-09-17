@@ -4,7 +4,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
-## [0.7.2] "System ops on the wire" - 2026-09-17
+## [0.7.2] "Slimming down and exampling up" - 2026-09-17
 
 ### Added
 
@@ -12,6 +12,20 @@ config-node shapes and message contracts may still change without a major bump.
   against ArduPilot: onboard log list, MAVFTP upload/download round-trip, and
   system backup (partial capture when the files root is missing). Wired into
   `sitl/run-example-suite.js` with a specialized verdict.
+
+### Changed
+
+- **XML catalog update is the official download, nothing else.** `update()`
+  takes no options: pinned commit of the default branch, whole definitions
+  dir, includes followed. A failed fetch ends the run; a download identical
+  to the newest snapshot (or the shipped seed) is not kept. Compare-with-seed
+  route, button, and helpers are gone.
+- **Fan-out broadcast advisories removed.** Mixed-firmware and mixed-mode
+  warnings (and the `warnings` aggregate field) are gone — §0: no advisories
+  about what a vehicle may do with a legal request.
+- **Transfer and subscription GIGO cleanup.** FTP and log transfers trust the
+  subscription filter; `subscribe(filter)` takes the object as given;
+  `longToIntFields` no longer invents `current`/`autocontinue` overrides.
 
 ## [0.7.1] "EOF, silence, and companions" - 2026-09-15
 
