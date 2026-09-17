@@ -431,3 +431,16 @@ test('a short read under a requested byte boundary does not end the log, an EOF 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.data, Buffer.from('abc'));
 });
+
+test('a reply delivered during LOG_REQUEST_END cannot turn a cancel into success', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    if (message.name === 'LOG_REQUEST_END') deliver(entry(0, 1, 0, 100));
+  });
+  const machine = new LogList(machineOptions(stub, clock));
+  const cancelled = machine.start();
+  machine.cancel();
+  assert.equal((await cancelled).result, 'cancelled');
+  assert.deepEqual(stub.sentNames(), ['LOG_REQUEST_LIST', 'LOG_REQUEST_END']);
+});
