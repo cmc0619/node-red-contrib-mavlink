@@ -1,0 +1,388 @@
+[
+  {
+    "id": "sitl44-tab",
+    "type": "tab",
+    "label": "SITL 44 System ops",
+    "disabled": false,
+    "info": "Exercise mavlink-system against ArduPilot sysid 1: list onboard logs, MAVFTP upload/download round-trip, then system backup (parameters + fence + rally + files). Partial backup is a valid outcome when a section cannot transfer.",
+    "env": []
+  },
+  {
+    "id": "sitl44-comment",
+    "type": "comment",
+    "z": "sitl44-tab",
+    "name": "System: logs → FTP round-trip → backup",
+    "info": "One inject chains three System services on AP sysid 1 (14550→14551):\n1. Logs → List — LOG_REQUEST_LIST settles succeeded (empty list is fine on a cold SITL).\n2. Files → Upload a probe Buffer to /nrc-system-ops.txt, then Download and assert byte-identical payload.\n3. Backup/Restore → Backup — parameters/fence/rally run first; the files root is /__nrc_no_such__ so that section fails fast (no @SYS walk). A partial capture with parameters present is a valid PASS.\n\nMatches sitl/measure-system-ops.js engines through the palette node.",
+    "x": 300,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "type": "mavlink-local-identity",
+    "name": "GCS identity",
+    "role": "gcs",
+    "sourceSystemId": 255,
+    "sourceComponentId": 190,
+    "heartbeatType": "MAV_TYPE_GCS",
+    "heartbeatAutopilot": "MAV_AUTOPILOT_INVALID",
+    "heartbeatIntervalMs": 1000,
+    "id": "sitl44-identity"
+  },
+  {
+    "type": "mavlink-vehicle",
+    "name": "ArduCopter sysid 1",
+    "vehicleFamily": "copter",
+    "firmware": "ardupilot",
+    "dialect": "ardupilotmega",
+    "dialectRevision": "seed",
+    "additionalDialects": "",
+    "defaultTargetSystem": 1,
+    "defaultTargetComponent": 1,
+    "id": "sitl44-vehicle"
+  },
+  {
+    "type": "mavlink-connection",
+    "name": "UDP ArduPilot",
+    "mode": "udp",
+    "bindHost": "0.0.0.0",
+    "bindPort": 14550,
+    "remoteHost": "127.0.0.1",
+    "remotePort": 14551,
+    "broadcastHost": "",
+    "broadcastPort": "",
+    "serialPath": "",
+    "baudRate": "57600",
+    "vehicle": "sitl44-vehicle",
+    "localIdentity": "sitl44-identity",
+    "additionalIdentities": [],
+    "signOutbound": false,
+    "acceptInvalid": false,
+    "linkId": 0,
+    "staleMs": "5000",
+    "expireMs": "15000",
+    "disabled": false,
+    "id": "sitl44-connection"
+  },
+  {
+    "id": "sitl44-inject",
+    "type": "inject",
+    "z": "sitl44-tab",
+    "name": "Exercise system ops",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 160,
+    "wires": [
+      [
+        "sitl44-log-list"
+      ]
+    ]
+  },
+  {
+    "type": "mavlink-system",
+    "name": "List logs",
+    "connection": "sitl44-connection",
+    "identity": "",
+    "service": "logs",
+    "operation": "list",
+    "logId": "",
+    "path": "",
+    "sections": [
+      "parameters",
+      "fence",
+      "rally",
+      "files"
+    ],
+    "paramEncoding": "auto",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "timeoutMs": 30000,
+    "maxRetries": 3,
+    "id": "sitl44-log-list",
+    "z": "sitl44-tab",
+    "x": 400,
+    "y": 160,
+    "wires": [
+      [
+        "sitl44-prep-upload"
+      ],
+      [
+        "sitl44-log-list-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl44-prep-upload",
+    "type": "function",
+    "z": "sitl44-tab",
+    "name": "Prep FTP probe upload",
+    "func": "const body = Buffer.from('nrc-system-ops ' + new Date().toISOString() + '\\n');\nmsg.payload = body;\nmsg.path = '/nrc-system-ops.txt';\nmsg._probeBody = body;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 640,
+    "y": 140,
+    "wires": [
+      [
+        "sitl44-ftp-upload"
+      ]
+    ]
+  },
+  {
+    "type": "mavlink-system",
+    "name": "Upload probe file",
+    "connection": "sitl44-connection",
+    "identity": "",
+    "service": "files",
+    "operation": "upload",
+    "logId": "",
+    "path": "/nrc-system-ops.txt",
+    "sections": [
+      "parameters",
+      "fence",
+      "rally",
+      "files"
+    ],
+    "paramEncoding": "auto",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "timeoutMs": 30000,
+    "maxRetries": 3,
+    "id": "sitl44-ftp-upload",
+    "z": "sitl44-tab",
+    "x": 880,
+    "y": 140,
+    "wires": [
+      [
+        "sitl44-prep-download"
+      ],
+      [
+        "sitl44-ftp-upload-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl44-prep-download",
+    "type": "function",
+    "z": "sitl44-tab",
+    "name": "Prep FTP probe download",
+    "func": "msg.payload = { path: '/nrc-system-ops.txt' };\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1120,
+    "y": 120,
+    "wires": [
+      [
+        "sitl44-ftp-download"
+      ]
+    ]
+  },
+  {
+    "type": "mavlink-system",
+    "name": "Download probe file",
+    "connection": "sitl44-connection",
+    "identity": "",
+    "service": "files",
+    "operation": "download",
+    "logId": "",
+    "path": "/nrc-system-ops.txt",
+    "sections": [
+      "parameters",
+      "fence",
+      "rally",
+      "files"
+    ],
+    "paramEncoding": "auto",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "timeoutMs": 30000,
+    "maxRetries": 3,
+    "id": "sitl44-ftp-download",
+    "z": "sitl44-tab",
+    "x": 1360,
+    "y": 120,
+    "wires": [
+      [
+        "sitl44-assert-roundtrip"
+      ],
+      [
+        "sitl44-ftp-download-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl44-assert-roundtrip",
+    "type": "function",
+    "z": "sitl44-tab",
+    "name": "Assert FTP round-trip",
+    "func": "const expected = msg._probeBody;\nconst got = msg.payload;\nconst ok = Buffer.isBuffer(expected) && Buffer.isBuffer(got) && Buffer.compare(got, expected) === 0;\nconst assert = {\n  payload: {\n    result: ok ? 'succeeded' : 'failed',\n    detail: ok\n      ? ('ftp round-trip ' + got.length + ' bytes')\n      : ('ftp mismatch expected=' + (expected && expected.length) + ' got=' + (got && got.length)),\n  },\n};\ndelete msg.path;\nmsg.payload = {};\nreturn [assert, msg];",
+    "outputs": 2,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1600,
+    "y": 100,
+    "wires": [
+      [
+        "sitl44-ftp-roundtrip-assert"
+      ],
+      [
+        "sitl44-backup"
+      ]
+    ]
+  },
+  {
+    "type": "mavlink-system",
+    "name": "Backup system",
+    "connection": "sitl44-connection",
+    "identity": "",
+    "service": "backup",
+    "operation": "backup",
+    "logId": "",
+    "path": "/__nrc_no_such__",
+    "sections": [
+      "parameters",
+      "fence",
+      "rally",
+      "files"
+    ],
+    "paramEncoding": "auto",
+    "targetSystem": 1,
+    "targetComponent": 1,
+    "timeoutMs": 60000,
+    "maxRetries": 3,
+    "id": "sitl44-backup",
+    "z": "sitl44-tab",
+    "x": 1840,
+    "y": 140,
+    "wires": [
+      [
+        "sitl44-backup-done"
+      ],
+      [
+        "sitl44-backup-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl44-backup-done",
+    "type": "debug",
+    "z": "sitl44-tab",
+    "name": "backup bundle",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 2060,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "sitl44-log-list-status",
+    "type": "debug",
+    "z": "sitl44-tab",
+    "name": "log list status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 620,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "sitl44-ftp-upload-status",
+    "type": "debug",
+    "z": "sitl44-tab",
+    "name": "ftp upload status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1100,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl44-ftp-download-status",
+    "type": "debug",
+    "z": "sitl44-tab",
+    "name": "ftp download status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1580,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "sitl44-ftp-roundtrip-assert",
+    "type": "debug",
+    "z": "sitl44-tab",
+    "name": "ftp roundtrip assert",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1840,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sitl44-backup-status",
+    "type": "debug",
+    "z": "sitl44-tab",
+    "name": "backup status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 2060,
+    "y": 200,
+    "wires": []
+  }
+]

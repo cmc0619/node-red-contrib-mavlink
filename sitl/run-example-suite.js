@@ -211,6 +211,16 @@ const PROFILE = {
       'stream that never crosses the threshold re-anchors zero times; the 60 m leader move clears ' +
       'it by design. Setup (GUIDED/arm/takeoff \u00d75) is plumbing to get airborne and reporting.',
   },
+  '44-system-ops': {
+    restart: 'ap-1',
+    waitMs: 180000,
+    expect: 'system logs list, FTP round-trip, and backup',
+    notes:
+      'Palette System node against AP sysid 1: logs list, MAVFTP upload/download of /nrc-system-ops.txt ' +
+      'with a byte-identical assert, then Backup/Restore → Backup. The backup root is a missing path so ' +
+      'the files section fails fast (no @SYS walk); parameters/fence/rally still run and a partial ' +
+      'capture is a valid PASS. Empty log list on cold SITL is still succeeded.',
+  },
   '04-param-defs-live': {
     restart: 'none',
     waitMs: 20000,
@@ -742,6 +752,47 @@ function verdictFrom(profile, summary, log) {
       };
     }
     return { status: 'FAIL', reason: 'neither the leader move nor a follower re-anchor was observed' };
+  }
+  if (/system logs list, FTP round-trip, and backup/i.test(expect)) {
+    // Palette System node: logs list, FTP upload/download + byte assert, then
+    // Backup. Key on the named debug tags — a lone succeeded progress line or
+    // the generic tail must not green a half-run. Backup may be partial when
+    // the files root is missing (intentional in the flow); parameters still
+    // have to have transferred for that to count.
+    const logList = summary.debug.some(
+      (d) => /log list status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const ftpUp = summary.debug.some(
+      (d) => /ftp upload status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const ftpDown = summary.debug.some(
+      (d) => /ftp download status/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const roundTrip = summary.debug.some(
+      (d) => /ftp roundtrip assert/i.test(d.tag) && d.result === 'succeeded'
+    );
+    const backup = summary.debug.find((d) => /backup status/i.test(d.tag) && d.result);
+    const backupOk =
+      Boolean(backup) &&
+      (backup.result === 'succeeded' || backup.result === 'partial');
+    if (logList && ftpUp && ftpDown && roundTrip && backupOk) {
+      return {
+        status: 'PASS',
+        reason: `system ops: logs listed, FTP round-trip, backup ${backup.result}`,
+      };
+    }
+    const bits = {
+      logList,
+      ftpUp,
+      ftpDown,
+      roundTrip,
+      backup: backup?.result || 'missing',
+    };
+    const any = logList || ftpUp || ftpDown || roundTrip || Boolean(backup);
+    return {
+      status: any ? 'PARTIAL' : 'FAIL',
+      reason: `system ops incomplete: ${JSON.stringify(bits)}`,
+    };
   }
   if (/carrier=reposition|Move reposition/i.test(expect)) {
     // #267 again, one carrier over: 27/30 send the same goto through

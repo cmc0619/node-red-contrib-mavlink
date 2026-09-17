@@ -357,6 +357,55 @@ test('42 passes on both honest terrain-goto outcomes — only silence fails', ()
   assert.equal(run(null).status, 'FAIL', 'no record at all');
 });
 
+test('44 requires logs list, FTP round-trip, and backup — partials alone do not PASS', () => {
+  const profile = PROFILE['44-system-ops'];
+  assert.ok(profile, 'profile 44 exists');
+  assert.equal(profile.restart, 'ap-1');
+  const row = (tag, result) => ({
+    tag: `debug:${tag}`,
+    result,
+    excerpt: `result: '${result}'`,
+    detail: null,
+    resultCode: null,
+  });
+  const full = [
+    row('log list status', 'succeeded'),
+    row('ftp upload status', 'succeeded'),
+    row('ftp download status', 'succeeded'),
+    row('ftp roundtrip assert', 'succeeded'),
+    row('backup status', 'partial'),
+  ];
+  assert.equal(verdictFrom(profile, { debug: full, errors: [] }, '').status, 'PASS');
+  assert.match(
+    verdictFrom(profile, { debug: full, errors: [] }, '').reason,
+    /backup partial/
+  );
+  const succeededBackup = full.slice(0, 4).concat(row('backup status', 'succeeded'));
+  assert.equal(
+    verdictFrom(profile, { debug: succeededBackup, errors: [] }, '').status,
+    'PASS'
+  );
+  assert.equal(
+    verdictFrom(profile, { debug: full.slice(0, 2), errors: [] }, '').status,
+    'PARTIAL',
+    'half a chain is not a pass'
+  );
+  assert.equal(
+    verdictFrom(profile, { debug: [], errors: [] }, '').status,
+    'FAIL',
+    'silence is not a pass'
+  );
+  assert.equal(
+    verdictFrom(
+      profile,
+      { debug: full.slice(0, 4).concat(row('backup status', 'failed')), errors: [] },
+      ''
+    ).status,
+    'PARTIAL',
+    'failed backup is not a pass'
+  );
+});
+
 test('39 requires healthy, lease-expired, and faulted — command-shaped goods do not PASS', () => {
   const profile = PROFILE['39-companion-health-lease'];
   assert.ok(profile, 'profile 39 exists');
