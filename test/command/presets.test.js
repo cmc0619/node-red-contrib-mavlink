@@ -262,13 +262,13 @@ test('a blank msg.payload override stays blank instead of coercing to 0 (Greptil
   // distinction still matters after the coordinate guards went to the editor —
   // buildParamArray reads "absent" and "0" differently, and blank means absent.
   for (const blank of ['', '   ', '\t']) {
-    const merged = mergeParams({ params: '{}' }, { 5: blank, 6: 8.5 });
+    const merged = mergeParams(JSON.parse('{}'), { 5: blank, 6: 8.5 });
     assert.equal(merged[5], undefined, `${JSON.stringify(blank)} must not become a coordinate`);
   }
 
   // A real override still lands, and an explicit 0 still counts as typed.
-  assert.equal(mergeParams({ params: '{}' }, { 5: 47.4 })[5], 47.4);
-  assert.equal(mergeParams({ params: '{}' }, { 5: 0 })[5], 0);
+  assert.equal(mergeParams(JSON.parse('{}'), { 5: 47.4 })[5], 47.4);
+  assert.equal(mergeParams(JSON.parse('{}'), { 5: 0 })[5], 0);
 });
 
 test('GCS parity: blank reposition speed and yaw encode the spec sentinels (#240)', () => {
@@ -276,7 +276,7 @@ test('GCS parity: blank reposition speed and yaw encode the spec sentinels (#240
   // heading mode) for unspecified fields. The old zero-fill commanded 0 m/s
   // and yaw-to-north on every goto — the #98b land-yaw hazard, on the goto
   // primitive.
-  const arr = buildParamArray(getPreset('reposition'), mergeParams({ params: '{"5":47.4,"6":8.5,"7":30}' }, {}));
+  const arr = buildParamArray(getPreset('reposition'), mergeParams(JSON.parse('{"5":47.4,"6":8.5,"7":30}'), {}));
   assert.equal(arr[0], -1, 'blank speed encodes -1 (vehicle default)');
   assert.ok(Number.isNaN(arr[3]), 'blank yaw encodes NaN (keep current heading mode)');
   assert.deepEqual(arr.slice(4), [47.4, 8.5, 30]);
@@ -284,21 +284,21 @@ test('GCS parity: blank reposition speed and yaw encode the spec sentinels (#240
   // Explicit values — including 0 — are typed and win over the sentinels.
   const explicit = buildParamArray(
     getPreset('reposition'),
-    mergeParams({ params: '{"1":5,"4":0,"5":47.4,"6":8.5,"7":30}' }, {})
+    mergeParams(JSON.parse('{"1":5,"4":0,"5":47.4,"6":8.5,"7":30}'), {})
   );
   assert.equal(explicit[0], 5);
   assert.equal(explicit[3], 0, 'an explicit 0 yaw is a command to heading 0');
 });
 
 test('GCS parity: blank change-speed fields encode -1 "no change", never a commanded zero (#240)', () => {
-  const arr = buildParamArray(getPreset('change_speed'), mergeParams({ params: '{"1":1}' }, {}));
+  const arr = buildParamArray(getPreset('change_speed'), mergeParams(JSON.parse('{"1":1}'), {}));
   assert.deepEqual(arr.slice(0, 3), [1, -1, -1], 'blank speed and throttle are "no change"');
-  const explicit = buildParamArray(getPreset('change_speed'), mergeParams({ params: '{"1":1,"2":0}' }, {}));
+  const explicit = buildParamArray(getPreset('change_speed'), mergeParams(JSON.parse('{"1":1,"2":0}'), {}));
   assert.equal(explicit[1], 0, 'an explicit 0 speed is a typed command');
 });
 
 test('GCS parity: blank takeoff yaw encodes NaN — the editor renders no yaw field (#98b class)', () => {
-  const arr = buildParamArray(getPreset('takeoff'), mergeParams({ params: '{"7":25}' }, {}));
+  const arr = buildParamArray(getPreset('takeoff'), mergeParams(JSON.parse('{"7":25}'), {}));
   assert.ok(Number.isNaN(arr[3]), 'blank yaw encodes NaN (current heading mode)');
   assert.equal(arr[6], 25);
 });

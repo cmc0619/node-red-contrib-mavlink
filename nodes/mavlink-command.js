@@ -107,6 +107,9 @@ module.exports = function registerMavlinkCommand(RED) {
     const completionKey = preset ? preset.completionKey : null;
 
     const connNode = RED.nodes.getNode(config.connection);
+    // Configured params are deploy-constant: parse the JSON once, not per
+    // input (mavlink-mission's items pattern). The editor saves valid JSON.
+    const configParams = JSON.parse(config.params);
 
     const delivery = config.delivery;
 
@@ -209,7 +212,7 @@ module.exports = function registerMavlinkCommand(RED) {
      *   transmits, and the request with its holes kept
      */
     function getParams(payload, resolution) {
-      const userParams = mergeParams(config, payload);
+      const userParams = mergeParams(configParams, payload);
       applyModeName(userParams, payload, resolution);
       // Two views of one request. `wire` is what transmits — zero-filled, so a
       // blank lat/lon becomes 0,0, a legal coordinate the vehicle will fly to;
