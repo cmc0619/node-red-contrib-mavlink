@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl44-tab",
     "name": "System: logs → FTP round-trip → backup",
-    "info": "One inject chains three System services on AP sysid 1 (14550→14551):\n1. Logs → List — LOG_REQUEST_LIST settles succeeded (empty list is fine on a cold SITL).\n2. Files → Upload a probe Buffer to /nrc-system-ops.txt, then Download and assert byte-identical payload.\n3. Backup/Restore → Backup — parameters/fence/rally run first; the files root is /__nrc_no_such__ so that section fails fast (no @SYS walk). A partial capture with parameters present is a valid PASS.\n\nMatches sitl/measure-system-ops.js engines through the palette node.",
+    "info": "One inject chains three System services on AP sysid 1 (14550→14551):\n1. Logs → List — LOG_REQUEST_LIST settles succeeded (empty list is fine on a cold SITL).\n2. Files → Upload a probe Buffer to /nrc-system-ops.txt, then Download and assert byte-identical payload.\n3. Backup/Restore → Backup — parameters/fence/rally run first; the files root is /__nrc_no_such__ so that section fails fast (no @SYS walk). A partial capture with parameters present is a valid PASS.\n\nStatus debugs drop progress so the suite scrape stays on terminal records.\n\nMatches sitl/measure-system-ops.js engines through the palette node.",
     "x": 300,
     "y": 40,
     "wires": []
@@ -117,7 +117,7 @@
         "sitl44-prep-upload"
       ],
       [
-        "sitl44-log-list-status"
+        "sitl44-log-terminal"
       ]
     ]
   },
@@ -170,7 +170,7 @@
         "sitl44-prep-download"
       ],
       [
-        "sitl44-ftp-upload-status"
+        "sitl44-ftp-up-terminal"
       ]
     ]
   },
@@ -223,7 +223,7 @@
         "sitl44-assert-roundtrip"
       ],
       [
-        "sitl44-ftp-download-status"
+        "sitl44-ftp-down-terminal"
       ]
     ]
   },
@@ -279,7 +279,7 @@
         "sitl44-backup-done"
       ],
       [
-        "sitl44-backup-status"
+        "sitl44-backup-terminal"
       ]
     ]
   },
@@ -381,8 +381,88 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 2060,
+    "x": 2180,
     "y": 200,
     "wires": []
+  },
+  {
+    "id": "sitl44-log-terminal",
+    "type": "function",
+    "z": "sitl44-tab",
+    "name": "Terminal log list only",
+    "func": "const r = msg.result !== undefined ? msg.result : (msg.payload && msg.payload.result);\nif (r === 'progress') return null;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 520,
+    "y": 240,
+    "wires": [
+      [
+        "sitl44-log-list-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl44-ftp-up-terminal",
+    "type": "function",
+    "z": "sitl44-tab",
+    "name": "Terminal ftp upload only",
+    "func": "const r = msg.result !== undefined ? msg.result : (msg.payload && msg.payload.result);\nif (r === 'progress') return null;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1000,
+    "y": 220,
+    "wires": [
+      [
+        "sitl44-ftp-upload-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl44-ftp-down-terminal",
+    "type": "function",
+    "z": "sitl44-tab",
+    "name": "Terminal ftp download only",
+    "func": "const r = msg.result !== undefined ? msg.result : (msg.payload && msg.payload.result);\nif (r === 'progress') return null;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1480,
+    "y": 220,
+    "wires": [
+      [
+        "sitl44-ftp-download-status"
+      ]
+    ]
+  },
+  {
+    "id": "sitl44-backup-terminal",
+    "type": "function",
+    "z": "sitl44-tab",
+    "name": "Terminal backup only",
+    "func": "const r = msg.result !== undefined ? msg.result : (msg.payload && msg.payload.result);\nif (r === 'progress') return null;\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1960,
+    "y": 200,
+    "wires": [
+      [
+        "sitl44-backup-status"
+      ]
+    ]
   }
 ]

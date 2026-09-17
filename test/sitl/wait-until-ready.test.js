@@ -369,10 +369,12 @@ test('44 requires logs list, FTP round-trip, and backup — partials alone do no
     resultCode: null,
   });
   const full = [
+    row('log list status', 'progress'),
     row('log list status', 'succeeded'),
     row('ftp upload status', 'succeeded'),
     row('ftp download status', 'succeeded'),
     row('ftp roundtrip assert', 'succeeded'),
+    row('backup status', 'progress'),
     row('backup status', 'partial'),
   ];
   assert.equal(verdictFrom(profile, { debug: full, errors: [] }, '').status, 'PASS');
@@ -380,7 +382,20 @@ test('44 requires logs list, FTP round-trip, and backup — partials alone do no
     verdictFrom(profile, { debug: full, errors: [] }, '').reason,
     /backup partial/
   );
-  const succeededBackup = full.slice(0, 4).concat(row('backup status', 'succeeded'));
+  // A progress-only backup tag must not be read as the terminal result.
+  assert.equal(
+    verdictFrom(
+      profile,
+      {
+        debug: full.slice(0, 5).concat(row('backup status', 'progress')),
+        errors: [],
+      },
+      ''
+    ).status,
+    'PARTIAL',
+    'progress is not a finished backup'
+  );
+  const succeededBackup = full.slice(0, 5).concat(row('backup status', 'succeeded'));
   assert.equal(
     verdictFrom(profile, { debug: succeededBackup, errors: [] }, '').status,
     'PASS'
@@ -398,7 +413,7 @@ test('44 requires logs list, FTP round-trip, and backup — partials alone do no
   assert.equal(
     verdictFrom(
       profile,
-      { debug: full.slice(0, 4).concat(row('backup status', 'failed')), errors: [] },
+      { debug: full.slice(0, 5).concat(row('backup status', 'failed')), errors: [] },
       ''
     ).status,
     'PARTIAL',
