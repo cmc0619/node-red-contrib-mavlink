@@ -139,18 +139,10 @@ async function collectXml(opts) {
     const { commit, commitDate, files } = loadFromSourceDir(opts.sourceDir);
     return { repo: opts.repo, ref: opts.ref, commit, commitDate, files };
   }
-  // The shared fetchers answer null on failure so the catalog can degrade;
-  // the generator has nothing to degrade to — an unpinnable ref or an
-  // unlistable definitions dir fails the run loudly, previous seed untouched.
-  const info = await fetchCommitInfo(opts.repo, opts.ref);
-  if (!info) {
-    throw new Error(`Cannot resolve ${opts.repo}@${opts.ref} to a commit`);
-  }
-  const { commit, commitDate } = info;
+  // The shared fetchers throw on an unpinnable ref or an unlistable
+  // definitions dir, which fails the run loudly, previous seed untouched.
+  const { commit, commitDate } = await fetchCommitInfo(opts.repo, opts.ref);
   const names = await defaultListFiles(opts.repo, commit);
-  if (!Array.isArray(names) || names.length === 0) {
-    throw new Error(`Cannot list ${DEFINITIONS_DIR} at ${opts.repo}@${commit.slice(0, 7)}`);
-  }
   const files = {};
   for (const name of names) {
     files[name] = await defaultFetchFile(opts.repo, commit, name);

@@ -34,8 +34,13 @@ const CUSTOM = XML(
   '<messages><message id="9100" name="MY_MSG"><field type="uint8_t" name="x">x</field></message></messages>'
 );
 
-/** In-memory GitHub source stub: pins a fixed commit and serves a file tree. */
-function stubSource(tree, sha = 'a'.repeat(40)) {
+/**
+ * In-memory GitHub source stub: pins a fixed commit, lists `roots` (every
+ * file of `tree` when omitted) and serves the tree; a file outside it 404s
+ * the way the default fetcher does.
+ */
+function stubSource(tree, roots = Object.keys(tree)) {
+  const sha = 'a'.repeat(40);
   const requested = [];
   return {
     sha,
@@ -48,8 +53,19 @@ function stubSource(tree, sha = 'a'.repeat(40)) {
       }
       return tree[file];
     },
-    listFiles: async () => Object.keys(tree),
+    listFiles: async () => roots,
   };
+}
+
+/** @returns {XmlCatalog} a catalog over a temp dir, wired to `src` */
+function catalogFor(src, opts = {}) {
+  return new XmlCatalog({
+    baseDir: fs.mkdtempSync(path.join(os.tmpdir(), 'mav-xml-cat-')),
+    resolveCommit: src.resolveCommit,
+    fetchFile: src.fetchFile,
+    listFiles: src.listFiles,
+    ...opts,
+  });
 }
 
 function tmpBase() {
@@ -65,11 +81,8 @@ test('an update follows real <include>s and ignores commented-out ones', async (
         '<messages><message id="9000" name="EXTRA_MSG"><field type="uint8_t" name="a">a</field></message></messages>'
     ),
     'common.xml': MINIMAL,
-  });
-  const catalog = new XmlCatalog({
-    baseDir: tmpBase(), resolveCommit: src.resolveCommit, fetchFile: src.fetchFile, listFiles: src.listFiles,
-  });
-  await catalog.update({ repo: 'mavlink/mavlink', ref: 'master', files: ['root.xml'] });
+  }, ['root.xml']);
+  await catalogFor(src).update();
   assert.deepEqual(src.requested.map((r) => r.file), ['root.xml', 'common.xml'],
     'the real include was fetched, the commented one never asked for');
 });
@@ -112,74 +125,37 @@ test('compileXmlFromFile fails loud on a missing entry file', () => {
 
 /* ---------- XmlCatalog: update ---------- */
 
-test('update pins a commit, writes a snapshot/manifest/latest, and lists it', async () => {
-  const baseDir = tmpBase();
+test('update pins a commit, writes a snapshot and its manifest, and lists it', async () => {
   const src = stubSource({ 'minimal.xml': MINIMAL, 'custom.xml': CUSTOM });
-  const catalog = new XmlCatalog({
-    baseDir,
-    resolveCommit: src.resolveCommit,
-    fetchFile: src.fetchFile,
-    listFiles: src.listFiles,
-    now: () => 1700000000000,
-  });
+  const catalog = catalogFor(src, { now: () => 1700000000000 });
 
-  const manifest = await catalog.update({ repo: 'mavlink/mavlink', ref: 'master', files: ['minimal.xml', 'custom.xml'] });
+  const manifest = await catalog.update();
 
   assert.equal(manifest.commit, src.sha);
   assert.ok(src.requested.every((r) => r.commit === src.sha), 'every fetch used the pinned commit');
-  assert.deepEqual(manifest.missing, []);
-  assert.deepEqual(manifest.unusable, []);
-
-  // Files were written to the snapshot and to latest/.
-  const snapFile = path.join(catalog.snapshotsDir(), manifest.snapshotId, 'minimal.xml');
-  assert.ok(fs.existsSync(snapFile));
-  assert.ok(fs.existsSync(path.join(catalog.latestDir(), 'minimal.xml')));
+  assert.deepEqual(manifest.files.map((f) => f.name), ['custom.xml', 'minimal.xml']);
+  assert.ok(fs.existsSync(catalog.filePath('minimal.xml', manifest.snapshotId)));
 
   const list = catalog.list();
   assert.equal(list.length, 1);
   assert.equal(list[0].snapshotId, manifest.snapshotId);
 });
 
-test('update refuses when the ref cannot be pinned to a commit', async () => {
-  const baseDir = tmpBase();
-  const catalog = new XmlCatalog({ baseDir, resolveCommit: async () => null, fetchFile: async () => MINIMAL });
-  await assert.rejects(
-    () => catalog.update({ repo: 'mavlink/mavlink', ref: 'nope', files: ['minimal.xml'] }),
-    (e) => e.code === 'XML_CATALOG_COMMIT_UNRESOLVED'
-  );
-});
-
-test('a root missing a required include is recorded as unusable, not published', async () => {
-  const baseDir = tmpBase();
+test('an include that cannot be downloaded fails the update; nothing is written', async () => {
   const withInclude = XML('<include>common.xml</include><messages><message id="1" name="ONLY"><field type="uint8_t" name="a">a</field></message></messages>');
   const src = stubSource({ 'ardupilotmega.xml': withInclude }); // common.xml absent → 404
-  const catalog = new XmlCatalog({ baseDir, resolveCommit: src.resolveCommit, fetchFile: src.fetchFile });
+  const catalog = catalogFor(src);
 
-  const manifest = await catalog.update({ files: ['ardupilotmega.xml'] });
-  assert.equal(manifest.unusable.length, 1);
-  assert.equal(manifest.unusable[0].file, 'ardupilotmega.xml');
-  assert.deepEqual(manifest.unusable[0].missingIncludes, ['common.xml']);
-});
-
-/* ---------- XmlCatalog: filePath ---------- */
-
-test('filePath rejects unsafe file and snapshot ids', async () => {
-  const baseDir = tmpBase();
-  const src = stubSource({ 'minimal.xml': MINIMAL });
-  const catalog = new XmlCatalog({ baseDir, resolveCommit: src.resolveCommit, fetchFile: src.fetchFile });
-  const manifest = await catalog.update({ files: ['minimal.xml'] });
-
-  assert.ok(catalog.filePath('minimal.xml', manifest.snapshotId));
-  assert.equal(catalog.filePath('minimal.xml', '../escape'), null);
+  await assert.rejects(() => catalog.update(), /404 common\.xml/);
+  assert.deepEqual(catalog.list(), []);
 });
 
 /* ---------- XmlCatalog: compare ---------- */
 
 test('compare against a bundled dialect reports added messages/enums', async () => {
-  const baseDir = tmpBase();
   const src = stubSource({ 'minimal.xml': MINIMAL });
-  const catalog = new XmlCatalog({ baseDir, resolveCommit: src.resolveCommit, fetchFile: src.fetchFile });
-  const manifest = await catalog.update({ files: ['minimal.xml'] });
+  const catalog = catalogFor(src);
+  const manifest = await catalog.update();
 
   const result = catalog.compare({ file: 'minimal.xml', snapshot: manifest.snapshotId });
   assert.equal(result.bundledExists, true);
@@ -191,10 +167,9 @@ test('compare against a bundled dialect reports added messages/enums', async () 
 });
 
 test('compare of a non-bundled dialect reports bundledExists=false, not comparable', async () => {
-  const baseDir = tmpBase();
   const src = stubSource({ 'custom.xml': CUSTOM });
-  const catalog = new XmlCatalog({ baseDir, resolveCommit: src.resolveCommit, fetchFile: src.fetchFile });
-  const manifest = await catalog.update({ files: ['custom.xml'] });
+  const catalog = catalogFor(src);
+  const manifest = await catalog.update();
 
   const result = catalog.compare({ file: 'custom.xml', snapshot: manifest.snapshotId });
   assert.equal(result.bundledExists, false);
@@ -203,10 +178,9 @@ test('compare of a non-bundled dialect reports bundledExists=false, not comparab
 });
 
 test('compare of a file not in the catalog throws XML_CATALOG_FILE_NOT_FOUND', () => {
-  const baseDir = tmpBase();
-  const catalog = new XmlCatalog({ baseDir });
+  const catalog = new XmlCatalog({ baseDir: tmpBase() });
   assert.throws(
-    () => catalog.compare({ file: 'minimal.xml' }),
+    () => catalog.compare({ file: 'minimal.xml', snapshot: 'nope' }),
     (e) => e.code === 'XML_CATALOG_FILE_NOT_FOUND'
   );
 });

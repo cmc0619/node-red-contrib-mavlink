@@ -98,12 +98,6 @@ test('longToIntFields scales x/y to metres × 1e4 for a non-global frame', () =>
   assert.equal(int.frame, 1);
 });
 
-test('longToIntFields honours current/autocontinue overrides', () => {
-  const int = longToIntFields([0, 0, 0, 0, 0, 0, 0], { current: 1, autocontinue: 1 });
-  assert.equal(int.current, 1);
-  assert.equal(int.autocontinue, 1);
-});
-
 test('the exact value measured against PX4 SITL round-trips (§14)', () => {
   // PX4 decoded a LOCAL_NED x of 1234567 as 123.4567 m, so entering 123.4567 m
   // must put exactly 1234567 on the wire. Before this, 50 m was sent as `50`

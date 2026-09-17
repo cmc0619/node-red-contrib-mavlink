@@ -119,24 +119,9 @@ module.exports = function registerMavlinkVehicle(RED) {
   RED.httpAdmin.post(
     `${XML_CATALOG_ROUTE}/update`,
     RED.auth.needsPermission('mavlink.write'),
-    (req, res) => {
-      const body = req.body;
-      // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
-      // so a crafted value cannot inject extra path segments server-side.
-      if (body.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(String(body.repo))) {
-        res.status(400).json({ ok: false, error: "repo must look like 'owner/name'." });
-        return;
-      }
-      if (body.ref !== undefined && !/^[\w./-]+$/.test(String(body.ref))) {
-        res.status(400).json({ ok: false, error: 'ref contains unsupported characters.' });
-        return;
-      }
+    (_req, res) => {
       newCatalog()
-        .update({
-          repo: body.repo,
-          ref: body.ref,
-          files: body.files,
-        })
+        .update()
         .then((manifest) => res.json({ ok: true, manifest }))
         .catch((err) => res.status(500).json({ ok: false, error: err.message, code: err.code }));
     }
