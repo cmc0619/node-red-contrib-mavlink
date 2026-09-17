@@ -23,11 +23,11 @@ test('each subscriber receives its own copy — mutation does not leak', () => {
   const reg = new SubscriptionRegistry();
   let seenByB = null;
 
-  reg.subscribe(null, (msg) => {
+  reg.subscribe({}, (msg) => {
     msg.fields.lat = 999; // a Function-node-style mutation
     msg.fields.coords.push(4);
   });
-  reg.subscribe(null, (msg) => {
+  reg.subscribe({}, (msg) => {
     seenByB = msg;
   });
 
@@ -43,7 +43,7 @@ test('each subscriber receives its own copy — mutation does not leak', () => {
 test('NaN survives the copy (the codec sentinel must not become null)', () => {
   const reg = new SubscriptionRegistry();
   let received = null;
-  reg.subscribe(null, (msg) => {
+  reg.subscribe({}, (msg) => {
     received = msg;
   });
   reg.dispatch(decoded({ fields: { yaw: NaN } }));
@@ -116,7 +116,7 @@ test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #2
 test('unsubscribe stops further delivery', () => {
   const reg = new SubscriptionRegistry();
   let count = 0;
-  const off = reg.subscribe(null, () => {
+  const off = reg.subscribe({}, () => {
     count += 1;
   });
   reg.dispatch(decoded());
@@ -128,7 +128,7 @@ test('unsubscribe stops further delivery', () => {
 test('dispatch reports how many subscribers received the message', () => {
   const reg = new SubscriptionRegistry();
   reg.subscribe({ message: 'HEARTBEAT' }, () => {});
-  reg.subscribe(null, () => {});
+  reg.subscribe({}, () => {});
   assert.equal(reg.dispatch(decoded({ name: 'HEARTBEAT' })), 2);
   assert.equal(reg.dispatch(decoded({ name: 'SYS_STATUS' })), 1);
 });
@@ -138,10 +138,10 @@ test('a throwing subscriber does not block delivery to the next one, or escape d
   const reg = new SubscriptionRegistry({ logger: { error: (m) => errors.push(m) } });
   let secondReceived = null;
 
-  reg.subscribe(null, () => {
+  reg.subscribe({}, () => {
     throw new TypeError('Do not know how to serialize a BigInt');
   });
-  reg.subscribe(null, (msg) => {
+  reg.subscribe({}, (msg) => {
     secondReceived = msg;
   });
 
@@ -162,10 +162,10 @@ test('a subscriber throwing a non-Error (null) is still isolated', () => {
   const reg = new SubscriptionRegistry({ logger: { error: (m) => errors.push(m) } });
   let secondReceived = null;
 
-  reg.subscribe(null, () => {
+  reg.subscribe({}, () => {
     throw null;
   });
-  reg.subscribe(null, (msg) => {
+  reg.subscribe({}, (msg) => {
     secondReceived = msg;
   });
 

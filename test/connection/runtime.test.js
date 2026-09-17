@@ -115,7 +115,7 @@ test('source sysid 0 is rejected at connection ingress', async () => {
   await connection.start();
 
   const received = [];
-  connection.subscribe(null, (message) => received.push(message));
+  connection.subscribe({}, (message) => received.push(message));
   dg.sockets[0].receive(
     frameBuffer({
       name: 'HEARTBEAT',
@@ -454,7 +454,7 @@ test('a configured key rejects every unsigned inbound frame', async () => {
 
   const received = [];
   const rejected = [];
-  connection.subscribe(null, (m) => received.push(m));
+  connection.subscribe({}, (m) => received.push(m));
   connection.on('rejected', (e) => rejected.push(e.reason));
 
   dg.sockets[0].receive(
@@ -481,7 +481,7 @@ test('an UNKNOWN_<id> frame dispatches but records no endpoint (crcVerified gati
   await connection.start();
 
   const received = [];
-  connection.subscribe(null, (m) => received.push(m));
+  connection.subscribe({}, (m) => received.push(m));
   dg.sockets[0].receive(
     frameBuffer({ name: 'UNKNOWN_22', sysid: 7, compid: 1, crcVerified: false, fields: { msgid: 22 } }),
     { address: '10.0.0.5', port: 14550 }
@@ -1159,7 +1159,7 @@ test('a frame stamped with a bound identity is our own echo — dropped before t
   const { connection, dg } = build();
   await connection.start();
   const received = [];
-  connection.subscribe(null, (m) => received.push(m));
+  connection.subscribe({}, (m) => received.push(m));
 
   dg.sockets[0].receive(
     frameBuffer({ name: 'COMMAND_LONG', sysid: 255, compid: 190, fields: { command: 400 } }),
@@ -1177,7 +1177,7 @@ test('a companion sharing our sysid under another compid is a real peer, not an 
   const { connection, dg } = build();
   await connection.start();
   const received = [];
-  connection.subscribe(null, (m) => received.push(m));
+  connection.subscribe({}, (m) => received.push(m));
 
   dg.sockets[0].receive(
     frameBuffer({ name: 'HEARTBEAT', sysid: 255, compid: 191, fields: { type: 6, autopilot: 8, base_mode: 0, custom_mode: 0, system_status: 4 } }),
@@ -1784,7 +1784,7 @@ test('reconnect keeps inbound replay memory — a below-high-water frame is stil
 
   const received = [];
   const rejected = [];
-  connection.subscribe(null, (m) => received.push(m));
+  connection.subscribe({}, (m) => received.push(m));
   connection.on('rejected', (e) => rejected.push(e.reason));
 
   const t0 = timestampFromMs(Date.now());

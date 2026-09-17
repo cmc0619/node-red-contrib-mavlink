@@ -46,7 +46,7 @@ test('dialectLibrary appends dated snapshot versions without duplicating dialect
       </messages></mavlink>`;
     },
   });
-  await catalog.update({ files: ['minimal.xml', 'icarous.xml'] });
+  await catalog.update();
 
   const { dialects } = dialectLibrary(catalog);
   const icarous = dialects.find((d) => d.name === 'icarous');

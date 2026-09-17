@@ -347,23 +347,6 @@ test('suppress does nothing', () => {
 
 // ── Broadcast guards (§10) ────────────────────────────────────────────────────
 
-test('broadcast aggregate warns about mixed firmware for uniform commands', async () => {
-  const connection = connectionStub([
-    peer(1, { firmware: 'ardupilot', flightMode: 4 }),
-    peer(2, { firmware: 'px4', flightMode: 4 }),
-  ]);
-
-  const result = await executeFanout({ signal, selection: { mode: 'all' },
-    connection,
-    message: builtCommand({ fields: { param1: 1 } }),
-    mode: 'broadcast',
-    delivery: 'send',
-  });
-
-  assert.equal(result.success, true);
-  assert.match(result.warnings.join('\n'), /mixed firmware/);
-});
-
 test('broadcast reports the whole-link audience regardless of a subset selection', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 

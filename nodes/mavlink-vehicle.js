@@ -92,7 +92,6 @@ module.exports = function registerMavlinkVehicle(RED) {
    *
    * GET  /mavlink/xml-catalog          dialect library (name → seed + dated versions)
    * POST /mavlink/xml-catalog/update   download/refresh from an official source
-   * GET  /mavlink/xml-catalog/compare  informational diff vs the seed dialect
    */
   setCompiledCacheDir(compiledCacheDir(RED));
 
@@ -115,48 +114,15 @@ module.exports = function registerMavlinkVehicle(RED) {
   );
 
   // POST update: downloads (network + disk write), so it gates on the write
-  // scope — read-scoped users can list and compare, not mutate.
+  // scope — read-scoped users can list, not mutate.
   RED.httpAdmin.post(
     `${XML_CATALOG_ROUTE}/update`,
     RED.auth.needsPermission('mavlink.write'),
-    (req, res) => {
-      const body = req.body;
-      // `repo`/`ref` are interpolated into GitHub URLs — constrain their shape
-      // so a crafted value cannot inject extra path segments server-side.
-      if (body.repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(String(body.repo))) {
-        res.status(400).json({ ok: false, error: "repo must look like 'owner/name'." });
-        return;
-      }
-      if (body.ref !== undefined && !/^[\w./-]+$/.test(String(body.ref))) {
-        res.status(400).json({ ok: false, error: 'ref contains unsupported characters.' });
-        return;
-      }
+    (_req, res) => {
       newCatalog()
-        .update({
-          repo: body.repo,
-          ref: body.ref,
-          files: body.files,
-        })
+        .update()
         .then((manifest) => res.json({ ok: true, manifest }))
         .catch((err) => res.status(500).json({ ok: false, error: err.message, code: err.code }));
-    }
-  );
-
-  // GET compare: informational diff of a downloaded XML vs the bundled dialect.
-  RED.httpAdmin.get(
-    `${XML_CATALOG_ROUTE}/compare`,
-    RED.auth.needsPermission('mavlink.read'),
-    (req, res) => {
-      try {
-        const result = newCatalog().compare({
-          file: req.query.file,
-          snapshot: req.query.snapshot,
-        });
-        res.json({ ok: true, comparison: result });
-      } catch (err) {
-        const status = err.code === 'XML_CATALOG_FILE_NOT_FOUND' ? 404 : 500;
-        res.status(status).json({ ok: false, error: err.message, code: err.code });
-      }
     }
   );
 
