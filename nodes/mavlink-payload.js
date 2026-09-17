@@ -7,7 +7,7 @@ const {
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const { valueFrom } = require('../lib/addressing/resolve');
-const { ackWaiterFor, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { awaitAckWithBadge, ackRecordFields, cancelSlot } = require('../lib/command/ack');
 const { resolveFrame } = require('../lib/command/carrier');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
@@ -90,14 +90,12 @@ module.exports = function registerMavlinkPayload(RED) {
          * like any other rejection and the flow decides what to send next.
          */
         async function awaitAck(built) {
-          applyActionStatus(node, 'sending', `${built.message.name}…`);
-          const outcome = await waiterSlot.run(ackWaiterFor(connectionNode, built.message, {
-            band: BAND.CONTROL,
+          const outcome = await awaitAckWithBadge(node, waiterSlot, connectionNode, built.message, built.message.name, {
             target,
             identityId,
             timeoutMs,
             maxRetries,
-          }));
+          });
           if (outcome.result === 'cancelled') {
             // A redeploy cancelled the wait (see the close handler). Finish
             // quietly on a node that is going away — raising here would

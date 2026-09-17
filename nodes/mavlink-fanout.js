@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { valueFrom } = require('../lib/addressing/resolve');
+const { valueFrom, isBlank } = require('../lib/addressing/resolve');
 const { executeFanout, parseSysidList } = require('../lib/fanout');
 
 module.exports = function registerMavlinkFanout(RED) {
@@ -144,9 +144,9 @@ function unwrapPayload(payload) {
 
 function selectionFrom(config) {
   const filter = {};
-  assignIfPresent(filter, 'type', config.vehicleType);
-  assignIfPresent(filter, 'firmware', config.firmwareFilter);
-  assignIfPresent(filter, 'armed', config.armedFilter);
+  for (const [key, value] of [['type', config.vehicleType], ['firmware', config.firmwareFilter], ['armed', config.armedFilter]]) {
+    if (!isBlank(value)) filter[key] = value;
+  }
   // No `|| 'all'`: the editor always saves a member, and the runtime maps
   // nothing — a blank saved mode crashes at dispatch, like any non-member.
   const mode = config.selectionMode;
@@ -219,10 +219,6 @@ function applyAggregateStatus(node, aggregate, tier) {
     return;
   }
   delivery.applyActionStatus(node, 'error', aggregate.result);
-}
-
-function assignIfPresent(target, key, value) {
-  if (value !== undefined && value !== null && value !== '') target[key] = value;
 }
 
 /**

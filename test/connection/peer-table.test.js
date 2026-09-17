@@ -71,19 +71,19 @@ test('endpointsForSystemBroadcast reaches every component of one system, and no 
   // would still return two and pass.
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 2, 1), { address: '10.0.0.6', port: 14552 });
 
-  const forSysOne = table.endpointsForSystemBroadcast(1);
+  const forSysOne = table.endpointsForBroadcast(0, 1);
   assert.equal(forSysOne.length, 2, 'both of system 1\'s components, not system 2\'s');
   assert.ok(forSysOne.some((ep) => ep.address === EP1.address && ep.port === EP1.port));
   assert.ok(forSysOne.some((ep) => ep.address === EP2.address && ep.port === EP2.port));
 
-  assert.deepEqual(table.endpointsForSystemBroadcast(3), [], 'an unheard system reaches nobody');
+  assert.deepEqual(table.endpointsForBroadcast(0, 3), [], 'an unheard system reaches nobody');
 });
 
 test('endpointsForSystemBroadcast dedupes two components sharing one endpoint', () => {
   const table = new PeerTable({ now: () => 0 });
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 1), EP1);
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }, 1, 100), EP1);
-  assert.deepEqual(table.endpointsForSystemBroadcast(1), [EP1]);
+  assert.deepEqual(table.endpointsForBroadcast(0, 1), [EP1]);
 });
 
 test('table is keyed by sysid with components nested underneath', () => {

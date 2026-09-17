@@ -126,19 +126,10 @@ function createSingleMachine(context) {
 }
 
 async function runMachine(machine, signal) {
-  let started = false;
-  const cancel = () => {
-    if (started) machine.cancel();
-  };
+  const cancel = () => machine.cancel();
   signal.addEventListener('abort', cancel, { once: true });
   try {
-    return await Promise.resolve().then(() => {
-      if (signal.aborted) return { result: 'cancelled', phase: 'cancelled' };
-      started = true;
-      const startedRun = machine.start();
-      if (signal.aborted) machine.cancel();
-      return startedRun;
-    });
+    return await machine.start();
   } finally {
     signal.removeEventListener('abort', cancel);
   }
@@ -626,6 +617,3 @@ function successBadge(service, operation, outcome) {
 }
 
 module.exports = registerMavlinkSystem;
-module.exports.machineOptions = machineOptions;
-module.exports.statusFields = statusFields;
-module.exports.successMessage = successMessage;
