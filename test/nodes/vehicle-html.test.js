@@ -98,13 +98,10 @@ test('parameter definitions use an explicit profile-keyed Update workflow', () =
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {
   assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog['"]\)/, 'list endpoint');
   assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog\/update['"]\)/, 'update endpoint');
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog\/compare['"]\)/, 'compare endpoint');
 });
 
-test('catalog actions update and compare are present', () => {
+test('the catalog update action is present', () => {
   assert.match(html, /id="mav-catalog-update"/);
-  assert.match(html, /id="mav-catalog-compare"/);
-  assert.match(html, /Compare with seed/);
 });
 
 test('update posts JSON to the update endpoint', () => {

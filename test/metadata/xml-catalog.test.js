@@ -44,6 +44,7 @@ function stubSource(tree, roots = Object.keys(tree)) {
   const requested = [];
   return {
     sha,
+    tree,
     requested,
     resolveCommit: () => Promise.resolve(sha),
     fetchFile: async (_repo, commit, file) => {
@@ -150,37 +151,21 @@ test('an include that cannot be downloaded fails the update; nothing is written'
   assert.deepEqual(catalog.list(), []);
 });
 
-/* ---------- XmlCatalog: compare ---------- */
-
-test('compare against a bundled dialect reports added messages/enums', async () => {
+test('a download matching the newest snapshot file for file is not kept', async () => {
   const src = stubSource({ 'minimal.xml': MINIMAL });
-  const catalog = catalogFor(src);
-  const manifest = await catalog.update();
+  // A ticking clock: the stub pins one commit, so only the stamp tells two
+  // snapshot ids apart.
+  let tick = 1700000000000;
+  const catalog = catalogFor(src, { now: () => (tick += 1000) });
+  const first = await catalog.update();
+  assert.ok(first);
 
-  const result = catalog.compare({ file: 'minimal.xml', snapshot: manifest.snapshotId });
-  assert.equal(result.bundledExists, true);
-  assert.equal(result.comparable, true);
-  assert.ok(result.diff.addedMessages.includes('EXTRA_MSG'));
-  assert.ok(result.diff.addedEnums.includes('EXTRA_ENUM'));
-  assert.ok(result.downloaded.messageCount >= 2);
-  assert.ok(result.bundled.messageCount >= 1);
-});
+  assert.equal(await catalog.update(), null);
+  assert.equal(catalog.list().length, 1);
 
-test('compare of a non-bundled dialect reports bundledExists=false, not comparable', async () => {
-  const src = stubSource({ 'custom.xml': CUSTOM });
-  const catalog = catalogFor(src);
-  const manifest = await catalog.update();
-
-  const result = catalog.compare({ file: 'custom.xml', snapshot: manifest.snapshotId });
-  assert.equal(result.bundledExists, false);
-  assert.equal(result.comparable, false);
-  assert.ok(result.downloaded.messageCount >= 1);
-});
-
-test('compare of a file not in the catalog throws XML_CATALOG_FILE_NOT_FOUND', () => {
-  const catalog = new XmlCatalog({ baseDir: tmpBase() });
-  assert.throws(
-    () => catalog.compare({ file: 'minimal.xml', snapshot: 'nope' }),
-    (e) => e.code === 'XML_CATALOG_FILE_NOT_FOUND'
-  );
+  // A changed file upstream is a new snapshot again.
+  src.tree['minimal.xml'] = CUSTOM;
+  const second = await catalog.update();
+  assert.notEqual(second.snapshotId, first.snapshotId);
+  assert.equal(catalog.list().length, 2);
 });

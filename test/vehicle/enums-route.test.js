@@ -67,10 +67,10 @@ test('/mavlink/enums is registered once with mavlink.read auth', () => {
 
   assert.ok(handlers.has('/mavlink/enums'));
   assert.ok(handlers.has('/mavlink/dialects'));
-  // dialects + enums + xml-catalog list/compare GETs are read-guarded; the
-  // mutating POSTs (xml-catalog update, compiled-dialect cache rebuild) gate
-  // on the write scope.
-  assert.equal(permissions.filter((p) => p === 'mavlink.read').length, 4);
+  // dialects + enums + xml-catalog list GETs are read-guarded; the mutating
+  // POSTs (xml-catalog update, compiled-dialect cache rebuild) gate on the
+  // write scope.
+  assert.equal(permissions.filter((p) => p === 'mavlink.read').length, 3);
   assert.equal(permissions.filter((p) => p === 'mavlink.write').length, 2);
 });
 
@@ -85,7 +85,6 @@ test('the XML-catalog admin routes register under /mavlink/xml-catalog', () => {
 
   assert.equal(handlers.get('/mavlink/xml-catalog').method, 'get');
   assert.equal(handlers.get('/mavlink/xml-catalog/update').method, 'post');
-  assert.equal(handlers.get('/mavlink/xml-catalog/compare').method, 'get');
 });
 
 test('deployed Vehicle Profile serves requested enums from its own bundle', () => {

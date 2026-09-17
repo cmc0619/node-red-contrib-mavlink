@@ -226,8 +226,8 @@
             contentType: 'application/json',
             data: JSON.stringify({})
           })
-            .done(() => {
-              $status.text('Catalog updated.');
+            .done((data) => {
+              $status.text(data.manifest ? 'Catalog updated.' : 'Upstream matches what is already here; nothing kept.');
               const keepDialect = $dialect.val();
               const keepRev = $revision.val();
               loadLibrary(() => {
@@ -259,47 +259,6 @@
             .fail((xhr) => {
               const msg = (xhr?.responseJSON?.error) || 'rebuild failed';
               $status.text(`Rebuild failed: ${msg}`);
-            });
-        });
-
-        $('#mav-catalog-compare').on('click', (e) => {
-          e.preventDefault();
-          const dialect = $dialect.val();
-          const rev = $revision.val();
-          const opt = $revision.find('option:selected');
-          const entry = opt.attr('data-entry') || (`${dialect}.xml`);
-          if (!rev || rev === 'seed') {
-            $status.text('Pick a downloaded date to compare against the seed.');
-            return;
-          }
-          $status.text(`Comparing ${entry} with seed...`);
-          $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog/compare'), { file: entry, snapshot: rev })
-            .done((data) => {
-              const c = data?.comparison;
-              if (!c) {
-                $status.text('No comparison available.');
-                return;
-              }
-              if (c.error) {
-                $status.text(`${entry}: ${c.error}`);
-                return;
-              }
-              if (!c.bundledExists) {
-                $status.text(`${entry}: not present in the seed (new dialect).`);
-                return;
-              }
-              if (!c.comparable || !c.diff) {
-                $status.text(`${entry}: seed exists (deeper diff unavailable).`);
-                return;
-              }
-              const d = c.diff;
-              $status.text(
-                `${entry} vs seed — messages: +${d.addedMessages.length} / -${d.removedMessages.length} / changed ${d.changedMessages.length}; enums: +${d.addedEnums.length} / -${d.removedEnums.length}.`
-              );
-            })
-            .fail((xhr) => {
-              const msg = (xhr?.responseJSON?.error) || 'comparison failed';
-              $status.text(`Comparison failed: ${msg}`);
             });
         });
 
@@ -422,7 +381,6 @@
   <div class="mav-advanced" style="display:none;">
     <div class="form-row" style="margin-left:104px;">
       <button id="mav-catalog-update" class="red-ui-button">Update catalog</button>
-      <button id="mav-catalog-compare" class="red-ui-button">Compare with seed</button>
       <button id="mav-dialect-rebuild" class="red-ui-button">Rebuild dialect</button>
     </div>
     <div class="form-tips" id="mav-catalog-status" style="min-height:1em;"></div>
