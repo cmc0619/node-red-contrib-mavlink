@@ -227,12 +227,14 @@
             data: JSON.stringify({})
           })
             .done((data) => {
-              $status.text(data.manifest ? 'Catalog updated.' : 'Upstream matches what is already here; nothing kept.');
               const keepDialect = $dialect.val();
               const keepRev = $revision.val();
+              // loadLibrary writes the status line itself, so the outcome
+              // is reported after the reload or it is never seen.
               loadLibrary(() => {
                 populateDialects(keepDialect);
                 populateRevisions(keepRev);
+                $status.text(data.manifest ? 'Catalog updated.' : 'Upstream matches what is already here; nothing kept.');
               });
             })
             .fail((xhr) => {
