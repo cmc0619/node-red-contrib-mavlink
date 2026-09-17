@@ -869,6 +869,20 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 - **Config/launch:** `restart: ap-fleet`; whole fleet must be arm-ready (`prep:
   ap-arm-ready-fleet`) — `delivery: confirm` fails the aggregate on the first refusal.
 
+### sitl/44 — System ops (AP)
+
+- **File:** `examples/sitl/44-system-ops.json` · **Tab:** `SITL 44 System ops`
+- **Story:** One inject chains the System node against ArduCopter sysid 1: list
+  onboard logs, MAVFTP upload then download of `/nrc-system-ops.txt` with a
+  byte-identical assert, then Backup/Restore → Backup. The backup root is a
+  missing path so the files section fails fast (no `@SYS` walk); parameters /
+  fence / rally still run and a `partial` capture is a valid PASS. An empty log
+  list on cold SITL still settles `succeeded`.
+- **Nodes:** config triplet, `system` ×4 (logs list, files upload, files
+  download, backup), `function` ×3, `inject`, `debug` ×6.
+- **Config/launch:** `restart: ap-1`; mirrors `sitl/measure-system-ops.js`
+  through the palette node.
+
 ---
 
 ## 3. `examples/sitl/README.md` outline

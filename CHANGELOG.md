@@ -4,6 +4,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [0.7.2] "System ops on the wire" - 2026-09-17
+
+### Added
+
+- **SITL example 44 — System ops.** Importable flow exercises `mavlink-system`
+  against ArduPilot: onboard log list, MAVFTP upload/download round-trip, and
+  system backup (partial capture when the files root is missing). Wired into
+  `sitl/run-example-suite.js` with a specialized verdict.
+
 ## [0.7.1] "EOF, silence, and companions" - 2026-09-15
 
 ### Added
