@@ -115,7 +115,10 @@ const PROFILE = {
   },
   '32-fanout-member-expires': {
     restart: 'ap-fleet',
-    waitMs: 20000,
+    // Fan-out confirm: timeoutMs 10000 × (maxRetries 3 + 1) on the killed
+    // member when it still launches as active (staleMs 5 s). 20 s was short
+    // of that ceiling and the suite reported UNKNOWN before aggregate/failed.
+    waitMs: 55000,
     expect: 'aggregate reports one failed after mid-run kill',
     // The mid-run kill is afterInjectHook, keyed on the file — `kill-ap-3-mid`
     // was a label prep() never handled. The story needs four to arm and one to
