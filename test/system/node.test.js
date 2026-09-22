@@ -301,12 +301,12 @@ test('the backup bundle asks each plan section for its own type and keeps nonfin
     }
     if (message.name === 'MISSION_REQUEST_INT') {
       deliver({
-        name: 'MISSION_ITEM',
+        name: 'MISSION_ITEM_INT',
         sysid: 42,
         compid: 191,
         fields: {
           seq: 0, frame: 3, command: 16, current: 0, autocontinue: 1,
-          param1: NaN, param2: -0, param3: 1, param4: 2, x: NaN, y: -0, z: NaN,
+          param1: NaN, param2: -0, param3: 1, param4: 2, x: 0, y: 0, z: NaN,
           mission_type: message.fields.mission_type,
           target_system: 255, target_component: 190,
         },
