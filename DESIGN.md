@@ -1254,6 +1254,22 @@ GCS. Not to be re-raised as a bot finding; reopen only with a listen-only compan
 setup that needs it.
 *Check:* `rg "GCS_SYSID_MIN" lib/connection/peer-table.js`; `examples/CATALOG.md` entry 28.
 
+## 14.148 Mission download carrier
+
+**14.148 Mission download asks for `MISSION_ITEM_INT` only; there is no fallback to `MISSION_REQUEST`.** ✔ 📖 (owner ruling, 2026-09-22)
+The download machine retried item 0 once with the legacy `MISSION_REQUEST` when
+`MISSION_REQUEST_INT` went unanswered, for pre-INT autopilots (8b0acca). No reference
+does this. MAVSDK's download sends only `MISSION_REQUEST_INT`, handles only
+`MISSION_ITEM_INT`, and fails on silence. MAVProxy sends the INT form unless the operator
+turns `wp_use_mission_int` off, and never switches on its own. pymavlink has no download
+machine. The owner flies MAVLink 2 vehicles only, and current ArduPilot and PX4 answer
+the INT request, so the fallback only added a retry round before a genuine item-0 stall
+failed. Removed: download requests and subscribes to the INT form alone. Upload is
+unchanged — it answers whichever request form the vehicle sends, as MAVSDK does.
+Reopen only for a fleet vehicle that ignores `MISSION_REQUEST_INT`.
+*Check:* `node --test test/mission/download.test.js` — a silent item 0 fails naming
+seq 0 and no `MISSION_REQUEST` is sent.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
