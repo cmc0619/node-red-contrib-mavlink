@@ -248,7 +248,9 @@ export default [
       'lib/delivery/**/*.js',
       'lib/fanout/**/*.js',
       'lib/formation/**/*.js',
+      'lib/ftp/**/*.js',
       'lib/identity/**/*.js',
+      'lib/log/**/*.js',
       'lib/mission/**/*.js',
       'lib/move/**/*.js',
       'lib/payload/**/*.js',
@@ -259,7 +261,7 @@ export default [
     ignores: ['lib/**/test/**'],
     rules: {
       'no-restricted-syntax': ['error', {
-        selector: "ThrowStatement > NewExpression[callee.name='Error']",
+        selector: 'ThrowStatement > NewExpression[callee.name=/Error$/]',
         message: 'AGENTS.md §0: the driver does not refuse its input. Keep this only if it '
           + 'is a real wire/library refusal (rule 1) or an operational failure that cannot '
           + 'exist until runtime (rule 3), and say which with an eslint-disable naming the '

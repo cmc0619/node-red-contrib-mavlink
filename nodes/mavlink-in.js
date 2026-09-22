@@ -116,7 +116,7 @@ module.exports = function registerMavlinkIn(RED) {
 
     // Field predicate: pass only frames where `fieldName` exists — and, when a
     // value is given, string-equals it (enums and BigInts compare naturally).
-    const fieldName = config.fieldName ? String(config.fieldName).trim() : null;
+    const fieldName = isBlank(config.fieldName) ? null : config.fieldName;
     const fieldValue = isBlank(config.fieldValue) ? null : String(config.fieldValue).trim();
 
     // Rate limit: one Hz for everything, or per-message `NAME=Hz` pairs with
