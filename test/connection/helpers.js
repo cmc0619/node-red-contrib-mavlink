@@ -98,6 +98,9 @@ function fakeWire() {
     },
     releaseDecoder() {},
     clearDecoders() {},
+    crcFailureCount() {
+      return 0;
+    },
   };
 }
 
