@@ -150,6 +150,7 @@ test('fieldName red-rings anything but a single field name; blank = any', () => 
   assert.equal(fieldName.validate.call({}, '', {}), true, 'blank disables the predicate');
   assert.equal(fieldName.validate.call({}, 'base_mode', {}), true);
   assert.match(String(fieldName.validate.call({}, 'base_mode, custom_mode', {})), /single field name/);
+  assert.match(String(fieldName.validate.call({}, ' base_mode', {})), /single field name/, 'padding reds; the runtime does not trim');
 });
 
 test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {

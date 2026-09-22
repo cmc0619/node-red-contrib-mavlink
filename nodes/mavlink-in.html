@@ -95,7 +95,7 @@
           value: '',
           validate(v, _opt) {
             if (RED.mavlink.isBlank(v)) return true;
-            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(v).trim())
+            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(v))
               || 'must be a single field name';
           },
         },
