@@ -1271,7 +1271,7 @@ test('a PX4 Hold completes against the packed HEARTBEAT word; the profile firmwa
       completionTimeout: '60',
     });
     node.status = () => {};
-    let output;
+    let output = null;
     node.emit('input', { payload: { 2: 4, 3: 3 } }, (messages) => { output = messages; }, () => {});
     await tick();
     conn.injectAck({ command: 176, result: 0 }, 1, 1);
