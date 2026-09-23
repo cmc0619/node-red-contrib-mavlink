@@ -74,11 +74,10 @@ test('vehicleType is a MAV_TYPE select loaded from the shared catalog (§6)', ()
   assert.match(html, /preferLive:\s*true/, 'in-progress selection wins over saved');
 });
 
-test('firmware filter is a small select (ArduPilot/PX4/custom)', () => {
+test('firmware filter is a small select (ArduPilot/PX4)', () => {
   assert.match(html, /<select id="node-input-firmwareFilter">/);
   assert.match(html, /<option value="ardupilot">ArduPilot<\/option>/);
   assert.match(html, /<option value="px4">PX4<\/option>/);
-  assert.match(html, /<option value="custom">Custom<\/option>/);
 });
 
 test('admin catalog fetches go through the shared loaders (httpAdminRoot-safe)', () => {
@@ -156,6 +155,8 @@ test('members validator: per-row reasons, offsets-vs-position-patch conflict red
   assert.match(String(onList([{ sysid: 1, north: 1, patch: { lat_int: 5 } }])), /conflict/);
   assert.equal(onList([{ sysid: 1, patch: { param7: 50 } }]), true,
     'a position-field patch without offsets is legitimate');
+  assert.match(String(onList([{ sysid: 1, patch: { target: 2 } }])), /may not set target —/,
+    'MANUAL_CONTROL\'s system field is addressing, like target_system');
 });
 
 test('members validation reads the open editable-list value', () => {
@@ -342,7 +343,7 @@ test('fan-out filter vocabularies carry rings; blank stays "Any" (walled-garden 
   assert.match(String(defaults.vehicleType.validate.call({}, 'quad', {})), /between 0 and 255/,
     'the select saves numbers — a stray token matches no vehicle, silently');
 
-  for (const v of ['', 'ardupilot', 'px4', 'custom']) {
+  for (const v of ['', 'ardupilot', 'px4']) {
     assert.equal(defaults.firmwareFilter.validate.call({}, v, {}), true, v || 'blank');
   }
   assert.match(String(defaults.firmwareFilter.validate.call({}, 'betaflight', {})), /must be one of/);

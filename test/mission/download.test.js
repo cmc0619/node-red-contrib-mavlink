@@ -3,9 +3,9 @@
 /**
  * Mission download state-machine tests (DESIGN.md §9 "Download", §13). Covers
  * the happy path with N items, the count-zero short-circuit, mission_type
- * mismatch rejection, error-ack handling at any phase (§14), and the one-shot
- * legacy request fallback. Fixtures only — a scripted stub plays the vehicle
- * side.
+ * mismatch rejection, error-ack handling at any phase (§14), and the INT-only
+ * item request with no legacy fallback (§14.148). Fixtures only — a scripted
+ * stub plays the vehicle side.
  */
 
 const test = require('node:test');
@@ -22,6 +22,7 @@ function machineOpts(stub, extra) {
   return {
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     ...extra,
@@ -87,7 +88,7 @@ test('download ignores replies whose mission_type mismatches', async () => {
     } else if (message.name === 'MISSION_REQUEST_INT') {
       requestedItems += 1;
       // A mismatched item is ignored; the matching one completes the download.
-      deliver({ name: 'MISSION_ITEM', fields: { seq: 0, command: 16, mission_type: MISSION_TYPE.FENCE } });
+      deliver({ name: 'MISSION_ITEM_INT', fields: { seq: 0, command: 16, mission_type: MISSION_TYPE.FENCE } });
       deliver({ name: 'MISSION_ITEM_INT', fields: { seq: 0, command: 16, mission_type: MISSION_TYPE.MISSION } });
     }
   });
@@ -275,41 +276,29 @@ test('non-global-frame MISSION_ITEM_INT x/y (metres) pass through unscaled', asy
   assert.equal(outcome.items[0].y, -7);
 });
 
-test('a pre-INT vehicle: the first item step falls back once to legacy MISSION_REQUEST and sticks', async () => {
+test('a vehicle silent on item 0 fails naming seq 0, and no legacy MISSION_REQUEST is sent (§14.148)', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
-  const maxRetries = 2;
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
-      // A pre-INT autopilot answers the list request but ignores
-      // MISSION_REQUEST_INT entirely — only the legacy form gets items.
       deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
-    } else if (message.name === 'MISSION_REQUEST') {
-      const seq = message.fields.seq;
-      deliver({ name: 'MISSION_ITEM', fields: { seq, command: 16, x: seq, y: seq, mission_type: 0 } });
     }
+    // MISSION_REQUEST_INT is never answered.
   });
 
-  const machine = new MissionDownload(machineOpts(stub, { maxRetries, timeoutMs: 1000, ...fakeDeps(clock) }));
+  const machine = new MissionDownload(machineOpts(stub, { maxRetries: 2, timeoutMs: 1000, ...fakeDeps(clock) }));
   const done = machine.start();
   clock.flush();
   const outcome = await done;
 
-  assert.equal(outcome.result, 'succeeded');
-  assert.equal(outcome.items.length, 2);
-  // INT tried to its ceiling (1 + maxRetries sends of seq 0), then legacy —
-  // and the rest of the walk stays legacy.
-  const intSeqs = stub.sent
-    .filter((s) => s.message.name === 'MISSION_REQUEST_INT')
-    .map((s) => s.message.fields.seq);
-  const legacySeqs = stub.sent
-    .filter((s) => s.message.name === 'MISSION_REQUEST')
-    .map((s) => s.message.fields.seq);
-  assert.deepEqual(intSeqs, [0, 0, 0]);
-  assert.deepEqual(legacySeqs, [0, 1]);
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.phase, 'aborted');
+  assert.equal(outcome.seq, 0);
+  assert.equal(stub.sentNames().filter((n) => n === 'MISSION_REQUEST_INT').length, 3);
+  assert.equal(stub.sentNames().includes('MISSION_REQUEST'), false);
 });
 
-test('no fallback once an INT request was answered — a later stall aborts naming the sequence', async () => {
+test('a stall mid-walk aborts naming the sequence', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
   stub.onSend((message, deliver) => {
@@ -329,7 +318,7 @@ test('no fallback once an INT request was answered — a later stall aborts nami
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.phase, 'aborted');
   assert.equal(outcome.seq, 1);
-  assert.equal(stub.sentNames().includes('MISSION_REQUEST'), false, 'silence mid-walk is not a carrier problem');
+  assert.equal(stub.sentNames().includes('MISSION_REQUEST'), false);
 });
 
 test('cancelling a mid-flight download sends MISSION_ACK OPERATION_CANCELLED before settling (#261)', async () => {
@@ -387,7 +376,7 @@ test('the subscription filters to the download messages — target telemetry nev
   const machine = new MissionDownload(machineOpts(stub));
   const done = machine.start();
 
-  assert.equal(stub.subscriberCount(), 4, 'one subscription per handled name');
+  assert.equal(stub.subscriberCount(), 3, 'one subscription per handled name');
   // The target's telemetry stream (HEARTBEAT at frame rate) is filtered out
   // at the subscription, not copied in and discarded by the name switch.
   assert.equal(stub.inject({ name: 'HEARTBEAT', fields: {} }), 0);

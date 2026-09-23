@@ -207,10 +207,6 @@ function backupOutcome(done, failed) {
  * section: stopping never rolled the earlier ones back, so it left the
  * vehicle in the same mixed state while writing less of what was asked for.
  *
- * An object carrying no section at all runs no engine, and reporting that as
- * a restore is the false success §9 names — settled here, where the outcome
- * is reported, not by vetting the payload.
- *
  * `result` is the whole story: a second boolean beside it could only say what
  * a non-empty `sections` already says, and on a short run the two disagree —
  * which is how a half-written restore reached output 0 reading complete.
@@ -221,9 +217,6 @@ function backupOutcome(done, failed) {
  */
 function restoreOutcome(done, failed) {
   const written = Object.keys(done);
-  if (written.length === 0 && Object.keys(failed).length === 0) {
-    return { result: 'failed', phase: 'empty', reason: 'no section to restore' };
-  }
   if (written.length === 0) return { result: 'failed', phase: 'done', failed };
   const sections = Object.fromEntries(
     written.map((section) => [section, restoreCount(section, done[section])])

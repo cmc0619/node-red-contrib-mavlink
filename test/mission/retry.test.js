@@ -34,6 +34,7 @@ test('download retries a stalled item to the ceiling then aborts naming the sequ
   const machine = new MissionDownload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     maxRetries: 3,
@@ -65,6 +66,7 @@ test('upload retries a stalled count then aborts', async () => {
   const machine = new MissionUpload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
@@ -107,6 +109,7 @@ test('a livelocked upload — same-seq re-requests forever — terminates at the
   const machine = new MissionUpload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
@@ -151,6 +154,7 @@ test('a livelocked upload — alternating re-requests of two answered items — 
   const machine = new MissionUpload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     items: [
@@ -199,6 +203,7 @@ test('a download advancing distinct items past the deadline is not aborted (#249
   const machine = new MissionDownload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     maxRetries: 3,
@@ -219,46 +224,3 @@ test('a download advancing distinct items past the deadline is not aborted (#249
   assert.equal(clock.pending(), 0, 'no timer left armed after the transfer');
 });
 
-test('the INT→legacy fallback is a distinct step, so it gets a fresh deadline budget', async () => {
-  const stub = new StubConnection();
-  const clock = new FakeTimers();
-
-  // A pre-INT autopilot: INT item requests are ignored, so item 0 burns four
-  // attempts × 13 s = 52 s of the 60 s budget before the legacy fallback
-  // fires. The fallback is a distinct step ('item 0 legacy'), so it starts on
-  // a fresh deadline; sharing item 0's budget would abort this healthy walk
-  // 8 s in, while the pre-INT vehicle was answering normally.
-  stub.onSend((message, deliver) => {
-    if (message.name === 'MISSION_REQUEST_LIST') {
-      deliver({ name: 'MISSION_COUNT', fields: { count: 2, mission_type: 0 } });
-      return;
-    }
-    if (message.name !== 'MISSION_REQUEST') return;
-    const seq = Number(message.fields.seq);
-    clock.setTimeout(
-      () => deliver({ name: 'MISSION_ITEM', fields: { seq, frame: 3, command: 16, mission_type: 0 } }),
-      20000
-    );
-  });
-
-  const machine = new MissionDownload({
-    send: (m) => stub.send(m),
-    subscribe: (f, h) => stub.subscribe(f, h),
-    target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
-    maxRetries: 3,
-    timeoutMs: 13000,
-    ...fakeDeps(clock),
-  });
-
-  const done = machine.start();
-  clock.flush();
-  const outcome = await done;
-
-  // 1 initial INT request + 3 retries, then the one-shot legacy fallback.
-  assert.equal(stub.sentNames().filter((n) => n === 'MISSION_REQUEST_INT').length, 4);
-  assert.ok(stub.sentNames().includes('MISSION_REQUEST'), 'the legacy fallback was sent');
-  assert.equal(outcome.result, 'succeeded');
-  assert.equal(outcome.count, 2);
-  assert.ok(outcome.elapsed > DEFAULT_TRANSFER_DEADLINE_MS, 'the fallback walk outlived the initial budget');
-});

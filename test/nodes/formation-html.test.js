@@ -88,6 +88,18 @@ test('fixed-anchor lat/lon red outside the ellipsoid and on blank; other modes s
   assert.equal(defaults.lon.validate.call({ anchorMode: 'leader' }, ''), true);
 });
 
+test('heading: required on a fixed anchor, blank legal on a leader anchor, 0-360 either way', () => {
+  const defaults = loadNodeDefaults('mavlink-formation');
+  const heading = (anchorMode, v) => defaults.headingDeg.validate.call({ anchorMode }, v, {});
+
+  assert.match(String(heading('fixed', '')), /fixed anchor needs a heading/,
+    'blank has no leader to fall back on and would ride as NaN geometry');
+  assert.equal(heading('fixed', 0), true);
+  assert.equal(heading('leader', ''), true, 'blank means the leader\'s heading');
+  assert.match(String(heading('leader', 361)), /between 0 and 360/);
+  assert.match(String(heading('fixed', -1)), /between 0 and 360/);
+});
+
 test('intervalMs requires a number >= 0 — the runtime reads a present value as Number()', () => {
   // Blank would ride as Number('') = 0 and a negative paces nothing: an
   // unthrottled fleet send either way. min="0" is not enforced on save.

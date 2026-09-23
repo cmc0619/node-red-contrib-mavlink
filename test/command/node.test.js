@@ -1246,6 +1246,47 @@ test('a completion timeout keeps the accepted ack\'s result_param2 (CodeRabbit)'
   node.emit('close', () => {});
 });
 
+test('a PX4 Hold completes against the packed HEARTBEAT word; the profile firmware selects the packing (§14.110)', async () => {
+  // Hold goes out as param2 = 4 (main), param3 = 3 (sub); PX4's HEARTBEAT
+  // reports 50593792. The node hands completion the firmware the request was
+  // built for, so the complete tier compares like with like.
+  async function hold(firmware, flightMode) {
+    const conn = connStubWithInject({ id: 'veh', targetSystem: 1, targetComponent: 1, firmware });
+    conn.peerTable = new StubPeerTable();
+    conn.peerTable.setComponent(1, 1, { flightMode });
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-command')(RED);
+    const Node = RED.nodes.types['mavlink-command'];
+    const node = new Node({
+      params: '{}',
+      connection: 'conn',
+      sendAs: 'long',
+      mode: 'preset',
+      preset: 'set_mode',
+      delivery: 'complete',
+      targetSystem: '1',
+      targetComponent: '1',
+      timeoutMs: '60000',
+      maxRetries: '0',
+      completionTimeout: '60',
+    });
+    node.status = () => {};
+    let output = null;
+    node.emit('input', { payload: { 2: 4, 3: 3 } }, (messages) => { output = messages; }, () => {});
+    await tick();
+    conn.injectAck({ command: 176, result: 0 }, 1, 1);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    node.emit('close', () => {});
+    return output[1];
+  }
+
+  const px4 = await hold('px4', 50593792);
+  assert.equal(px4.result, 'accepted');
+  assert.equal(px4.confirmedBy, 'state');
+  const ap = await hold('ardupilot', 50593792);
+  assert.equal(ap.result, 'timeout', 'a non-PX4 profile compares param2 as the whole word');
+});
+
 test('a PX4 takeoff completes against the AMSL datum on COMMAND_LONG; ArduPilot keeps the relative one (471#49)', async () => {
   // PX4 reads NAV_TAKEOFF param7 as AMSL whatever the carrier — mavlink_receiver
   // copies z straight to param7 and navigator takes it as the loiter altitude

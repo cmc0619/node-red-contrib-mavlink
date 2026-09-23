@@ -10,7 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { installEditorHelpers } = require('../helpers/editor-resource');
-const { assertChangeHandlerContains } = require('./html-assert');
+const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-param.html'),
@@ -82,7 +82,6 @@ test('mavlink-param Build shows Dialect and concrete dialects require Firmware',
   assert.match(html, /node-input-firmware/, 'firmware select element exists');
   assert.match(html, /value="ardupilot"/, 'ArduPilot firmware option exists');
   assert.match(html, /value="px4"/, 'PX4 firmware option exists');
-  assert.match(html, /value="custom"/, 'custom firmware option exists');
   // Firmware XOR validator lives in buildTierDialectDefaults({ withFirmware: true })
   // — proven in mavlink-editor-resource.test.js. Param pins the merge, not a paste.
   assert.match(
@@ -387,7 +386,7 @@ test('mavlink-param value validator: each node is checked against its own firmwa
 test('mavlink-param value validator: a node whose definitions were never loaded skips the check', () => {
   // The safe direction: no entry means no bounds to apply, never someone
   // else's bounds.
-  const strangerNode = { delivery: 'build', dialect: 'common', firmware: 'custom' };
+  const strangerNode = { delivery: 'build', dialect: 'common', firmware: '' };
   const validate = mountKeyedValidator(BY_KEY, strangerNode, 'RC1_MIN');
   assert.equal(validate(99999), true);
   assert.equal(validate('abc'), false, 'but it is still a number check');
@@ -644,7 +643,6 @@ test('the action select is pinned to the actions the driver implements', () => {
 });
 
 test('param lookup, type, timeout, and target compid carry rings (walled-garden sweep)', () => {
-  const { loadNodeDefaults } = require('./html-assert');
   const defaults = loadNodeDefaults('mavlink-param');
 
   assert.equal(defaults.lookup.validate.call({}, 'name', {}), true);
@@ -670,7 +668,29 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.maxRetries.validate.call({ delivery: 'confirm', action: 'read' }, '1.5', {}), true, 'a read waits once; the hidden retries row never reds');
 
   assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
-  assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
+  assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 1 and 255/);
+  assert.match(String(defaults.targetComponent.validate.call({}, '0', {})), /between 1 and 255/,
+    'component 0 is not a target: every Param action waits for one component (§14.149)');
+});
+
+test('param targetComponent: a blank that inherits component 0 from the Vehicle Profile reds too (§14.149)', () => {
+  const lookup = {
+    c1: { vehicle: 'veh0' },
+    veh0: { defaultTargetComponent: 0 },
+    veh1: { defaultTargetComponent: 1 },
+    comp: { role: 'companion' },
+  };
+  const validate = loadNodeDefaults('mavlink-param', lookup).targetComponent.validate;
+  assert.match(String(validate.call({ delivery: 'confirm', connection: 'c1' }, '', {})), /inherits component 0/,
+    'the Connection\'s profile default is what a blank resolves to on the wire');
+  assert.match(String(validate.call({ delivery: 'build', dialect: '__vehicle', vehicle: 'veh0' }, '', {})), /inherits component 0/,
+    'on Build the node\'s own profile is the rung');
+  assert.equal(validate.call({ delivery: 'build', dialect: '__vehicle', vehicle: 'veh1' }, '', {}), true);
+  assert.equal(validate.call({ delivery: 'build', dialect: 'common', vehicle: 'veh0' }, '', {}), true,
+    'a concrete Build dialect has no profile rung');
+  assert.equal(validate.call({ delivery: 'confirm', connection: 'c1', identity: 'comp' }, '', {}), true,
+    'a companion identity addresses compid 1 whatever the profile says');
+  assert.equal(validate.call({ delivery: 'confirm', connection: 'c1' }, '1', {}), true);
 });
 
 test('param id search uses the stock autoComplete widget, not a hand-rolled results panel', () => {

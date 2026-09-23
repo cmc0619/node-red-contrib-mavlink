@@ -193,7 +193,7 @@ test('firmware and vehicle family red on membership (walled-garden sweep)', () =
   assert.equal(defaults.firmware.required, true);
   assert.equal(defaults.vehicleFamily.required, true);
 
-  for (const v of ['ardupilot', 'px4', 'custom']) {
+  for (const v of ['ardupilot', 'px4']) {
     assert.equal(defaults.firmware.validate.call({}, v, {}), true, v);
   }
   assert.match(String(defaults.firmware.validate.call({}, 'betaflight', {})), /must be one of/);

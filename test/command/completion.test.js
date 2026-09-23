@@ -28,7 +28,7 @@ test('DO_SET_MODE completion matches the requested custom mode from param 2 (par
   // params = [base_mode, custom_mode, submode, 0, 0, 0, 0]
   const params = [1, 4, 0, 0, 0, 0, 0];
   const pt = peerWithMode(3, 1, 4);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, true);
 });
 
@@ -36,7 +36,7 @@ test('DO_SET_MODE completion stays pending when the active mode differs from par
   const params = [1, 4, 0, 0, 0, 0, 0];
   // Vehicle is in mode 9, not the requested custom mode 4.
   const pt = peerWithMode(3, 1, 9);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, false);
 });
 
@@ -45,15 +45,29 @@ test('DO_SET_MODE completion matches custom mode 0 when the vehicle is in mode 0
   // wrongly report success the moment a peer exists. It must compare against 0.
   const params = [1, 0, 0, 0, 0, 0, 0];
   const pt = peerWithMode(3, 1, 0);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, true);
 });
 
 test('DO_SET_MODE completion stays pending when custom mode 0 is requested but the vehicle is in another mode', () => {
   const params = [1, 0, 0, 0, 0, 0, 0];
   const pt = peerWithMode(3, 1, 5);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, false);
+});
+
+test('PX4 DO_SET_MODE completes against the packed HEARTBEAT custom_mode (§14.110)', () => {
+  // A px4 profile sends Hold as main 4 (AUTO), sub 3 (LOITER); the HEARTBEAT
+  // reports the pair packed, (3 << 24) | (4 << 16) = 50593792. Comparing that
+  // to param2 = 4 timed out a mode change the vehicle had made.
+  const hold = [1, 4, 3, 0, 0, 0, 0];
+  const check = (flightMode, firmware) =>
+    checkCompletion(COMPLETION.SET_MODE, hold, peerWithMode(1, 1, flightMode), 1, 1, undefined, firmware).done;
+  assert.equal(check(50593792, 'px4'), true);
+  assert.equal(check(4 * 65536, 'px4'), false, 'AUTO with another sub_mode is not Hold');
+  // ArduPilot's custom_mode is one word on both sides.
+  assert.equal(check(4, 'ardupilot'), true);
+  assert.equal(check(50593792, 'ardupilot'), false);
 });
 
 test('a base-mode-only DO_SET_MODE is unverifiable — never done, never falsely confirmed', () => {

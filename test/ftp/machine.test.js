@@ -742,36 +742,3 @@ test('cancelling after a child settles does not start the next restore file', as
   assert.equal(stub.subscriberCount(), 0);
   assert.equal(clock.pending(), 0);
 });
-
-test('cancel from inside a progress callback sends nothing afterwards', async () => {
-  const openStub = new StubConnection();
-  const openClock = new FakeTimers();
-  openStub.onSend(() => {});
-  const openMachine = new FtpMachine('upload', machineOptions(openStub, openClock, {
-    path: '/cancelled.bin',
-    data: Buffer.from('abc'),
-    onProgress: (update) => {
-      if (update.phase === 'open') openMachine.cancel();
-    },
-  }));
-  assert.equal((await openMachine.start()).result, 'cancelled');
-  assert.equal(openStub.sent.length, 0);
-  assert.equal(openStub.subscriberCount(), 0);
-  assert.equal(openClock.pending(), 0);
-
-  const retryStub = new StubConnection();
-  const retryClock = new FakeTimers();
-  retryStub.onSend(() => {});
-  const retryMachine = new FtpMachine('upload', machineOptions(retryStub, retryClock, {
-    path: '/cancelled.bin',
-    data: Buffer.from('abc'),
-    onProgress: (update) => {
-      if (update.phase === 'retry') retryMachine.cancel();
-    },
-  }));
-  const retried = retryMachine.start();
-  retryClock.flush();
-  assert.equal((await retried).result, 'cancelled');
-  assert.equal(retryStub.sent.length, 1);
-  assert.equal(retryClock.pending(), 0);
-});

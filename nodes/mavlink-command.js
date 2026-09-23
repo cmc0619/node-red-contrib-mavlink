@@ -403,12 +403,10 @@ module.exports = function registerMavlinkCommand(RED) {
         // `param7` with no frame conversion and `navigator` takes it as the
         // loiter altitude AMSL (§14.79) — so completion compares against what
         // that vehicle flies to, whatever frame the operator saved (471#49).
-        // A custom stack has no measured datum: the frame the operator saved
-        // stands, as it did for every stack before PX4 was measured.
         let completionFrame;
         switch (profile.firmware) {
           case 'px4': completionFrame = MAV_FRAME.GLOBAL; break;
-          case 'ardupilot': case 'custom': completionFrame = configuredCarrier === CARRIER.INT ? frame : undefined; break;
+          case 'ardupilot': completionFrame = configuredCarrier === CARRIER.INT ? frame : undefined; break;
           default: break; // This space intentionally left blank (§5)
         }
 
@@ -421,7 +419,8 @@ module.exports = function registerMavlinkCommand(RED) {
               connNode.peerTable,
               target.sysid,
               target.compid,
-              completionFrame
+              completionFrame,
+              profile.firmware
             );
             if (stateCheck.done) {
               // Ack was lost on the return leg; the command ran.
@@ -498,6 +497,7 @@ module.exports = function registerMavlinkCommand(RED) {
           sysid: target.sysid,
           compid: completionCompid,
           frame: completionFrame,
+          firmware: profile.firmware,
           timeoutMs: completionTimeoutMs,
         });
         if (myGen === _generation) {

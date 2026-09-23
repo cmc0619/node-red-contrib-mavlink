@@ -319,6 +319,27 @@ test('a fresh heartbeat clears a stale mark', () => {
   assert.equal(table.getComponent(1, 1).state, 'active');
 });
 
+test('after demoteEndpoints only an arriving frame revives a component, never a sweep', () => {
+  // A reconnect demotes every component so Fan-out cannot select a member
+  // with no route. A sweep inside staleMs once flipped it back to active on
+  // the old timestamp alone — no frame, no relearned endpoint.
+  const table = new PeerTable({ now: () => 0, heartbeatStaleMs: 5000, heartbeatExpireMs: 15000 });
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1, 0);
+  table.update({ name: 'SYS_STATUS', sysid: 1, compid: 100, fields: {} }, EP1, 0);
+  table.demoteEndpoints();
+
+  table.sweep(1000);
+  assert.equal(table.getComponent(1, 1).state, 'stale', 'no frame since the demote');
+  assert.equal(table.getComponent(1, 100).state, 'stale');
+
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP2, 2000);
+  assert.equal(table.getComponent(1, 1).state, 'active', 'its heartbeat revives it');
+  assert.deepEqual(table.endpointFor(1, 1), EP2, 'and relearns the route in the same update');
+
+  table.update({ name: 'SYS_STATUS', sysid: 1, compid: 100, fields: {} }, EP2, 2000);
+  assert.equal(table.getComponent(1, 100).state, 'active', 'a component that never heartbeats revives on any frame');
+});
+
 test('a new endpoint on a known component surfaces the multi-endpoint condition', () => {
   const table = new PeerTable({ now: () => 0 });
   const added = [];

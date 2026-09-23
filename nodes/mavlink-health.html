@@ -22,19 +22,21 @@
      * Health's Identity is the shared override (§6) with one stricter rule:
      * a Connection that carries a choice of identities requires a pick. A
      * single-identity Connection hides the field (see oneditprepare) and
-     * oneditsave stores blank, so whatever is stored never rings there; the
-     * runtime asserts the Connection's Local Identity. With a pick present,
-     * the shared validator owns existence and binding. The connection is read
-     * live through liveOr so the check is scoped to this node's own open
-     * dialog.
+     * oneditsave stores blank, which the runtime reads as the Connection's
+     * Local Identity. A pick saved while the Connection still had a choice
+     * outlives that choice until this dialog is saved again, and the runtime
+     * asserts it as saved — so a non-blank value goes through the shared
+     * validator in both cases, which owns existence and binding, exactly as
+     * on the other identity-binding nodes. Reopening the dialog and pressing
+     * Done clears it. The connection is read live through liveOr so the check
+     * is scoped to this node's own open dialog.
      */
     const overrideValidator = RED.mavlink.identityOverrideValidator();
     function boundIdentityValidator(v, opt) {
       const connId = RED.mavlink.liveOr(this, '#node-input-connection', this.connection, '');
       // No Connection resolved yet — its own required ring owns that.
       if (RED.mavlink.isBlank(connId) || connId === '_ADD_' || !RED.nodes.node(connId)) return true;
-      // Single-identity Connection: field hidden, value ignored — never ring.
-      if (isSingleIdentity(connId)) return true;
+      if (isSingleIdentity(connId)) return RED.mavlink.isBlank(v) || overrideValidator.call(this, v, opt);
       // Multi-identity: a bound identity must be chosen.
       if (RED.mavlink.isBlank(v) || v === '_ADD_') return 'is required';
       return overrideValidator.call(this, v, opt);
@@ -64,9 +66,8 @@
         const node = this;
         // The Identity is a choice only when the Connection carries more than
         // one identity. A single-identity Connection has exactly one — its
-        // Local Identity — so the field is hidden and oneditsave stores blank.
-        // Showing a field with a single answer, then red-ringing a stale pick,
-        // is the anti-pattern §0 forbids. When there is a choice,
+        // Local Identity — so the field is hidden and oneditsave stores blank
+        // (§14.135: a single answer is not a choice). When there is a choice,
         // the field is a connection-scoped select — the same one command and
         // fanout use — that only ever offers bound identities (no role filter:
         // health asserts any bound identity, gcs included). Re-evaluate on

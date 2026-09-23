@@ -19,6 +19,9 @@
   function finiteRequired(v) {
     return !RED.mavlink.isBlank(v) && Number.isFinite(Number(v));
   }
+  const headingRange = RED.mavlink.validateRange(0, 360);
+  const headingRequired = whenAnchorMode('fixed', (v, _opt) => !RED.mavlink.isBlank(v)
+      || 'a fixed anchor needs a heading — there is no leader to take it from');
 
   RED.nodes.registerType('mavlink-formation', {
     category: 'mavlink',
@@ -87,7 +90,18 @@
         value: '',
         validate: whenAnchorMode('fixed', (v, _opt) => finiteRequired(v) || 'needs an altitude — blank would ride as ground level'),
       },
-      headingDeg: { value: '', validate: RED.mavlink.validateRange(0, 360) },
+      /**
+       * Blank means "the leader's heading", so a fixed anchor — no leader to
+       * take it from — requires one: blank would ride as NaN geometry
+       * (§14.104).
+       */
+      headingDeg: {
+        value: '',
+        validate(v, opt) {
+          const required = headingRequired.call(this, v, opt);
+          return required === true ? headingRange(v, opt) : required;
+        },
+      },
       pitchDeg: { value: 0, validate: RED.mavlink.validateRange(-180, 180) },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       changeMode: { value: false },
@@ -128,7 +142,7 @@
   <div class="form-row" id="row-formation-lat"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat"></div>
   <div class="form-row" id="row-formation-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon"></div>
   <div class="form-row" id="row-formation-alt"><label for="node-input-alt">Altitude m</label><input type="number" id="node-input-alt"></div>
-  <div class="form-row"><label for="node-input-headingDeg">Heading deg</label><input type="number" id="node-input-headingDeg" placeholder="blank = leader's heading"></div>
+  <div class="form-row"><label for="node-input-headingDeg">Heading deg</label><input type="number" id="node-input-headingDeg" placeholder="blank = leader's heading (leader anchor only)"></div>
   <div class="form-row"><label for="node-input-pitchDeg">Pitch deg</label><input type="number" id="node-input-pitchDeg" step="any"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"></div>
@@ -173,11 +187,11 @@
   Pick an anchor high enough that the lowest sphere slot stays clear of the
   ground.</p>
   <h3>Heading and pitch</h3>
-  <p>Heading yaws the pattern in the horizontal plane (0 = north). If blank, a
-  leader anchor uses the leader's reported heading; if that is unknown too, the
-  pattern faces north (0). Unlike a coordinate or altitude, an unknown heading
-  is safe to default: any heading yields a fully separated formation — it
-  orients the pattern, it cannot collapse it. <b>Pitch</b> tumbles the whole
+  <p>Heading yaws the pattern in the horizontal plane (0 = north). A fixed
+  anchor requires one. If blank, a leader anchor uses the leader's reported
+  heading; if that is unknown too, no heading is invented — the slots come out
+  with no horizontal position (<code>NaN</code>), which Build shows as it is
+  and Send refuses at the wire for every member. <b>Pitch</b> tumbles the whole
   pattern around body +Y (right): positive pitch lifts the nose (forward toward
   −down). Use pitch steps to rotate a 3-D formation as a rigid group. Vehicle
   noses are not commanded: reposition yaw is sent as <code>NaN</code> (hold

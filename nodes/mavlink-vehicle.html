@@ -12,7 +12,7 @@
         // stray still gets the membership reason.
         vehicleFamily:         { value: 'unknown', required: true, validate: RED.mavlink.oneOf(
           ['unknown', 'copter', 'plane', 'rover', 'boat', 'sub', 'blimp', 'antenna-tracker']) },
-        firmware:              { value: 'ardupilot', required: true, validate: RED.mavlink.oneOf(['ardupilot', 'px4', 'custom']) },
+        firmware:              { value: 'ardupilot', required: true, validate: RED.mavlink.oneOf(['ardupilot', 'px4']) },
         dialect:               { value: 'ardupilotmega', required: true },
         dialectRevision:       { value: 'seed', required: true },
         // Comma-joined `dialect@revision` picks from the Components
@@ -63,7 +63,7 @@
         const $firmware = $('#node-config-input-firmware');
         const $status = $('#mav-catalog-status');
         const $paramDefsStatus = $('#mav-param-defs-status');
-        const FIRMWARE_DIALECT = { ardupilot: 'ardupilotmega', px4: 'development', custom: 'common' };
+        const FIRMWARE_DIALECT = { ardupilot: 'ardupilotmega', px4: 'development' };
         const $vehicleFamily = $('#node-config-input-vehicleFamily');
         const $paramDefsUrl = $('#node-config-input-paramDefsUrl');
         const ARDUPILOT_VEHICLE_DOC = {
@@ -344,7 +344,6 @@
     <select id="node-config-input-firmware">
       <option value="ardupilot">ArduPilot</option>
       <option value="px4">PX4</option>
-      <option value="custom">Custom</option>
     </select>
   </div>
   <div class="form-row">
@@ -395,9 +394,9 @@
     <div class="form-tips" id="mav-param-defs-status" style="min-height:1em;"></div>
     <div class="form-tips">
       Pre-filled when firmware and vehicle name a known URL; override for a different
-      source. Hidden when none is known (Custom firmware, or ArduPilot with unknown
-      family). Used only by Update, which downloads definitions into this profile's
-      local holding file.
+      source. Hidden when none is known (ArduPilot with unknown family).
+      Used only by Update, which downloads definitions into this profile's local
+      holding file.
     </div>
     </div>
   </div>
@@ -419,7 +418,7 @@
       it selects that vehicle's parameter document; <b>Unknown / custom</b>
       takes every document's parameter names but none of their bounds or
       choice lists, since the documents disagree on those.</li>
-    <li><b>Firmware</b> — ArduPilot, PX4, or custom (suggests a dialect).</li>
+    <li><b>Firmware</b> — ArduPilot or PX4 (suggests a dialect).</li>
     <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers.</li>
     <li><b>Dialect / Version</b> — Advanced: seed or a downloaded snapshot date.</li>
     <li><b>Param defs URL</b> — pre-filled from firmware and vehicle; used when you click Update to refresh this profile's local definitions.</li>
