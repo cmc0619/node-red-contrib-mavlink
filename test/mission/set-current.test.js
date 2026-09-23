@@ -19,6 +19,7 @@ function machine(stub, clock, options = {}) {
   return new MissionSetCurrent({
     send: (message) => stub.send(message),
     subscribe: (filter, handler) => stub.subscribe(filter, handler),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     seq: 0,

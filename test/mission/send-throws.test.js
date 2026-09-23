@@ -31,6 +31,7 @@ function downloadOver(stub, clock) {
   return new MissionDownload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     maxRetries: 3,

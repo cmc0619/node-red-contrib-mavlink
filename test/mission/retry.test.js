@@ -34,6 +34,7 @@ test('download retries a stalled item to the ceiling then aborts naming the sequ
   const machine = new MissionDownload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     maxRetries: 3,
@@ -65,6 +66,7 @@ test('upload retries a stalled count then aborts', async () => {
   const machine = new MissionUpload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
@@ -107,6 +109,7 @@ test('a livelocked upload — same-seq re-requests forever — terminates at the
   const machine = new MissionUpload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
@@ -151,6 +154,7 @@ test('a livelocked upload — alternating re-requests of two answered items — 
   const machine = new MissionUpload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     items: [
@@ -199,6 +203,7 @@ test('a download advancing distinct items past the deadline is not aborted (#249
   const machine = new MissionDownload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     maxRetries: 3,

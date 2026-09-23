@@ -22,6 +22,7 @@ function machineOpts(stub, extra) {
   return {
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
     target: TARGET,
     missionType: MISSION_TYPE.MISSION,
     ...extra,
