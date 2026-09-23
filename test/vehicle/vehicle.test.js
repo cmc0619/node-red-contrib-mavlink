@@ -18,6 +18,7 @@ const {
   resolveDialect,
   knownDialects,
 } = require('../../lib/vehicle');
+const { seedSources } = require('../../lib/metadata/bundled');
 
 /* ---------- knownDialects ---------- */
 
@@ -107,6 +108,35 @@ test('a blank additionalDialects field resolves exactly like no field at all', (
   const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
   const blank = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
   assert.equal(blank, plain, 'same cached bundle, not a recompile');
+});
+
+test('a snapshot component dialect brings only its own include chain, not the whole snapshot', () => {
+  // A downloaded snapshot is a whole definitions directory. Layering all of
+  // it over the seed made `minimal@seed` + `icarous@<snap>` compile the
+  // snapshot's minimal.xml, though icarous includes nothing.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-veh-'));
+  const id = '2026-09-01-abc';
+  fs.mkdirSync(path.join(dir, 'snapshots', id), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'manifests'), { recursive: true });
+  const files = [];
+  for (const [name, text] of Object.entries(seedSources())) {
+    const marked = name === 'minimal.xml'
+      ? text.replace('<messages>', '<messages><message id="9999" name="SNAPSHOT_ONLY"><description>x</description>'
+        + '<field type="uint8_t" name="a">a</field></message>')
+      : text;
+    fs.writeFileSync(path.join(dir, 'snapshots', id, name), marked);
+    files.push({ name });
+  }
+  fs.writeFileSync(path.join(dir, 'manifests', `${id}.json`), JSON.stringify({ snapshotId: id, files }));
+  const profile = (dialect, dialectRevision, additionalDialects) => resolveDialect({
+    name: 'P', dialect, dialectRevision, additionalDialects, catalogBaseDir: dir,
+  });
+
+  const seedAirframe = profile('minimal', 'seed', `icarous@${id}`);
+  assert.ok(seedAirframe.messages.ICAROUS_HEARTBEAT);
+  assert.equal(seedAirframe.messages.SNAPSHOT_ONLY, undefined, 'minimal stays the seed revision it was picked at');
+  const snapAirframe = profile('minimal', id, 'icarous@seed');
+  assert.ok(snapAirframe.messages.SNAPSHOT_ONLY, 'a snapshot pick still takes its own chain from the snapshot');
 });
 
 test('a component dialect that collides on a msgid fails loud naming both', () => {
