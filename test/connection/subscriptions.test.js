@@ -75,30 +75,14 @@ test('addressed-to filters read the target fields: own id and broadcast pass, ot
   reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 1, target_component: 1 } }));
   reg.dispatch(decoded({ name: 'OTHER_SYSTEM', fields: { target_system: 2, target_component: 191 } }));
   reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
-  // A system-scoped message (SET_MODE shape: target_system, no component
-  // field) is addressed to every component of that system — mine included —
-  // and to no component of another.
-  reg.dispatch(decoded({ name: 'SET_MODE_MINE', fields: { target_system: 1, base_mode: 1 } }));
-  reg.dispatch(decoded({ name: 'SET_MODE_OTHER', fields: { target_system: 2, base_mode: 1 } }));
+  // A message naming a system but no component (CAMERA_FEEDBACK, SET_MODE)
+  // names no component, so a component filter keeps it out: ArduPilot sends
+  // CAMERA_FEEDBACK to system 0 on every trigger, and a companion inbox is
+  // not where the autopilot's camera events or a GCS's SET_MODE belong.
+  reg.dispatch(decoded({ name: 'CAMERA_FEEDBACK', fields: { target_system: 0, img_idx: 1 } }));
+  reg.dispatch(decoded({ name: 'SET_MODE', fields: { target_system: 1, base_mode: 1 } }));
 
-  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS', 'SET_MODE_MINE']);
-});
-
-test('a component-only addressed-to filter still keeps out messages that name no recipient', () => {
-  // To compid alone reads "for component 191 on any system". HEARTBEAT names
-  // no one and stays out; a system-scoped message (no component field) is
-  // for every component of its system and comes in; an explicit other
-  // component stays out.
-  const reg = new SubscriptionRegistry();
-  const hits = [];
-  reg.subscribe({ toCompid: 191 }, (m) => hits.push(m.name));
-
-  reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
-  reg.dispatch(decoded({ name: 'MINE', fields: { target_system: 7, target_component: 191 } }));
-  reg.dispatch(decoded({ name: 'SET_MODE', fields: { target_system: 7, base_mode: 1 } }));
-  reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 7, target_component: 1 } }));
-
-  assert.deepEqual(hits, ['MINE', 'SET_MODE']);
+  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS']);
 });
 
 test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {
