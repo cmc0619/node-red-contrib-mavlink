@@ -183,7 +183,7 @@ test('an invalid or unsigned accept never raises the outbound floor', () => {
 });
 
 test('the outbound sequence wraps 0..255', () => {
-  const s = new SigningState();
+  const s = new SigningState({ now: Date.now });
   const seqs = [];
   for (let i = 0; i < 257; i += 1) seqs.push(s.nextSeq(1, 1));
   assert.equal(seqs[0], 0);
@@ -194,7 +194,7 @@ test('the outbound sequence wraps 0..255', () => {
 test('each source component gets its own sequence stream (issue #92)', () => {
   // Receivers do loss detection per (sysid, compid); interleaving two
   // identities on one counter would show phantom gaps in both streams.
-  const s = new SigningState();
+  const s = new SigningState({ now: Date.now });
   assert.equal(s.nextSeq(255, 190), 0);
   assert.equal(s.nextSeq(255, 190), 1);
   assert.equal(s.nextSeq(255, 191), 0); // second identity starts fresh
@@ -205,7 +205,7 @@ test('each source component gets its own sequence stream (issue #92)', () => {
 });
 
 test('two connections sharing a key still carry distinct link IDs', () => {
-  const a = new SigningState({ linkId: 1 });
-  const b = new SigningState({ linkId: 2 });
+  const a = new SigningState({ linkId: 1, now: Date.now });
+  const b = new SigningState({ linkId: 2, now: Date.now });
   assert.notEqual(a.linkId, b.linkId);
 });
