@@ -156,6 +156,8 @@ test('members validator: per-row reasons, offsets-vs-position-patch conflict red
   assert.match(String(onList([{ sysid: 1, north: 1, patch: { lat_int: 5 } }])), /conflict/);
   assert.equal(onList([{ sysid: 1, patch: { param7: 50 } }]), true,
     'a position-field patch without offsets is legitimate');
+  assert.match(String(onList([{ sysid: 1, patch: { target: 2 } }])), /may not set target —/,
+    'MANUAL_CONTROL\'s system field is addressing, like target_system');
 });
 
 test('members validation reads the open editable-list value', () => {

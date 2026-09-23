@@ -240,6 +240,35 @@ test('retargeting does not invent target_component on a system-only message', as
   assert.equal('target_component' in connection.sends[0].message.fields, false);
 });
 
+test('MANUAL_CONTROL is readdressed through its `target` field, never an invented target_system', async () => {
+  // The joystick message names its system field `target`; stamping
+  // target_system is dropped by the serializer, so both members' packets
+  // went to the vehicle the message was built for.
+  const connection = connectionStub([peer(1), peer(2)]);
+  const manual = { name: 'MANUAL_CONTROL', fields: { target: 1, x: 0, y: 0, z: 500, r: 0, buttons: 0 } };
+
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: manual,
+    targets: [{ sysid: 1 }, { sysid: 2, target: 1 }],
+    mode: 'sequential',
+    delivery: 'send',
+  });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(connection.sends.map((s) => s.message.fields.target), [1, 2], 'a patch cannot re-aim target either');
+  assert.equal(connection.sends.some((s) => 'target_system' in s.message.fields), false);
+
+  const broadcast = connectionStub([peer(1), peer(2)]);
+  await executeFanout({ signal, selection: { mode: 'all' },
+    connection: broadcast,
+    message: manual,
+    mode: 'broadcast',
+    delivery: 'send',
+  });
+  assert.equal(broadcast.sends[0].message.fields.target, 0);
+});
+
 test('broadcast sends one autopilot-pinned packet with target_system zero', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 

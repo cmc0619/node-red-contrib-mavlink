@@ -79,7 +79,7 @@
           // Keys the runtime refuses per run (command — the run is classified
           // and safety-gated once) or silently strips (target ids) — red the
           // row at save time instead. Row sysid is the addressing.
-          const RESERVED_KEYS = ['command', 'sysid', 'target_system', 'target_component'];
+          const RESERVED_KEYS = ['command', 'sysid', 'target', 'target_system', 'target_component'];
           const seen = {};
           for (let i = 0; i < v.length; i++) {
             const row = v[i];
