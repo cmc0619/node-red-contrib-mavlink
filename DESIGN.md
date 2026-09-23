@@ -854,10 +854,10 @@ param2=196608 (POSCTL packed) is TEMPORARILY_REJECTED; param2=3 is ACCEPTED and
 HEARTBEAT then reports 196608. The completion-tier mode match compared param2 to peer
 `flightMode` and could not cross that encoding split — Hold (param2=4, param3=3) timed
 out against HEARTBEAT 50593792 after the vehicle had switched. Since 2026-09-23 it packs
-the request (`px4CustomMode(param2, param3)`, an unsupplied param3 being the wire's
-zero-fill) when the vehicle's own HEARTBEAT says `MAV_AUTOPILOT_PX4`, and compares that;
-ArduPilot's custom_mode is one word on both sides and compares as sent. Re-measure if the
-Compose digest changes.
+the request (`px4CustomMode(param2, param3)`) when the Vehicle Profile firmware is `px4` —
+the same firmware the mode ladder split the request by, passed in as the TAKEOFF datum
+is — and compares that; every other firmware's custom_mode is one word on both sides and
+compares as sent. Re-measure if the Compose digest changes.
 *Check:* `examples/sitl/36-mode-tables.json`; `node --test test/command/completion.test.js`.
 
 **14.111 A takeoff/motion-message capability field that exists is not a capability.** 📖 (summary rule)
