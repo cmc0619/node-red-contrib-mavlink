@@ -112,18 +112,22 @@ test('oneditsave executes: clears a hidden field for a single-identity Connectio
   assert.equal(multiNode.identity, 'gcs', 'a real multi-identity pick is preserved');
 });
 
-test('a single-identity Connection never rings — even with a stale unbound pick', () => {
+test('a single-identity Connection passes blank but rings a stale unbound pick', () => {
   const defaults = loadNodeDefaults('mavlink-health', {
     // One bound identity: the required Local Identity, no additionals.
     c1: { localIdentity: 'comp', additionalIdentities: [] },
     comp: { role: 'companion' },
-    // A GCS identity valid on its own but bound to no Connection here — the
-    // exact stale value that used to red-ring.
+    // Picked while the Connection also bound it, then removed from the
+    // Connection without reopening Health. The runtime asserts a saved pick
+    // as saved, so it would fault an identity nothing heartbeats for and
+    // report "faulted" while comp stays healthy.
     loose: { role: 'gcs' },
   });
-  // Blank passes (the field is hidden), and so does a leftover unbound id.
-  assert.equal(defaults.identity.validate.call({ connection: 'c1' }, '', {}), true);
-  assert.equal(defaults.identity.validate.call({ connection: 'c1' }, 'loose', {}), true);
+  assert.equal(defaults.identity.validate.call({ connection: 'c1' }, '', {}), true,
+    'blank is what oneditsave stores for the hidden field');
+  assert.equal(defaults.identity.validate.call({ connection: 'c1' }, 'comp', {}), true,
+    'the one bound identity is still a bound identity');
+  assert.notEqual(defaults.identity.validate.call({ connection: 'c1' }, 'loose', {}), true);
 });
 
 test('a multi-identity Connection requires a bound pick; GCS is accepted', () => {
