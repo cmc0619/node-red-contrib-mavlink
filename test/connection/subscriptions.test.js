@@ -20,7 +20,7 @@ function decoded(overrides) {
 }
 
 test('each subscriber receives its own copy — mutation does not leak', () => {
-  const reg = new SubscriptionRegistry();
+  const reg = new SubscriptionRegistry({ logger: { error() {} } });
   let seenByB = null;
 
   reg.subscribe({}, (msg) => {
@@ -41,7 +41,7 @@ test('each subscriber receives its own copy — mutation does not leak', () => {
 });
 
 test('NaN survives the copy (the codec sentinel must not become null)', () => {
-  const reg = new SubscriptionRegistry();
+  const reg = new SubscriptionRegistry({ logger: { error() {} } });
   let received = null;
   reg.subscribe({}, (msg) => {
     received = msg;
@@ -51,7 +51,7 @@ test('NaN survives the copy (the codec sentinel must not become null)', () => {
 });
 
 test('filter narrows by message, sysid, and compid', () => {
-  const reg = new SubscriptionRegistry();
+  const reg = new SubscriptionRegistry({ logger: { error() {} } });
   const hits = [];
   reg.subscribe({ message: 'HEARTBEAT' }, () => hits.push('by-message'));
   reg.subscribe({ sysid: 2 }, () => hits.push('by-sysid'));
@@ -65,7 +65,7 @@ test('addressed-to filters read the target fields: own id and broadcast pass, ot
   // The companion role's inbox: a message names its recipient in its own
   // target_system / target_component fields. 0 is broadcast and passes; a
   // message with no target field at all is addressed to no one and does not.
-  const reg = new SubscriptionRegistry();
+  const reg = new SubscriptionRegistry({ logger: { error() {} } });
   const hits = [];
   reg.subscribe({ toSysid: 1, toCompid: 191 }, (m) => hits.push(m.name));
 
@@ -86,7 +86,7 @@ test('addressed-to filters read the target fields: own id and broadcast pass, ot
 });
 
 test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {
-  const reg = new SubscriptionRegistry();
+  const reg = new SubscriptionRegistry({ logger: { error() {} } });
   const received = [];
   reg.subscribe({ trustedOnly: true }, (msg) => received.push(msg.trusted));
 
@@ -98,7 +98,7 @@ test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #2
 });
 
 test('unsubscribe stops further delivery', () => {
-  const reg = new SubscriptionRegistry();
+  const reg = new SubscriptionRegistry({ logger: { error() {} } });
   let count = 0;
   const off = reg.subscribe({}, () => {
     count += 1;
@@ -110,7 +110,7 @@ test('unsubscribe stops further delivery', () => {
 });
 
 test('dispatch reports how many subscribers received the message', () => {
-  const reg = new SubscriptionRegistry();
+  const reg = new SubscriptionRegistry({ logger: { error() {} } });
   reg.subscribe({ message: 'HEARTBEAT' }, () => {});
   reg.subscribe({}, () => {});
   assert.equal(reg.dispatch(decoded({ name: 'HEARTBEAT' })), 2);

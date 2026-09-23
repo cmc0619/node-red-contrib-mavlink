@@ -312,7 +312,7 @@ module.exports = function registerMavlinkCommand(RED) {
           case CARRIER.INT:
             return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
               frame,
-              coordKinds: coordKinds() || undefined,
+              coordKinds: coordKinds(),
             });
           case CARRIER.LONG:
             return buildCommandLong(commandId, target.sysid, target.compid, paramArray, 0);

@@ -62,7 +62,7 @@ test('a pre-2015 host clock still produces a signable epoch timestamp', () => {
 
 test('signing state’s per-stream timestamps land on the wire and stay monotonic', () => {
   const wire = createWire({ bundle: loadBundled('minimal'), key: KEY });
-  const signing = new SigningState({ signOutbound: true, hasKey: true, linkId: 0 });
+  const signing = new SigningState({ signOutbound: true, hasKey: true, linkId: 0, now: Date.now });
 
   const first = signing.nextOutboundTimestamp(1, 1);
   const second = signing.nextOutboundTimestamp(1, 1);

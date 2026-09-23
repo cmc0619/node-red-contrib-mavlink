@@ -58,7 +58,7 @@ test('a non-zero payload is untouched by the one-byte minimum', () => {
 
 test('a signed all-zero frame still verifies — the signature covers the fixed frame', () => {
   const wire = createWire({ bundle: loadBundled('common'), key: KEY });
-  const signing = new SigningState({ signOutbound: true, hasKey: true, linkId: 0 });
+  const signing = new SigningState({ signOutbound: true, hasKey: true, linkId: 0, now: Date.now });
   const timestamp = signing.nextOutboundTimestamp(CTX.sysid, CTX.compid);
 
   const frame = wire.serialize(

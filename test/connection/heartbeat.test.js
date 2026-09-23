@@ -24,6 +24,10 @@ function build(opts = {}) {
   const logs = [];
   const scheduler = new HeartbeatScheduler({
     emit: (entry) => emitted.push(entry),
+    health: () => true,
+    now: Date.now,
+    setInterval,
+    clearInterval,
     logger: {
       info: (m) => logs.push({ level: 'info', m }),
       warn: (m) => logs.push({ level: 'warn', m }),
