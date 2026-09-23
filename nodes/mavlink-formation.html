@@ -20,6 +20,8 @@
     return !RED.mavlink.isBlank(v) && Number.isFinite(Number(v));
   }
   const headingRange = RED.mavlink.validateRange(0, 360);
+  const headingRequired = whenAnchorMode('fixed', (v, _opt) => !RED.mavlink.isBlank(v)
+      || 'a fixed anchor needs a heading — there is no leader to take it from');
 
   RED.nodes.registerType('mavlink-formation', {
     category: 'mavlink',
@@ -96,11 +98,8 @@
       headingDeg: {
         value: '',
         validate(v, opt) {
-          if (RED.mavlink.isBlank(v)
-              && RED.mavlink.liveOr(this, '#node-input-anchorMode', this.anchorMode, 'leader') === 'fixed') {
-            return 'a fixed anchor needs a heading — there is no leader to take it from';
-          }
-          return headingRange(v, opt);
+          const required = headingRequired.call(this, v, opt);
+          return required === true ? headingRange(v, opt) : required;
         },
       },
       pitchDeg: { value: 0, validate: RED.mavlink.validateRange(-180, 180) },
