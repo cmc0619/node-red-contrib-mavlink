@@ -1301,9 +1301,6 @@ frame and suggesting the `common` dialect, and the PX4 mode-completion ternary (
 let it through an else-arm nobody chose. Other MAVLink stacks exist (INAV documents its
 MAVLink as transmit-only telemetry), but none is flown here. Removed from the Vehicle
 Profile, the Fan-out firmware filter, and the Mission and Param Build firmware selects.
-No migration (YAGNI): a saved `custom` Vehicle Profile or Fan-out filter red-rings; the
-Build-tier firmware field checks only non-blank, so a saved `custom` there rides as an
-unmatched token. At runtime it matches no case, as it already did almost everywhere.
 The Local Identity role `custom` is a different vocabulary and stays.
 *Check:* `node --test test/nodes/vehicle-html.test.js test/command/completion.test.js`.
 
