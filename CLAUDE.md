@@ -1,9 +1,11 @@
 # CLAUDE.md
 
-**`AGENTS.md` is the doctrine for this repo. Read it before changing code.** This file
-exists because `AGENTS.md` is not loaded automatically — it has to be opened — and an
-agent that never opens it will follow its own defaults instead. The rules most likely to
-be lost that way are repeated here, in context, where they cannot be missed.
+**`AGENTS.md` is the doctrine for this repo.** It is imported below, so it loads with
+this file at every session start and again after every context compaction. An agent that
+works from its own defaults, or from a paraphrase of doctrine it read earlier, breaks it.
+The rules broken most often are repeated under "Rules that get broken" for emphasis.
+
+@AGENTS.md
 
 ## Rules that get broken
 
