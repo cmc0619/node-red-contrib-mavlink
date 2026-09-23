@@ -1284,8 +1284,9 @@ table whole (external review of 7b2d6ef, finding 5). A first-responder pin in th
 collector was tried and dropped: it answered a request that should not have been sent.
 Every Param action waits for one component's answer, and asking every component to
 send its whole table over the radio to keep one is the wrong request. Ruled: the Param
-dialog's target component refuses 0, as the System node's already did; blank still
-inherits the Vehicle Profile default. The runtime is unchanged — a hand-edited or
+dialog's target component refuses 0, as the System node's already did — typed, or
+inherited by a blank from a Vehicle Profile whose default is 0 (a companion identity
+addresses compid 1 and inherits nothing). The runtime is unchanged — a hand-edited or
 payload compid 0 rides to its natural reading (§0).
 *Check:* `node --test test/nodes/param-html.test.js` — targetComponent 0 red-rings.
 
