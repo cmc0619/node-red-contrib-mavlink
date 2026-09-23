@@ -82,7 +82,7 @@ test('mavlink-param Build shows Dialect and concrete dialects require Firmware',
   assert.match(html, /node-input-firmware/, 'firmware select element exists');
   assert.match(html, /value="ardupilot"/, 'ArduPilot firmware option exists');
   assert.match(html, /value="px4"/, 'PX4 firmware option exists');
-  assert.match(html, /value="custom"/, 'custom firmware option exists');
+  assert.ok(!/value="custom"/.test(html), 'custom firmware is gone');
   // Firmware XOR validator lives in buildTierDialectDefaults({ withFirmware: true })
   // — proven in mavlink-editor-resource.test.js. Param pins the merge, not a paste.
   assert.match(
@@ -387,7 +387,7 @@ test('mavlink-param value validator: each node is checked against its own firmwa
 test('mavlink-param value validator: a node whose definitions were never loaded skips the check', () => {
   // The safe direction: no entry means no bounds to apply, never someone
   // else's bounds.
-  const strangerNode = { delivery: 'build', dialect: 'common', firmware: 'custom' };
+  const strangerNode = { delivery: 'build', dialect: 'common', firmware: '' };
   const validate = mountKeyedValidator(BY_KEY, strangerNode, 'RC1_MIN');
   assert.equal(validate(99999), true);
   assert.equal(validate('abc'), false, 'but it is still a number check');

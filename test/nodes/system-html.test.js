@@ -41,7 +41,7 @@ test('mavlink-system keeps a 10 s step window: the shared ack ring, its own valu
 test('mavlink-system conditionally validates log id, FTP path, and parameter encoding', () => {
   const defaults = loadNodeDefaults('mavlink-system', {
     connection: { vehicle: 'vehicle' },
-    vehicle: { firmware: 'custom' },
+    vehicle: { firmware: 'ardupilot' },
   });
   assert.equal(defaults.logId.validate.call({ service: 'logs', operation: 'list' }, 'not-an-id', {}), true);
   assert.equal(defaults.logId.validate.call({ service: 'logs', operation: 'download' }, 7, {}), true);

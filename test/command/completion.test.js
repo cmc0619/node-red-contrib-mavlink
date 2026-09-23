@@ -28,7 +28,7 @@ test('DO_SET_MODE completion matches the requested custom mode from param 2 (par
   // params = [base_mode, custom_mode, submode, 0, 0, 0, 0]
   const params = [1, 4, 0, 0, 0, 0, 0];
   const pt = peerWithMode(3, 1, 4);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, true);
 });
 
@@ -36,7 +36,7 @@ test('DO_SET_MODE completion stays pending when the active mode differs from par
   const params = [1, 4, 0, 0, 0, 0, 0];
   // Vehicle is in mode 9, not the requested custom mode 4.
   const pt = peerWithMode(3, 1, 9);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, false);
 });
 
@@ -45,14 +45,14 @@ test('DO_SET_MODE completion matches custom mode 0 when the vehicle is in mode 0
   // wrongly report success the moment a peer exists. It must compare against 0.
   const params = [1, 0, 0, 0, 0, 0, 0];
   const pt = peerWithMode(3, 1, 0);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, true);
 });
 
 test('DO_SET_MODE completion stays pending when custom mode 0 is requested but the vehicle is in another mode', () => {
   const params = [1, 0, 0, 0, 0, 0, 0];
   const pt = peerWithMode(3, 1, 5);
-  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1);
+  const res = checkCompletion(COMPLETION.SET_MODE, params, pt, 3, 1, undefined, 'ardupilot');
   assert.equal(res.done, false);
 });
 
@@ -65,9 +65,11 @@ test('PX4 DO_SET_MODE completes against the packed HEARTBEAT custom_mode (§14.1
     checkCompletion(COMPLETION.SET_MODE, hold, peerWithMode(1, 1, flightMode), 1, 1, undefined, firmware).done;
   assert.equal(check(50593792, 'px4'), true);
   assert.equal(check(4 * 65536, 'px4'), false, 'AUTO with another sub_mode is not Hold');
-  // Any other firmware's custom_mode is one word on both sides.
+  // ArduPilot's custom_mode is one word on both sides.
   assert.equal(check(4, 'ardupilot'), true);
   assert.equal(check(50593792, 'ardupilot'), false);
+  // An unmatched firmware selects no comparison (§5) and never completes.
+  assert.equal(check(4, 'custom'), false);
 });
 
 test('a base-mode-only DO_SET_MODE is unverifiable — never done, never falsely confirmed', () => {

@@ -211,7 +211,7 @@ test('resolveParamEncoding: explicit override still wins over a garbage firmware
     PARAM_ENCODING.BYTEWISE
   );
   assert.equal(
-    resolveParamEncoding({ encoding: 'c-cast', firmware: 'custom' }),
+    resolveParamEncoding({ encoding: 'c-cast', firmware: 'betaflight' }),
     PARAM_ENCODING.C_CAST
   );
 });

@@ -125,7 +125,7 @@
       // member set is the dialect's, which this dialog cannot enumerate at
       // deploy); the other two are the dialog's own closed lists.
       vehicleType: { value: '', validate: RED.mavlink.validateUint8(0) },
-      firmwareFilter: { value: '', validate: RED.mavlink.oneOf(['', 'ardupilot', 'px4', 'custom']) },
+      firmwareFilter: { value: '', validate: RED.mavlink.oneOf(['', 'ardupilot', 'px4']) },
       armedFilter: { value: '', validate: RED.mavlink.oneOf(['', 'true', 'false']) },
       executionMode: {
         value: 'sequential',
@@ -325,7 +325,7 @@
     object of raw wire-unit fields.
   </div>
   <div class="form-row" id="row-fanout-typeFilter"><label for="node-input-vehicleType">Type filter</label><select id="node-input-vehicleType"></select></div>
-  <div class="form-row" id="row-fanout-firmwareFilter"><label for="node-input-firmwareFilter">Firmware</label><select id="node-input-firmwareFilter"><option value="">Any</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option><option value="custom">Custom</option></select></div>
+  <div class="form-row" id="row-fanout-firmwareFilter"><label for="node-input-firmwareFilter">Firmware</label><select id="node-input-firmwareFilter"><option value="">Any</option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option></select></div>
   <div class="form-row" id="row-fanout-armedFilter"><label for="node-input-armedFilter">Armed</label><select id="node-input-armedFilter"><option value="">Any</option><option value="true">Armed</option><option value="false">Disarmed</option></select></div>
   <div class="form-row"><label for="node-input-executionMode">Execution</label><select id="node-input-executionMode"><option value="sequential">Sequential</option><option value="broadcast">Broadcast</option></select></div>
   <div class="form-row" id="row-fanout-interval"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>

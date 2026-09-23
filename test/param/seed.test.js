@@ -181,8 +181,6 @@ test('catalogLabel names the definition set the operator is actually looking at'
     catalogLabel({ firmware: 'ardupilot', vehicleFamily: 'blimp', count: 3127, source: 'profile' }),
     'ArduPilot Blimp · 3127 definitions (downloaded for this profile)'
   );
-
-  assert.equal(catalogLabel({ firmware: 'custom', count: 1 }), 'Custom · 1 definition (shipped seed)');
 });
 
 test('catalogLabel counts agree with what defsFor actually serves', () => {

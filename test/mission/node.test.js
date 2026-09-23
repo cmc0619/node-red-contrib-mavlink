@@ -64,7 +64,7 @@ test('payload === false suppresses: no output, no error', async () => {
 test('Build tier emits the protocol plan on output 0 and sends nothing', async () => {
   const conn = new StubConnection();
   const Node = loadNode(conn);
-  const node = new Node({ operation: 'download', connection: 'conn', delivery: 'build', dialect: 'common', firmware: 'custom', missionType: 'mission' });
+  const node = new Node({ operation: 'download', connection: 'conn', delivery: 'build', dialect: 'common', firmware: 'ardupilot', missionType: 'mission' });
   const { outputs } = await runInput(node, { payload: {} });
 
   assert.equal(outputs.length, 1);
@@ -83,7 +83,7 @@ test('set-current Build emits its address and sequence without mission_type', as
     connection: 'conn',
     delivery: 'build',
     dialect: 'common',
-    firmware: 'custom',
+    firmware: 'ardupilot',
     missionType: 'mission',
     targetSystem: 42,
     targetComponent: 1,

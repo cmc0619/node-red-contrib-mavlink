@@ -112,7 +112,7 @@ test('frameForReference: offset is LOCAL_OFFSET_NED on every stack and asks no f
   // whether the vehicle *acts* on it, which is the editor's business (PX4 is
   // measured inert, §14 2026-08-05, and the dropdown stops offering it there).
   // The driver has a frame number to give, so it gives it.
-  for (const profile of [null, { firmware: 'ardupilot' }, { firmware: 'px4' }, { firmware: 'custom' }]) {
+  for (const profile of [null, { firmware: 'ardupilot' }, { firmware: 'px4' }]) {
     assert.equal(
       frameForReference('offset', profile),
       7,
