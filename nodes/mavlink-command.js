@@ -421,7 +421,8 @@ module.exports = function registerMavlinkCommand(RED) {
               connNode.peerTable,
               target.sysid,
               target.compid,
-              completionFrame
+              completionFrame,
+              profile.firmware
             );
             if (stateCheck.done) {
               // Ack was lost on the return leg; the command ran.
@@ -498,6 +499,7 @@ module.exports = function registerMavlinkCommand(RED) {
           sysid: target.sysid,
           compid: completionCompid,
           frame: completionFrame,
+          firmware: profile.firmware,
           timeoutMs: completionTimeoutMs,
         });
         if (myGen === _generation) {
