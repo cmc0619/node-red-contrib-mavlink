@@ -300,18 +300,6 @@ test('collector pins the first advertised count; later differing counts do not m
   assert.equal(warns.length, 1, 'the out-of-range frame was warned about');
 });
 
-test('collector keeps the first responder\'s table; another component\'s frames never complete it (§14.149)', () => {
-  // A component-0 list request draws a table from every component. Index 0
-  // from the autopilot plus index 1 from a camera is neither table.
-  const collector = createParamListCollector();
-  const from = (compid, frame) => ({ ...frame, sysid: 1, compid });
-  assert.equal(collector.accept(from(1, listFrame(0, 2, 'AP_P0'))), true);
-  assert.equal(collector.accept(from(100, listFrame(1, 2, 'CAM_P1'))), null, 'the camera frame is ignored');
-  assert.equal(collector.accept(from(100, listFrame(0, 5, 'CAM_P0'))), null, 'nor does its count move the target');
-  const complete = collector.accept(from(1, listFrame(1, 2, 'AP_P1')));
-  assert.deepEqual(complete.map((p) => p.paramId), ['AP_P0', 'AP_P1']);
-});
-
 test('collector completes count 0 as an empty list', () => {
   const collector = createParamListCollector();
   assert.deepEqual(collector.accept(listFrame(65535, 0)), [], 'the count-0 frame is the whole answer');

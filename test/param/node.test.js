@@ -133,7 +133,7 @@ test('a broadcast target still sends — the editor is what reds it', () => {
   assert.equal(conn.sent[0].message.fields.target_system, 0);
 });
 
-test('mavlink-param confirm set works end to end with a broadcast COMPONENT (compid 0) and a real sysid — deliberate, supported behavior', () => {
+test('mavlink-param confirm set with compid 0 (editor-refused, §14.149) rides its natural reading: an unscoped echo wait', () => {
   const conn = connStubFull();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-param')(RED);

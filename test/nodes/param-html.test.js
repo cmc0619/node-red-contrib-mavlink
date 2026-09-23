@@ -670,7 +670,9 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.maxRetries.validate.call({ delivery: 'confirm', action: 'read' }, '1.5', {}), true, 'a read waits once; the hidden retries row never reds');
 
   assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
-  assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
+  assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 1 and 255/);
+  assert.match(String(defaults.targetComponent.validate.call({}, '0', {})), /between 1 and 255/,
+    'component 0 is not a target: every Param action waits for one component (§14.149)');
 });
 
 test('param id search uses the stock autoComplete widget, not a hand-rolled results panel', () => {
