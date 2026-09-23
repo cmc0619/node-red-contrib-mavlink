@@ -142,9 +142,8 @@ keyed `address:port` (capped 100, junk-first then LRU eviction; TCP clears on
 **14.19 Both firmwares publish parameter definitions at known URLs; the editor pre-fills them.** ✔
 ArduPilot: `https://autotest.ardupilot.org/Parameters/<Vehicle>/apm.pdef.json` (HTTP 200
 re-checked 2026-08-19). PX4: `https://artifacts.px4.io/Firmware/_general/parameters.xml`
-(same check). Custom firmware has no known pre-fill URL — there is nothing to invent —
-and an ArduPilot profile whose vehicle family is `unknown` has no per-document URL either
-(the union seed in 14.22 is names-only, not an Update source). The seed generator
+(same check). An ArduPilot profile whose vehicle family is `unknown` has no
+per-document URL (the union seed in 14.22 is names-only, not an Update source). The seed generator
 (`scripts/generate-param-seed.js`) fetches the known sources at build time; the shipped
 seed carries them all (see 14.22). At runtime the Vehicle Profile editor pre-fills
 `paramDefsUrl` only when a URL is known (named ArduPilot document or PX4); the operator
@@ -582,8 +581,8 @@ reproduce. Tolerance follows the wire: float32 precision for c-cast, exact for b
 Explicit `msg.payload.paramEncoding` wins, and it wins verbatim — the rung returns
 any non-blank value without testing it. Then the `PARAM_ENCODE_BYTEWISE`/`_C_CAST`
 capability bits. Then named firmware: px4 → bytewise, ardupilot → c-cast. Anything
-else — `custom` firmware with no bits and no override, or an override the ladder
-does not recognise — resolves nothing, and `encodeParamValue` matches no case and
+else — a hand-edited firmware token with no bits and no override (14.150), or an
+override the ladder does not recognise — resolves nothing, and `encodeParamValue` matches no case and
 returns NaN (§5), which is a legal float and rides `param_value` onto the wire. The
 confirm and collect tiers report `unconfirmed`, because no echo can match; the send
 tier reports `sent`. The ladder has no fourth rung and the driver authors no refusal:
@@ -856,8 +855,9 @@ HEARTBEAT then reports 196608. The completion-tier mode match compared param2 to
 out against HEARTBEAT 50593792 after the vehicle had switched. Since 2026-09-23 it packs
 the request (`px4CustomMode(param2, param3)`) when the Vehicle Profile firmware is `px4` —
 the same firmware the mode ladder split the request by, passed in as the TAKEOFF datum
-is — and compares that; every other firmware's custom_mode is one word on both sides and
-compares as sent. Re-measure if the Compose digest changes.
+is — and compares that. ArduPilot's custom_mode is one word on both sides and compares as
+sent; an unmatched firmware selects no comparison (§5). Re-measure if the Compose digest
+changes.
 *Check:* `examples/sitl/36-mode-tables.json`; `node --test test/command/completion.test.js`.
 
 **14.111 A takeoff/motion-message capability field that exists is not a capability.** 📖 (summary rule)
@@ -1289,6 +1289,23 @@ inherited by a blank from a Vehicle Profile whose default is 0 (a companion iden
 addresses compid 1 and inherits nothing). The runtime is unchanged — a hand-edited or
 payload compid 0 rides to its natural reading (§0).
 *Check:* `node --test test/nodes/param-html.test.js` — targetComponent 0 red-rings.
+
+## 14.150 Firmware vocabulary
+
+**14.150 Firmware is ArduPilot or PX4; there is no `custom` firmware.** ✔ 📖 (owner ruling, 2026-09-23)
+`custom` selected almost nothing of its own. Parameter encoding (14.81), mode names and
+Set Mode by name, the Move body frame, and the parameter-definition URL (14.19) all
+matched no case for it (§5), so a `custom` profile got NaN encodings, `unconfirmed`
+params, and no modes. Its only behaviours were sharing ArduPilot's takeoff completion
+frame and suggesting the `common` dialect, and the PX4 mode-completion ternary (14.110)
+let it through an else-arm nobody chose. Other MAVLink stacks exist (INAV documents its
+MAVLink as transmit-only telemetry), but none is flown here. Removed from the Vehicle
+Profile, the Fan-out firmware filter, and the Mission and Param Build firmware selects.
+No migration (YAGNI): a saved `custom` Vehicle Profile or Fan-out filter red-rings; the
+Build-tier firmware field checks only non-blank, so a saved `custom` there rides as an
+unmatched token. At runtime it matches no case, as it already did almost everywhere.
+The Local Identity role `custom` is a different vocabulary and stays.
+*Check:* `node --test test/nodes/vehicle-html.test.js test/command/completion.test.js`.
 
 ## Removed from the old §14, and why
 
