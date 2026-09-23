@@ -269,6 +269,21 @@ test('MANUAL_CONTROL is readdressed through its `target` field, never an invente
   assert.equal(broadcast.sends[0].message.fields.target, 0);
 });
 
+test('only MANUAL_CONTROL is addressed through `target`; another message\'s `target` field is data', async () => {
+  // A custom message may carry its real target_system beside an unrelated
+  // field named `target`; readdressing that field left the packet aimed at
+  // the original system.
+  const connection = connectionStub([peer(2)]);
+  await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: { name: 'CUSTOM_AIM', fields: { target_system: 1, target: 42 } },
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(connection.sends[0].message.fields.target_system, 2);
+  assert.equal(connection.sends[0].message.fields.target, 42, 'the unrelated field rides as built');
+});
+
 test('broadcast sends one autopilot-pinned packet with target_system zero', async () => {
   const connection = connectionStub([peer(1), peer(2)]);
 
