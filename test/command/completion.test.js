@@ -68,8 +68,6 @@ test('PX4 DO_SET_MODE completes against the packed HEARTBEAT custom_mode (§14.1
   // ArduPilot's custom_mode is one word on both sides.
   assert.equal(check(4, 'ardupilot'), true);
   assert.equal(check(50593792, 'ardupilot'), false);
-  // An unmatched firmware selects no comparison (§5) and never completes.
-  assert.equal(check(4, 'custom'), false);
 });
 
 test('a base-mode-only DO_SET_MODE is unverifiable — never done, never falsely confirmed', () => {

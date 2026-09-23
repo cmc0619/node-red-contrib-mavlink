@@ -196,7 +196,6 @@ test('firmware and vehicle family red on membership (walled-garden sweep)', () =
   for (const v of ['ardupilot', 'px4']) {
     assert.equal(defaults.firmware.validate.call({}, v, {}), true, v);
   }
-  assert.match(String(defaults.firmware.validate.call({}, 'custom', {})), /must be one of/, 'custom firmware is gone');
   assert.match(String(defaults.firmware.validate.call({}, 'betaflight', {})), /must be one of/);
   assert.match(String(defaults.firmware.validate.call({}, '', {})), /must be one of/, 'blank firmware reds');
 

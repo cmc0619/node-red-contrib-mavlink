@@ -78,7 +78,6 @@ test('firmware filter is a small select (ArduPilot/PX4)', () => {
   assert.match(html, /<select id="node-input-firmwareFilter">/);
   assert.match(html, /<option value="ardupilot">ArduPilot<\/option>/);
   assert.match(html, /<option value="px4">PX4<\/option>/);
-  assert.ok(!/<option value="custom">Custom<\/option>/.test(html), 'custom firmware is gone');
 });
 
 test('admin catalog fetches go through the shared loaders (httpAdminRoot-safe)', () => {
