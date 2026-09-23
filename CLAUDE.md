@@ -11,8 +11,8 @@ The rules broken most often are repeated under "Rules that get broken" for empha
 
 **Every report of a diff includes the runtime-logic line count, counted as code, not prose**
 (owner standing orders, 2026-08-10 and 2026-08-14): additions/deletions across `lib/**/*.js`
-+ `nodes/*.js`, tests and editor `.html` broken out separately, **with comment and blank
-lines stripped from both sides before netting** — this codebase carries more comment than
++ `nodes/*.js`, editor `.html` broken out separately, no test counts (`AGENTS.md` §2),
+**with comment and blank lines stripped from both sides before netting** — this codebase carries more comment than
 code on new work, so raw `git diff --numstat` roughly doubles every number and buries the
 delta the net-code-budget rule (`AGENTS.md`) governs. Numstat may ride alongside, labeled.
 
