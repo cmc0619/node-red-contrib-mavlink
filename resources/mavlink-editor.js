@@ -1854,11 +1854,52 @@
    * @returns {number|undefined}
    */
   function inheritedTargetSystem(self, tier) {
+    return inheritedProfileDefault(self, tier, 'defaultTargetSystem');
+  }
+
+  /**
+   * One Vehicle Profile default a blank target field inherits, by the rung
+   * {@link inheritedVehicleId} reads; undefined when nothing resolves.
+   *
+   * @param {object} self  the node config under validation
+   * @param {string} tier
+   * @param {'defaultTargetSystem'|'defaultTargetComponent'} key
+   * @returns {number|undefined}
+   */
+  function inheritedProfileDefault(self, tier, key) {
     const vehicleId = inheritedVehicleId(self, tier);
     const vehicle = vehicleId ? RED.nodes.node(vehicleId) : null;
-    if (!vehicle || RED.mavlink.isBlank(vehicle.defaultTargetSystem)) return undefined;
-    return Number(vehicle.defaultTargetSystem);
+    if (!vehicle || RED.mavlink.isBlank(vehicle[key])) return undefined;
+    return Number(vehicle[key]);
   }
+
+  /**
+   * Target-compid validator for a node whose every action waits for one
+   * component's answer (Param, §14.149): component 0 (MAV_COMP_ID_ALL) reds
+   * whether typed or inherited. Blank is checked by what it resolves to, the
+   * bound Vehicle Profile's default, as {@link RED.mavlink.validateTargetSystem}
+   * checks the sysid; a companion identity on a wire tier addresses compid 1
+   * whatever is configured (lib/addressing/resolve.js), so it inherits nothing.
+   *
+   * @param {string} [modeField='delivery']
+   * @param {string} [fallbackTier]  tier assumed when the field is unset
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validateSingleTargetComponent = function (modeField, fallbackTier) {
+    const key = modeField || 'delivery';
+    return function (v, opt) {
+      const range = RED.mavlink.validateUint8(1).call(this, v, opt);
+      if (range !== true || !RED.mavlink.isBlank(v)) return range;
+      const tier = RED.mavlink.liveOr(this, `#node-input-${key}`, this[key], fallbackTier);
+      const identity = RED.mavlink.liveOr(this, '#node-input-identity', this.identity, '');
+      if (tier !== 'build' && RED.mavlink.identityRole(identity) === 'companion') return true;
+      if (inheritedProfileDefault(this, tier, 'defaultTargetComponent') === 0) {
+        return 'inherits component 0 from the bound Vehicle Profile — a parameter answer '
+          + 'comes from one component; pick one here or change the profile default';
+      }
+      return true;
+    };
+  };
 
   /** The Vehicle Profile id the target rung above reads from, '' when none. */
   function inheritedVehicleId(self, tier) {

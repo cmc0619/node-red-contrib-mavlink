@@ -23,12 +23,12 @@
       },
       /**
        * Every Param action waits for one component's answer, so component 0
-       * (MAV_COMP_ID_ALL) is not a target here: a list sent to it draws every
-       * component's whole table and mixes their indices (§14.149), and a
-       * read or set to it confirms on whichever component answers. Blank
-       * inherits the Vehicle Profile's default.
+       * (MAV_COMP_ID_ALL) is not a target here, typed or inherited from the
+       * Vehicle Profile: a list sent to it draws every component's whole
+       * table and mixes their indices (§14.149), and a read or set to it
+       * confirms on whichever component answers.
        */
-      targetComponent: { value: '', validate: RED.mavlink.validateUint8(1) },
+      targetComponent: { value: '', validate: RED.mavlink.validateSingleTargetComponent('delivery', 'build') },
       // Which way the parameter is named. The protocol has one field for this
       // -- param_index -1 means "use param_id" -- so the two are alternatives,
       // not a pair, and the dialog shows one at a time.
