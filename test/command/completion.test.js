@@ -56,6 +56,26 @@ test('DO_SET_MODE completion stays pending when custom mode 0 is requested but t
   assert.equal(res.done, false);
 });
 
+test('PX4 DO_SET_MODE completes against the packed HEARTBEAT custom_mode (§14.110)', () => {
+  // Hold goes out as main 4 (AUTO), sub 3 (LOITER); PX4's HEARTBEAT reports
+  // the pair packed, (3 << 24) | (4 << 16) = 50593792. Comparing that to
+  // param2 = 4 timed out a mode change the vehicle had made.
+  const px4 = (flightMode) => {
+    const pt = new StubPeerTable();
+    pt.setComponent(1, 1, { flightMode, autopilot: 12 });
+    return pt;
+  };
+  assert.equal(checkCompletion(COMPLETION.SET_MODE, [1, 4, 3, 0, 0, 0, 0], px4(50593792), 1, 1).done, true);
+  assert.equal(checkCompletion(COMPLETION.SET_MODE, [1, 4, 3, 0, 0, 0, 0], px4(4 * 65536), 1, 1).done, false,
+    'AUTO with another sub_mode is not Hold');
+  // POSCTL is main-only: param3 unsupplied rides as the wire's zero-fill.
+  assert.equal(checkCompletion(COMPLETION.SET_MODE, [1, 3, undefined, 0, 0, 0, 0], px4(196608), 1, 1).done, true);
+  // ArduPilot's custom_mode is the whole word on both sides.
+  const ap = new StubPeerTable();
+  ap.setComponent(1, 1, { flightMode: 4, autopilot: 3 });
+  assert.equal(checkCompletion(COMPLETION.SET_MODE, [1, 4, 0, 0, 0, 0, 0], ap, 1, 1).done, true);
+});
+
 test('a base-mode-only DO_SET_MODE is unverifiable — never done, never falsely confirmed', () => {
   // checkCompletion receives the *requested* params, sparse — the command
   // node's wire array zero-fills, and a filler 0 is indistinguishable from
