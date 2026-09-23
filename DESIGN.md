@@ -1274,6 +1274,22 @@ Reopen only for a fleet vehicle that ignores `MISSION_REQUEST_INT`.
 *Check:* `node --test test/mission/download.test.js` — a silent item 0 fails naming
 seq 0 and no `MISSION_REQUEST` is sent.
 
+## 14.149 Parameter list collect
+
+**14.149 A component-0 parameter list collects the first responder's table.** ✔ (2026-09-23)
+`PARAM_REQUEST_LIST` to component 0 draws one table per component, each keyed by the
+same `param_index` values from 0. The collector keyed entries by index alone, so index 0
+from the autopilot plus index 1 from a camera reported `list-complete` — neither table
+whole (external review of 7b2d6ef, finding 5). The collector pins the compid of the
+first frame beside the first advertised count, and ignores frames from any other
+component: the collect is one component's table, the one that answered first, as a
+component-0 command completes on the component that replied (§14.144). The wire request
+and the subscription are unchanged; Param's collect and `ParamBackup` share the
+collector. Collecting every component's table in one run is a different feature, not
+this one.
+*Check:* `node --test test/param/param.test.js` — a camera frame neither completes the
+autopilot's table nor moves its count.
+
 ## Removed from the old §14, and why
 
 Entries and passages dropped in this rewrite. The *measurements* they carried survive
