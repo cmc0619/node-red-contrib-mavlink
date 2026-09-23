@@ -425,6 +425,26 @@ test('REAL32 echo confirms at float32 precision, not absolute 1e-6', () => {
   );
 });
 
+test('a float32 echo of a different value never confirms, however small the gap (§14.80)', () => {
+  // 0 and float32(5e-7) are two distinct stored values; an absolute 1e-6
+  // epsilon once called them equal and confirmed a set the vehicle refused.
+  const request = {
+    target: { sysid: 1, compid: 1 },
+    paramId: 'WPNAV_SPEED',
+    value: 0,
+    paramType: 'MAV_PARAM_TYPE_REAL32',
+    firmware: 'ardupilot',
+  };
+  const echoOf = (stored) => ({
+    name: 'PARAM_VALUE',
+    sysid: 1,
+    compid: 1,
+    fields: { param_id: 'WPNAV_SPEED', param_type: 9, param_value: stored },
+  });
+  assert.equal(matchesParamEcho(request, echoOf(Math.fround(5e-7))), false);
+  assert.equal(matchesParamEcho(request, echoOf(0)), true);
+});
+
 test('bytewise integer echo compares exactly — float32 tolerance must not confirm a different value', () => {
   // Above 2^24 consecutive integers collide under Math.fround, so a float32
   // comparison would confirm a stored value the operator did not ask for. A
