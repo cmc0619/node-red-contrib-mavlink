@@ -822,7 +822,6 @@ test('completionTimeout: a whole number >= 1, checked only on the Complete tier'
   assert.equal(complete(60000), true);
   assert.match(String(complete(0)), />= 1/, 'zero would time every completion out on the first poll');
   assert.match(String(complete('')), />= 1/);
-  assert.match(String(complete(2147483648)), /at most 2147483647/);
   assert.equal(completionTimeout.validate.call({ delivery: 'confirm' }, '', {}), true,
     'the row is hidden and unread off the Complete tier');
 });

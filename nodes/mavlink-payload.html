@@ -18,6 +18,12 @@
      * (test/nodes/payload-verb-html.test.js).
      */
     const REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
+    /**
+     * The slots whose recipe sends NaN for a blank — the dialect's "unused"
+     * value (gimbal aim rates: not rate-controlled). Every other blank slot
+     * would go out unset.
+     */
+    const NAN_WHEN_BLANK = { 'gimbal|aim': ['pitchRate', 'yawRate', 'rollRate'] };
     const MAV_BOOL_VALUES = [0, 1, '0', '1'];
     const validateMavBool = RED.mavlink.oneOf(MAV_BOOL_VALUES);
     const VALUE_VALIDATORS = {
@@ -97,6 +103,12 @@
                 }
               }
             }
+            const nanWhenBlank = NAN_WHEN_BLANK[key] || [];
+            for (const field of Object.keys(values)) {
+              if (RED.mavlink.isBlank(values[field]) && nanWhenBlank.indexOf(field) === -1) {
+                return `${field} is blank — it would be sent unset; enter a value`;
+              }
+            }
             const validators = VALUE_VALIDATORS[key] || {};
             for (const field of Object.keys(validators)) {
               const verdict = validators[field](values[field], _opt);
@@ -132,11 +144,9 @@
           return;
         }
         if (kind === 'bitmask') {
-          // Blank, not 0, when nothing is selected: 0 would assert "no flags"
-          // as a deliberate choice. Recipe default is painted into the control
-          // when unset so a save persists it.
+          /** Nothing selected is the mask 0 — "no flags", as pymavlink and MAVSDK send it. */
           const mask = RED.mavlink.bitmaskFromSelection($input.val());
-          values[key] = mask === null ? '' : mask;
+          values[key] = mask === null ? 0 : mask;
           return;
         }
         values[key] = $input.val();

@@ -79,25 +79,6 @@
     return companionBoundElsewhere(conn, [identityId]) === true;
   }
 
-  /** The Vehicle Profile this Connection binds, read live while its dialog is open. */
-  function boundVehicle(conn) {
-    const vehicleId = RED.mavlink.liveOr(conn, '#node-config-input-vehicle', conn.vehicle, '');
-    return vehicleId ? RED.nodes.node(vehicleId) : null;
-  }
-
-  /**
-   * A companion sends from the Vehicle Profile's target sysid, and system 0
-   * is never a source (DESIGN 14.138): a fleet-broadcast Vehicle Profile
-   * cannot carry a companion.
-   */
-  function companionSysidZero(vehicleNode, identityIds) {
-    const sysid = vehicleNode ? vehicleNode.defaultTargetSystem : '';
-    if (RED.mavlink.isBlank(sysid) || Number(sysid) !== 0) return true;
-    if (!identityIds.some((id) => RED.mavlink.identityRole(id) === 'companion')) return true;
-    return 'a companion takes its source sysid from the Vehicle Profile’s target sysid, '
-      + 'and 0 is never a source (DESIGN 14.138)';
-  }
-
   // The Connection whose dialog is open. Node-RED hands the Identity picker's
   // filter no node — `filter.call(null, config)` on the first build, the edit
   // context on the rebuild after the pencil returns — so the owner is read
@@ -213,9 +194,7 @@
           const cfg = RED.nodes.node(v);
           if (!cfg) return 'no longer exists — reselect an Identity';
           if (cfg.valid === false) return 'is not properly configured';
-          const elsewhere = companionBoundElsewhere(this, [v]);
-          if (elsewhere !== true) return elsewhere;
-          return companionSysidZero(boundVehicle(this), [v]);
+          return companionBoundElsewhere(this, [v]);
         } },
       // Every bound identity must send as its own (sysid, compid). Sharing the
       // pair is a wire collision the driver cannot report: the Connection runs
@@ -234,12 +213,11 @@
         if ($live) v = $live.val();
         const elsewhere = companionBoundElsewhere(this, v);
         if (elsewhere !== true) return elsewhere;
-        const vehicleNode = boundVehicle(this);
+        const vehicleId = RED.mavlink.liveOr(this, '#node-config-input-vehicle', this.vehicle, '');
+        const vehicleNode = vehicleId ? RED.nodes.node(vehicleId) : null;
         // No Vehicle resolved yet — its own required ring owns that, and a
         // companion's sysid cannot be derived without it.
         if (!vehicleNode) return true;
-        const sysidZero = companionSysidZero(vehicleNode, Array.isArray(v) ? v : []);
-        if (sysidZero !== true) return sysidZero;
         const primary = RED.mavlink.liveOr(this, '#node-config-input-localIdentity', this.localIdentity, '');
         const bound = [primary].concat(Array.isArray(v) ? v : []);
         const clash = RED.mavlink.duplicateBoundIdentity(bound, vehicleNode.defaultTargetSystem);

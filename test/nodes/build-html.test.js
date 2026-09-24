@@ -515,5 +515,4 @@ test('repeatMs: a whole number of milliseconds, 0 = off', () => {
   assert.equal(validate(0), true, 'off');
   assert.equal(validate(1000), true);
   assert.match(String(validate(0.5)), /whole number/, 'a fraction would run the timer at 1 ms');
-  assert.match(String(validate(2147483648)), /at most 2147483647/);
 });

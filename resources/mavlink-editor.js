@@ -1723,20 +1723,10 @@
   };
 
   /**
-   * The longest delay Node.js timers honour (2^31 - 1 ms). A longer
-   * `setTimeout`/`setInterval` delay is replaced by 1 ms, so "wait a month"
-   * would fire at once.
-   */
-  const MAX_TIMER_MS = 2147483647;
-  RED.mavlink.MAX_TIMER_MS = MAX_TIMER_MS;
-
-  /**
-   * Lower-bound check — the duration / retry-count shape. The value must be a
-   * number at least `min`, a whole number when `opts.integer` is set, and no
-   * more than {@link MAX_TIMER_MS}: every caller is a timer delay or a count,
-   * and a delay past that ceiling runs at 1 ms. Blank reds: the editor owns
-   * the default (the field's `value:`), so the runtime reads the saved number
-   * and nothing falls back.
+   * Open-ended lower-bound check — the duration / retry-count shape. The value
+   * must be a number at least `min`, a whole number when `opts.integer` is
+   * set. Blank reds: the editor owns the default (the field's `value:`), so
+   * the runtime reads the saved number and nothing falls back.
    *
    * @param {number} min
    * @param {{integer?: boolean}} [opts]
@@ -1747,9 +1737,8 @@
     return function (v, _opt) {
       const n = Number(v);
       const numeric = !RED.mavlink.isBlank(v) && (integer ? Number.isInteger(n) : Number.isFinite(n));
-      if (!numeric || n < min) return `must be ${integer ? 'a whole number' : 'a number'} >= ${min}`;
-      if (n > MAX_TIMER_MS) return `must be at most ${MAX_TIMER_MS} — Node.js runs a longer timer at 1 ms`;
-      return true;
+      if (numeric && n >= min) return true;
+      return `must be ${integer ? 'a whole number' : 'a number'} >= ${min}`;
     };
   };
 

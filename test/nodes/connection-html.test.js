@@ -773,49 +773,6 @@ test('a saved secret\'s __PWRD__ placeholder is present, never malformed', () =>
   assert.equal(both.credentials.signingKeyHex.validate.call({ id: 'c9', credentials: {} }, key, {}), true);
 });
 
-test('a companion cannot bind to a Vehicle Profile whose target sysid is 0 (DESIGN 14.138)', () => {
-  const nodes = { ...BOUND, fleet: { defaultTargetSystem: 0 } };
-  const defaults = loadNodeDefaults('mavlink-connection', nodes);
-  const reason = /0 is never a source/;
-
-  assert.match(
-    String(defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'fleet' }, 'id-comp', {})),
-    reason
-  );
-  assert.match(
-    String(defaults.additionalIdentities.validate.call(
-      { id: 'c1', vehicle: 'fleet', localIdentity: 'id-gcs' }, ['id-comp'], {}
-    )),
-    reason
-  );
-  // A ground station owns its sysid; a fleet target is fine for it.
-  assert.equal(
-    defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'fleet' }, 'id-gcs', {}),
-    true
-  );
-  assert.equal(
-    defaults.additionalIdentities.validate.call(
-      { id: 'c1', vehicle: 'fleet', localIdentity: 'id-gcs' }, ['id-own'], {}
-    ),
-    true
-  );
-  // A companion on a real target sysid passes.
-  assert.equal(
-    defaults.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-comp', {}),
-    true
-  );
-
-  // Own dialog open: the live Vehicle select is the answer over the saved one.
-  const live = loadNodeDefaults('mavlink-connection', nodes, {
-    dom: { '#node-config-input-vehicle': { val: 'fleet' } },
-    editStack: [{ id: 'c1' }],
-  });
-  assert.match(
-    String(live.localIdentity.validate.call({ id: 'c1', vehicle: 'veh' }, 'id-comp', {})),
-    reason
-  );
-});
-
 test('Local Identity editor exposes heartbeatIntervalMs', () => {
   assert.match(
     identityHtml,

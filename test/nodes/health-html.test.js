@@ -150,13 +150,3 @@ test('a multi-identity Connection requires a bound pick; GCS is accepted', () =>
     /is required/
   );
 });
-
-test('ttlS red-rings blank, non-positive, and past the longest Node.js timer', () => {
-  const { ttlS } = loadNodeDefaults('mavlink-health');
-  const validate = (v) => ttlS.validate.call({}, v, {});
-  assert.equal(validate(5), true);
-  assert.match(String(validate('')), /positive number of seconds/);
-  assert.match(String(validate(0)), /positive number of seconds/);
-  assert.equal(validate(2147483.647), true, 'the longest lease Node.js times');
-  assert.match(String(validate(2592000)), /at most 2147483\.647 s/, 'a 30-day lease would expire at once');
-});

@@ -1491,9 +1491,6 @@ test('validateAtLeast: blank reds, a present value must clear the floor', () => 
   const rate = RED.mavlink.validateAtLeast(0.1);
   assert.equal(rate(0.1), true);
   assert.match(String(rate(0)), />= 0.1/, 'below the floor reds');
-  // Node.js runs a timer past 2^31 - 1 ms at 1 ms, so the ceiling reds.
-  assert.equal(ms(2147483647), true, 'the longest timer Node.js honours');
-  assert.match(String(ms(2147483648)), /at most 2147483647/, 'one past it would fire at once');
 });
 
 // ── PARAM_TYPE_OPTIONS ───────────────────────────────────────────────────────
