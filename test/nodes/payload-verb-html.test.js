@@ -508,6 +508,14 @@ test('payload roi-set lat/lon carry the same degree bounds as Command presets', 
   assert.match(String(validate({ ...roi, lon: 181 })), /^lon must be a number between -180 and 180/);
   assert.match(String(validate({ ...roi, lon: -180.5 })), /^lon must be a number between -180 and 180/);
   assert.equal(validate({ ...roi, alt: 99999 }), true, 'alt carries no degree bound');
+
+  const onFrame = (sendAs, frame, saved) =>
+    values.validate.call({ topic: 'gimbal', verb: 'roi-set', sendAs, frame }, saved, {});
+  assert.equal(onFrame('int', '1', { ...roi, lat: 100, lon: -250 }), true,
+    'Local NED carries metres, not degrees');
+  assert.match(String(onFrame('int', '3', { ...roi, lat: 100 })), /^lat must be a number between -90 and 90/);
+  assert.match(String(onFrame('long', '1', { ...roi, lat: 100 })), /^lat must be a number between -90 and 90/,
+    'COMMAND_LONG carries no frame — degrees');
 });
 
 test('payload storage booleans validate saved numeric and string MAV_BOOL values', () => {
