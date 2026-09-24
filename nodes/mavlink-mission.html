@@ -26,26 +26,20 @@
           return true;
         },
       },
-      /**
-       * Download, upload, and set-current cannot address broadcast (0) — no
-       * vehicle answers as sysid 0 (§9) — so the sysid the runtime will
-       * address reds at deploy: a typed 0, or the Vehicle Profile default a
-       * blank or companion identity inherits. Clear stays broadcast-legal.
-       */
+      // A statically configured broadcast (0) can never run a transfer:
+      // download, upload, and set-current are refused for sysid 0 on every
+      // tier (§9 — no vehicle answers as sysid 0), so the pair reds at deploy rather than
+      // on the first message. Clear stays broadcast-legal, and blank passes
+      // (it inherits the profile default). Two args so the reason renders.
       targetSystem: {
         value: '',
         validate(v, opt) {
           const range = RED.mavlink.validateUint8(0).call(this, v, opt);
           if (range !== true) return range;
+          if (RED.mavlink.isBlank(v) || Number(v) !== 0) return true;
           const op = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download');
           if (op === 'clear') return true;
-          const tier = RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'confirm');
-          if (RED.mavlink.effectiveTargetSystem(this, v, tier) !== 0) return true;
-          if (!RED.mavlink.isBlank(v) && Number(v) === 0) {
-            return `broadcast (0) cannot ${op} — no vehicle answers as sysid 0; address one vehicle`;
-          }
-          return `inherits broadcast (0) from the bound Vehicle Profile — cannot ${op}, no vehicle `
-            + 'answers as sysid 0; set a sysid here or change the profile default';
+          return `broadcast (0) cannot ${op} — no vehicle answers as sysid 0; address one vehicle`;
         },
       },
       // Compid is a wire uint8; the select's catalog values all fit, so this

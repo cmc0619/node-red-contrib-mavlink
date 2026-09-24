@@ -5,23 +5,13 @@
   const paramDefaults = {
     name: { value: '' },
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
-      delivery: {
-        value: 'build',
-        validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect'], function (v) {
-          return deliveryActionPairing(v, RED.mavlink.liveOr(this, '#node-input-action', this?.action, 'read'));
-        }),
-      },
+      delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
       // Without this, a drifted action falls through buildParamMessage's
       // switch to `return undefined` (§5) and the Build tier reports it as a
       // succeeded build of `{ payload: undefined }` — phantom success, which
       // §0 rule 3 forbids. The driver is right to select no behavior; the
       // red ring is what stops the flow reaching that state.
-      action: {
-        value: 'read',
-        validate: RED.mavlink.oneOf(['read', 'set', 'request-list'], function (v) {
-          return deliveryActionPairing(RED.mavlink.liveOr(this, '#node-input-delivery', this?.delivery, 'build'), v);
-        }),
-      },
+      action: { value: 'read', validate: RED.mavlink.oneOf(['read', 'set', 'request-list']) },
       // Every Param action is a two-way conversation: a set waits for its
       // PARAM_VALUE echo, a read for the value, a list for the stream. None
       // of them can be answered by "sysid 0", so broadcast reds on the tiers
@@ -102,13 +92,13 @@
          * must be a number, and — when the definition documents bounds — must
          * be inside them. Catching 50 for an 800–2200 PWM parameter here beats
          * discovering it after the vehicle has taken it. An integer Type also
-         * requires a whole number inside that type (`integerTypeRange`).
+         * requires a whole number (`integerType`).
          *
          * Definitions are advisory, not authority: with none loaded this is
          * a plain numeric check, and a parameter absent from the seed
          * is never rejected for being unknown.
          */
-        validate(v, opt) {
+        validate(v) {
           // Only PARAM_SET carries param_value, and only a set shows the row.
           // Configure a set with an out-of-range value, switch to Read one,
           // and without this the node stays red over a field that is no longer
@@ -120,11 +110,7 @@
           if (RED.mavlink.isBlank(v)) return true;
           const n = Number(v);
           if (!Number.isFinite(n)) return false;
-          const typed = integerTypeRange(this);
-          if (typed) {
-            const inType = RED.mavlink.validateIntRange(typed[0], typed[1])(v, opt);
-            if (inType !== true) return `${inType} to fit the selected Type`;
-          }
+          if (integerType(this) && !Number.isInteger(n)) return 'must be a whole number for the selected Type';
           const defs = _paramDefsByKey[paramDefsKey(this)];
           const def = defs?.[editedParamId(this)];
           if (!def) return true;
@@ -178,52 +164,26 @@
   const _paramDefsByKey = {};
 
   /**
-   * The waits the runtime arms: a confirm read or set, and a collected list.
-   * Any other pairing on those two tiers sends once and reports `sent`, so
-   * both the Delivery and the Action field red on it. Build and Send wait on
-   * nothing and take any action.
-   *
-   * @param {string} delivery
-   * @param {string} action
-   * @returns {true|string}
+   * The integer MAV_PARAM_TYPEs. A bytewise set writes the value into the
+   * type's bytes, which drops a fraction silently (2.9 is stored as 2);
+   * Buffer itself refuses a value outside the type's range.
    */
-  function deliveryActionPairing(delivery, action) {
-    if (delivery === 'confirm' && action !== 'read' && action !== 'set') {
-      return 'Send and echo-confirm waits on Read one or Set one; a list request would '
-        + 'only be sent — use Request list and collect';
-    }
-    if (delivery === 'collect' && action !== 'request-list') {
-      return 'Request list and collect waits on Request list; a read or set would only '
-        + 'be sent — use Send and echo-confirm';
-    }
-    return true;
-  }
+  const INTEGER_PARAM_TYPES = [
+    'MAV_PARAM_TYPE_UINT8', 'MAV_PARAM_TYPE_INT8', 'MAV_PARAM_TYPE_UINT16',
+    'MAV_PARAM_TYPE_INT16', 'MAV_PARAM_TYPE_UINT32', 'MAV_PARAM_TYPE_INT32',
+  ];
 
   /**
-   * The values each integer MAV_PARAM_TYPE's bytes hold. A bytewise set
-   * writes the value into those bytes, which drops a fraction (2.9 is stored
-   * as 2) and refuses anything outside the range. REAL32 has no row.
-   */
-  const PARAM_INT_RANGE = {
-    MAV_PARAM_TYPE_UINT8: [0, 255],
-    MAV_PARAM_TYPE_INT8: [-128, 127],
-    MAV_PARAM_TYPE_UINT16: [0, 65535],
-    MAV_PARAM_TYPE_INT16: [-32768, 32767],
-    MAV_PARAM_TYPE_UINT32: [0, 4294967295],
-    MAV_PARAM_TYPE_INT32: [-2147483648, 2147483647],
-  };
-
-  /**
-   * The range the selected Type bounds the value to, or null when it bounds
-   * nothing: a REAL32 type, or ArduPilot, which ignores the declared type and
-   * whose dialog removes the Type row (§14.80).
+   * Whether the selected Type is an integer the value is packed into bytewise.
+   * Not on ArduPilot, which ignores the declared type and whose dialog removes
+   * the Type row (§14.80).
    *
    * @param {object} node
-   * @returns {?number[]} `[min, max]`
+   * @returns {boolean}
    */
-  function integerTypeRange(node) {
-    if (RED.mavlink.resolveCatalogTarget({ source: node }).firmware === 'ardupilot') return null;
-    return PARAM_INT_RANGE[RED.mavlink.liveOr(node, '#node-input-paramType', node?.paramType)] || null;
+  function integerType(node) {
+    if (RED.mavlink.resolveCatalogTarget({ source: node }).firmware === 'ardupilot') return false;
+    return INTEGER_PARAM_TYPES.indexOf(RED.mavlink.liveOr(node, '#node-input-paramType', node?.paramType)) !== -1;
   }
 
   /**

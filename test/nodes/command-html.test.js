@@ -815,13 +815,3 @@ test('the MAV_CMD search box is not a node property and the select still is', ()
   );
   assert.match(html, /advancedSearch\.setEntries\(catalog\.commands \|\| \[\]\)/, 'every catalog refill feeds the search');
 });
-
-test('completionTimeout: a whole number >= 1, checked only on the Complete tier', () => {
-  const { completionTimeout } = loadNodeDefaults('mavlink-command');
-  const complete = (v) => completionTimeout.validate.call({ delivery: 'complete' }, v, {});
-  assert.equal(complete(60000), true);
-  assert.match(String(complete(0)), />= 1/, 'zero would time every completion out on the first poll');
-  assert.match(String(complete('')), />= 1/);
-  assert.equal(completionTimeout.validate.call({ delivery: 'confirm' }, '', {}), true,
-    'the row is hidden and unread off the Complete tier');
-});

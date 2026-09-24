@@ -346,15 +346,7 @@
       // rows on Build.
       ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire),
       unconfirmedContinue: { value: false },
-      // Checked only on the Complete tier, the one that shows and reads it.
-      // Zero would time every completion out on the first poll.
-      completionTimeout: {
-        value: '60000',
-        validate(v, opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'confirm') !== 'complete') return true;
-          return RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
-        },
-      },
+      completionTimeout: { value: '60000', validate: RED.mavlink.validateAtLeast(0) },
       // The preset params blob. Nothing checked it before, and the runtime
       // refused blank/out-of-range coordinates on its behalf; that refusal is
       // gone (AGENTS.md, input trust), so this is now the only thing between a

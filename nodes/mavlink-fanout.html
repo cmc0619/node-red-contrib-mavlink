@@ -4,13 +4,6 @@
   // same question, or a hidden row could still be hiding a real choice.
   const IDENTITY_ROLES = ['gcs', 'custom'];
 
-  /**
-   * Broadcast addresses target_system 0, which reaches every vehicle on the
-   * link, so it pairs only with the "All" selection (DESIGN.md §14.113).
-   * Both the Selection and Execution rings speak this reason.
-   */
-  const BROADCAST_NEEDS_ALL = 'Broadcast needs the "All" selection — target_system 0 reaches every vehicle, so it cannot honour a list or filter';
-
   function currentMembers() {
     const members = [];
     $('#mav-fanout-members').editableList('items').each(function () {
@@ -52,15 +45,10 @@
         // an explicit list is the one selection that does not need it.
         // Requiring the list on Build is what lets `connection` above share
         // the standard blank-on-Build rule. All/filter selection stays
-        // on the wire tiers, where a Connection is present anyway. Last, on
-        // every tier, a list or filter reds under Broadcast execution.
+        // on the wire tiers, where a Connection is present anyway.
         validate: RED.mavlink.oneOf(['all', 'list', 'filter'], function (v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) === 'build' && v !== 'list') {
-            return 'must be an explicit sysid list on Build';
-          }
-          if (v === 'all') return true;
-          return RED.mavlink.liveOr(this, '#node-input-executionMode', this.executionMode) !== 'broadcast'
-            || BROADCAST_NEEDS_ALL;
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
+          return v === 'list' || 'must be an explicit sysid list on Build';
         }),
       },
       members: {
@@ -142,16 +130,14 @@
       executionMode: {
         value: 'sequential',
         // Membership first (§5's editor half, as on selectionMode). Then
-        // Broadcast only pairs with the "All" selection: on Build, which
-        // cannot choose it, the reshape below greys the option and a retained
-        // or hand-set value reds; on the wire tiers a list or filter reds.
+        // Broadcast only pairs with the "All" selection: target_system 0
+        // reaches every vehicle on the link, so a list or filter would be
+        // ignored (DESIGN.md §14.113). Build requires a list, so it reds there
+        // too.
         validate: RED.mavlink.oneOf(['sequential', 'broadcast'], function (v, _opt) {
           if (v !== 'broadcast') return true;
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) === 'build') {
-            return 'Broadcast needs the "All" selection, which Build cannot use';
-          }
           return RED.mavlink.liveOr(this, '#node-input-selectionMode', this.selectionMode) === 'all'
-            || BROADCAST_NEEDS_ALL;
+            || 'Broadcast needs the "All" selection — target_system 0 reaches every vehicle, so it cannot honour a list or filter';
         }),
       },
       intervalMs: {

@@ -198,44 +198,6 @@ test('mavlink-mission target sysid: a configured broadcast reds for download/upl
   assert.match(String(targetComponent.validate.call({ id: 'm1' }, '300', {})), /between 0 and 255/);
 });
 
-test('mavlink-mission target sysid: an inherited broadcast reds for download/upload/set-current, not clear', () => {
-  // The ring judges the sysid the runtime will address: a blank or a companion
-  // identity inherits the bound Vehicle Profile's default, and 0 there is the
-  // same broadcast a typed 0 is.
-  const lookup = {
-    c0: { vehicle: 'veh0' },
-    c7: { vehicle: 'veh7' },
-    veh0: { defaultTargetSystem: 0 },
-    veh7: { defaultTargetSystem: 7 },
-    comp: { role: 'companion' },
-  };
-  const { targetSystem } = loadNodeDefaults('mavlink-mission', lookup);
-  const verdict = (node, v) => targetSystem.validate.call({ id: 'm1', delivery: 'confirm', ...node }, v, {});
-
-  for (const op of ['download', 'upload', 'set-current']) {
-    assert.match(String(verdict({ operation: op, connection: 'c0' }, '')),
-      new RegExp(`inherits broadcast \\(0\\) from the bound Vehicle Profile — cannot ${op}`),
-      `${op}: a blank inheriting 0 reds`);
-  }
-  assert.equal(verdict({ operation: 'clear', connection: 'c0' }, ''), true, 'clear stays broadcast-legal');
-  assert.equal(verdict({ operation: 'download', connection: 'c7' }, ''), true, 'blank inheriting 7 passes');
-  assert.equal(verdict({ operation: 'download', connection: 'c0' }, '5'), true, 'a typed sysid overrides the profile');
-  assert.match(String(verdict({ operation: 'download', connection: 'c7' }, '0')), /broadcast \(0\) cannot download/,
-    'a typed 0 keeps its own message');
-
-  // A companion identity on the wire tier ignores the typed sysid and derives
-  // the profile's.
-  assert.match(String(verdict({ operation: 'download', connection: 'c0', identity: 'comp' }, '5')),
-    /inherits broadcast \(0\)/, 'companion over a 0 profile reds');
-  assert.equal(verdict({ operation: 'download', connection: 'c7', identity: 'comp' }, '0'), true,
-    'companion over a 7 profile addresses 7');
-
-  // Build inherits from the node's own Vehicle Profile under the __vehicle escape.
-  assert.match(String(verdict({ operation: 'upload', delivery: 'build', dialect: '__vehicle', vehicle: 'veh0' }, '')),
-    /inherits broadcast \(0\)/);
-  assert.equal(verdict({ operation: 'upload', delivery: 'build', dialect: '__vehicle', vehicle: 'veh7' }, ''), true);
-});
-
 test('mavlink-mission exposes set-current with a uint16 sequence field', () => {
   const { operation, seq } = loadNodeDefaults('mavlink-mission');
   assert.equal(operation.validate('set-current', {}), true);

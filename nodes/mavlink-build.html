@@ -655,8 +655,8 @@
   (the shape every <code>data</code>/<code>len</code> pair relies on), and more
   entries than fit are refused rather than cut &mdash; here as a red ring, and
   at send time for a <code>msg.payload</code> array. Every configured value,
-  array entries included, must fit its wire type: a whole number in range on an
-  integer field, a finite number on a float field. <code>COMMAND_INT</code>
+  array entries included, must fit its wire type: a whole number on an integer
+  field (out of range is refused at send), a finite number on a float field. <code>COMMAND_INT</code>
   <code>x</code>/<code>y</code> are raw int32 wire values (degE7 in global
   frames), not degrees.</p>
   <p><b>Dialect</b> (Build delivery): pick a bundled dialect from the dropdown.

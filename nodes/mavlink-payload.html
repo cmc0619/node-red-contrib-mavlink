@@ -26,17 +26,6 @@
     const NAN_WHEN_BLANK = { 'gimbal|aim': ['pitchRate', 'yawRate', 'rollRate'] };
     const MAV_BOOL_VALUES = [0, 1, '0', '1'];
     const validateMavBool = RED.mavlink.oneOf(MAV_BOOL_VALUES);
-    /**
-     * ROI point in degrees, the bounds Command's preset coordinates carry.
-     * COMMAND_INT on Local NED (frame 1) carries metres instead, so these
-     * apply on every other carrier/frame.
-     */
-    const DEGREE_VALIDATORS = {
-      'gimbal|roi-set': {
-        lat: RED.mavlink.validateRange(-90, 90),
-        lon: RED.mavlink.validateRange(-180, 180),
-      },
-    };
     const VALUE_VALIDATORS = {
       'camera|track-point': {
         pointX: RED.mavlink.validateRange(0, 1),
@@ -115,9 +104,7 @@
                 return `${field} is blank — it would be sent unset; enter a value`;
               }
             }
-            const localFrame = RED.mavlink.liveOr(this, '#node-input-sendAs', this.sendAs, 'int') === 'int'
-              && RED.mavlink.liveOr(this, '#node-input-frame', this.frame, '3') === '1';
-            const validators = { ...VALUE_VALIDATORS[key], ...(localFrame ? {} : DEGREE_VALIDATORS[key]) };
+            const validators = VALUE_VALIDATORS[key] || {};
             for (const field of Object.keys(validators)) {
               const verdict = validators[field](values[field], _opt);
               if (verdict !== true) return `${field} ${verdict}`;
