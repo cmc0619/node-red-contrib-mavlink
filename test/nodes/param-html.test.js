@@ -623,7 +623,7 @@ test('the Index field advertises the same floor the validator enforces', () => {
 test('the action select is pinned to the actions the driver implements', () => {
   assert.match(
     html,
-    /action:\s*\{\s*value:\s*'read',\s*validate:\s*RED\.mavlink\.oneOf\(\[[^\]]*\]\)\s*\}/,
+    /action:\s*\{\s*value:\s*'read',\s*validate:\s*RED\.mavlink\.oneOf\(\[[^\]]*\]/,
     'action carries a oneOf validator'
   );
 
@@ -765,4 +765,25 @@ test('the Type bound reads the live Type select while the dialog is open', () =>
   });
   const saved = { id: 'p1', ...px4Set('MAV_PARAM_TYPE_REAL32') };
   assert.match(String(validate.call(saved, '2.5', {})), /whole number for the selected Type/);
+});
+
+test('Action reds a pairing the Delivery tier cannot wait on (false success otherwise)', () => {
+  const { action } = loadNodeDefaults('mavlink-param');
+  const verdict = (delivery, a) => action.validate.call({ delivery, action: a }, a, {});
+  for (const delivery of ['build', 'send']) {
+    for (const a of ['read', 'set', 'request-list']) assert.equal(verdict(delivery, a), true, `${delivery} + ${a}`);
+  }
+  assert.equal(verdict('confirm', 'read'), true);
+  assert.equal(verdict('confirm', 'set'), true);
+  assert.match(String(verdict('confirm', 'request-list')), /echo-confirm waits on Read one or Set one/);
+  assert.equal(verdict('collect', 'request-list'), true);
+  assert.match(String(verdict('collect', 'read')), /collect waits on Request list/);
+  assert.match(String(verdict('collect', 'set')), /collect waits on Request list/);
+
+  const open = loadNodeDefaults('mavlink-param', {}, {
+    dom: { '#node-input-delivery': { val: 'collect' } },
+    editStack: [{ id: 'p1' }],
+  }).action.validate;
+  assert.match(String(open.call({ id: 'p1', delivery: 'build' }, 'read', {})), /collect waits on Request list/,
+    'reads the live Delivery select while the dialog is open');
 });

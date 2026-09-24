@@ -6,12 +6,24 @@
     name: { value: '' },
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
-      // Without this, a drifted action falls through buildParamMessage's
-      // switch to `return undefined` (§5) and the Build tier reports it as a
-      // succeeded build of `{ payload: undefined }` — phantom success, which
-      // §0 rule 3 forbids. The driver is right to select no behavior; the
-      // red ring is what stops the flow reaching that state.
-      action: { value: 'read', validate: RED.mavlink.oneOf(['read', 'set', 'request-list']) },
+      /**
+       * Without the membership check, a drifted action falls through
+       * buildParamMessage's switch to `return undefined` (§5) and the Build
+       * tier reports it as a succeeded build of `{ payload: undefined }` —
+       * phantom success, which §0 rule 3 forbids. Then the pairing: the
+       * runtime waits only on confirm + read/set and on collect +
+       * request-list. Any other pair on those tiers sends once and reports
+       * success for a confirm or collect that never happened.
+       */
+      action: {
+        value: 'read',
+        validate: RED.mavlink.oneOf(['read', 'set', 'request-list'], function (v) {
+          const delivery = RED.mavlink.liveOr(this, '#node-input-delivery', this?.delivery, 'build');
+          if (delivery === 'confirm' && v === 'request-list') return 'Send and echo-confirm waits on Read one or Set one';
+          if (delivery === 'collect' && v !== 'request-list') return 'Request list and collect waits on Request list';
+          return true;
+        }),
+      },
       // Every Param action is a two-way conversation: a set waits for its
       // PARAM_VALUE echo, a read for the value, a list for the stream. None
       // of them can be answered by "sysid 0", so broadcast reds on the tiers
