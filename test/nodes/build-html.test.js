@@ -463,28 +463,24 @@ test('Build fields: each value must fit its wire type once the dialect is loaded
     u8: 255, u16: 0, i32: -2147483648, f: 1.5,
     big: '18446744073709551615', sbig: '-9223372036854775808',
     label: 'a.b!', arr: [1, 2], farr: [0.5, -1],
-  }), true, 'every value at its type limit fits');
+  }), true, 'whole integers, finite floats, 64-bit decimal strings');
 
   // Buffer truncates a fraction silently: 1.5 in a uint16 would go out as 1.
-  assert.equal(check({ u16: 1.5 }), 'u16 must be a whole number 0–65535');
-  // Out of range throws only at send time without this ring.
-  assert.equal(check({ u8: 300 }), 'u8 must be a whole number 0–255');
-  assert.equal(check({ u8: -1 }), 'u8 must be a whole number 0–255');
-  assert.equal(check({ i32: 2147483648 }), 'i32 must be a whole number -2147483648–2147483647');
+  assert.equal(check({ u16: 1.5 }), 'u16 must be a whole number');
+  assert.equal(check({ i32: 47.4 }), 'i32 must be a whole number', 'degrees typed into a degE7 field');
+  // Out of range is Buffer's own refusal at send, not a ring.
+  assert.equal(check({ u8: 300 }), true);
 
   // A junk array token is kept as a string by the collector; Buffer writes it
   // as 0 into an integer array and NaN into a float array.
-  assert.equal(check({ arr: [1, '2x', 3] }), 'arr[1] must be a whole number 0–65535');
-  assert.equal(check({ arr: [1, 2.5] }), 'arr[1] must be a whole number 0–65535');
+  assert.equal(check({ arr: [1, '2x', 3] }), 'arr[1] must be a whole number');
+  assert.equal(check({ arr: [1, 2.5] }), 'arr[1] must be a whole number');
   assert.equal(check({ farr: [1, '2x'] }), 'farr[1] must be a finite number');
   assert.equal(check({ farr: [1, 'NaN'] }), true, 'a typed NaN is the float "not used" value');
   assert.equal(check({ f: 'abc' }), 'f must be a finite number');
 
   // 64-bit fields save a decimal string the runtime reads as a BigInt.
-  assert.equal(check({ big: '18446744073709551616' }), 'big must be a whole number 0–18446744073709551615');
-  assert.equal(check({ big: '12abc' }), 'big must be a whole number 0–18446744073709551615');
-  assert.equal(check({ sbig: '-9223372036854775809' }),
-    'sbig must be a whole number -9223372036854775808–9223372036854775807');
+  assert.equal(check({ big: '12abc' }), 'big must be a whole number');
 
   // Length is still checked before type.
   assert.equal(check({ arr: [1, 2, 3, 4] }), 'arr has 4 entries — 3 fit');

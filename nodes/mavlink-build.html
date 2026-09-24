@@ -7,38 +7,25 @@
 
     const COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
 
-    /** Inclusive [min, max] of each MAVLink integer wire type. */
-    const INT_RANGES = {
-      uint8_t: [0n, 255n],
-      int8_t: [-128n, 127n],
-      uint16_t: [0n, 65535n],
-      int16_t: [-32768n, 32767n],
-      uint32_t: [0n, 4294967295n],
-      int32_t: [-2147483648n, 2147483647n],
-      uint64_t: [0n, 18446744073709551615n],
-      int64_t: [-9223372036854775808n, 9223372036854775807n],
-    };
-
     /**
      * Why one value cannot ride a numeric wire type, or null when it can.
      * Buffer truncates a fraction and writes a junk token as 0 or NaN without
      * a word (DESIGN.md 14.55), so the ring is where the operator hears it.
-     * Integers must be whole and in range; a 64-bit field also takes the
-     * decimal string the runtime reads as a BigInt. Float and double take any
-     * finite number, or the typed token `NaN` — legal on the wire for a float,
-     * the "field not used" value (DESIGN.md 14.56).
+     * Out-of-range integers need no ring: Buffer refuses them at send.
+     * Integers must be whole; a 64-bit field also takes the decimal string
+     * the runtime reads as a BigInt. Float and double take any finite number,
+     * or the typed token `NaN` — legal on the wire for a float, the "field not
+     * used" value (DESIGN.md 14.56).
      */
     function wireValueProblem(type, value) {
-      const range = INT_RANGES[type];
-      if (!range) {
+      if (type === 'float' || type === 'double') {
         if (value === 'NaN') return null;
         return typeof value === 'number' && Number.isFinite(value) ? null : 'must be a finite number';
       }
       const whole = typeof value === 'number'
         ? Number.isInteger(value)
         : type.endsWith('64_t') && typeof value === 'string' && /^\s*-?\d+\s*$/.test(value);
-      if (whole && BigInt(value) >= range[0] && BigInt(value) <= range[1]) return null;
-      return `must be a whole number ${range[0]}–${range[1]}`;
+      return whole ? null : 'must be a whole number';
     }
 
     /** Messages / commands catalog request sequences (DESIGN.md §6 shared loadCatalog). */
