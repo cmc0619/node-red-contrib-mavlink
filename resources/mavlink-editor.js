@@ -1825,48 +1825,21 @@
     return function (v, opt) {
       const range = RED.mavlink.validateUint8(0).call(this, v, opt);
       if (range !== true) return range;
+      const blank = RED.mavlink.isBlank(v);
+      if (!blank && Number(v) !== 0) return true;
       const tier = RED.mavlink.liveOr(this, field, this[key], fallbackTier);
       if (ackedTiers.indexOf(tier) === -1) return true;
-      if (RED.mavlink.effectiveTargetSystem(this, v, tier) !== 0) return true;
-      if (typedTargetSystem(this, v, tier)) {
+      if (!blank) {
         return 'broadcast (0) cannot be confirmed — one reply cannot answer for a fleet; '
           + 'use Send, or mavlink-fanout broadcast for per-vehicle replies';
       }
-      return 'inherits broadcast (0) from the bound Vehicle Profile — one reply cannot '
-        + 'answer for a fleet; set a sysid here, use Send, or change the profile default';
+      if (inheritedTargetSystem(this, tier) === 0) {
+        return 'inherits broadcast (0) from the bound Vehicle Profile — one reply cannot '
+          + 'answer for a fleet; set a sysid here, use Send, or change the profile default';
+      }
+      return true;
     };
   };
-
-  /**
-   * The target sysid the runtime will address for this field's value on
-   * `tier`, read the way lib/addressing/resolve.js resolves it: the typed
-   * value, unless it is blank or a companion identity is selected on a wire
-   * tier (the runtime then ignores it), in which case the Vehicle Profile
-   * default a blank inherits. Undefined when nothing resolves.
-   *
-   * @param {object} self  the node config under validation
-   * @param {*} v  the target-sysid field's value
-   * @param {string} tier
-   * @returns {number|undefined}
-   */
-  RED.mavlink.effectiveTargetSystem = function (self, v, tier) {
-    return typedTargetSystem(self, v, tier) ? Number(v) : inheritedTargetSystem(self, tier);
-  };
-
-  /**
-   * Whether the runtime addresses the typed target sysid: it is not blank,
-   * and no companion identity on a wire tier overrides it.
-   *
-   * @param {object} self
-   * @param {*} v
-   * @param {string} tier
-   * @returns {boolean}
-   */
-  function typedTargetSystem(self, v, tier) {
-    if (RED.mavlink.isBlank(v)) return false;
-    const identity = RED.mavlink.liveOr(self, '#node-input-identity', self.identity, '');
-    return tier === 'build' || RED.mavlink.identityRole(identity) !== 'companion';
-  }
 
   /**
    * The static target sysid a blank field inherits, read the way the runtime

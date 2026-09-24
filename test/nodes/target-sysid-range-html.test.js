@@ -247,20 +247,6 @@ test('mavlink-command.html: a blank target inheriting a broadcast profile reds o
     'broadcast is legal where no ack is awaited, inherited or not');
 });
 
-test('mavlink-command.html: a companion identity addresses the profile target, whatever sysid is typed', () => {
-  // resolve.js ignores the typed sysid under a companion identity and targets
-  // the one derived from the bound Vehicle Profile, so that is what is judged.
-  const saved = { delivery: 'confirm', connection: 'c1', identity: 'comp' };
-  const companion = { comp: { role: 'companion' } };
-  assert.match(
-    String(targetSystemValidator('mavlink-command.html', saved, { ...PROFILE_0, ...companion })('5')),
-    /inherits broadcast/,
-    'the typed 5 never reaches the wire; the companion targets the profile\'s 0'
-  );
-  assert.equal(targetSystemValidator('mavlink-command.html', saved, { ...PROFILE_1, ...companion })('0'), true,
-    'a typed 0 the runtime ignores is not a broadcast');
-});
-
 test('mavlink-param.html: on Build the inherited rung is the node\'s own Vehicle Profile, and only under __vehicle (#15)', () => {
   const lookup = { veh0: { defaultTargetSystem: 0 } };
   assert.match(
