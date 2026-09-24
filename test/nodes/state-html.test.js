@@ -103,12 +103,19 @@ test('events red-rings blank and a token the peer table never emits', () => {
 
 test('target filters carry the uint8 range ring, compid included', () => {
   const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-state');
-  for (const field of [targetSystem, targetComponent]) {
-    assert.equal(field.validate.call({}, '', {}), true, 'blank = any');
-    assert.equal(field.validate.call({}, 0, {}), true, 'broadcast/all is legal');
-    assert.equal(field.validate.call({}, 255, {}), true);
-    assert.match(String(field.validate.call({}, 256, {})), /between 0 and 255/);
-  }
+  assert.equal(targetComponent.validate.call({}, '', {}), true, 'blank = any');
+  assert.equal(targetComponent.validate.call({}, 0, {}), true, 'compid 0 is a real source component filter');
+  assert.equal(targetComponent.validate.call({}, 255, {}), true);
+  assert.match(String(targetComponent.validate.call({}, 256, {})), /between 0 and 255/);
+
+  // Sysid 0 never reaches State — the Connection drops sysid-0 sources
+  // (DESIGN.md §14.138) — so a 0 filter would match nothing.
+  assert.equal(targetSystem.validate.call({}, '', {}), true, 'blank = any');
+  assert.match(String(targetSystem.validate.call({}, 0, {})), /between 1 and 255/);
+  assert.equal(targetSystem.validate.call({}, 1, {}), true);
+  assert.equal(targetSystem.validate.call({}, 255, {}), true);
+  assert.match(String(targetSystem.validate.call({}, 256, {})), /between 1 and 255/);
+  assert.match(html, /id="node-input-targetSystem"[^>]*min="1"[^>]*max="255"/);
 });
 
 /**

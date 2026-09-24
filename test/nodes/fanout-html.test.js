@@ -251,10 +251,39 @@ test('selectionMode and executionMode red on membership, then on the Build pairi
   assert.match(String(sel.call({ delivery: 'build' }, 'all', {})), /explicit sysid list on Build/);
 
   assert.equal(exec.call({ delivery: 'send' }, 'sequential', {}), true);
-  assert.equal(exec.call({ delivery: 'send' }, 'broadcast', {}), true);
+  assert.equal(exec.call({ delivery: 'send', selectionMode: 'all' }, 'broadcast', {}), true);
   assert.match(String(exec.call({ delivery: 'send' }, 'parallel', {})), /must be one of/);
   assert.match(String(exec.call({ delivery: 'build' }, 'broadcast', {})), /All.*selection/);
   assert.equal(exec.call({ delivery: 'build' }, 'sequential', {}), true);
+});
+
+test('broadcast execution requires the "All" selection on every tier, on both fields (§14.113)', () => {
+  // The runtime replaces any selection with all under broadcast, so a list or
+  // filter paired with broadcast would command the whole fleet.
+  const defaults = loadNodeDefaults('mavlink-fanout');
+  const sel = defaults.selectionMode.validate;
+  const exec = defaults.executionMode.validate;
+
+  for (const delivery of ['send', 'confirm']) {
+    for (const selectionMode of ['list', 'filter']) {
+      const node = { delivery, selectionMode, executionMode: 'broadcast' };
+      assert.match(String(exec.call(node, 'broadcast', {})), /All.*selection.*list or filter/,
+        `${delivery}: Execution reds broadcast over a ${selectionMode} selection`);
+      assert.match(String(sel.call(node, selectionMode, {})), /All.*selection.*list or filter/,
+        `${delivery}: Selection reds ${selectionMode} under broadcast`);
+    }
+    const all = { delivery, selectionMode: 'all', executionMode: 'broadcast' };
+    assert.equal(exec.call(all, 'broadcast', {}), true, `${delivery}: broadcast over all is legal`);
+    assert.equal(sel.call(all, 'all', {}), true);
+    const sequential = { delivery, selectionMode: 'list', executionMode: 'sequential' };
+    assert.equal(sel.call(sequential, 'list', {}), true, `${delivery}: sequential keeps list`);
+    assert.equal(exec.call(sequential, 'sequential', {}), true);
+  }
+
+  // Build: the list is required, so broadcast reds on both fields.
+  const build = { delivery: 'build', selectionMode: 'list', executionMode: 'broadcast' };
+  assert.match(String(exec.call(build, 'broadcast', {})), /which Build cannot use/);
+  assert.match(String(sel.call(build, 'list', {})), /All.*selection/);
 });
 
 test('intervalMs and maxRetries: blank reds, present values carry range red rings', () => {
@@ -271,6 +300,7 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
   assert.equal(interval.call({}, 250, {}), true);
   assert.match(String(interval.call({}, -100, {})), />= 0/, 'negative pacing reds');
   assert.match(String(interval.call({}, 'abc', {})), />= 0/);
+  assert.match(String(interval.call({}, 0.5, {})), /whole number/, 'a fraction would run the timer at 1 ms');
 
   assert.match(String(retries.call(confirm, '', {})), />= 0/, 'blank retries reds');
   assert.equal(retries.call(confirm, 0, {}), true);

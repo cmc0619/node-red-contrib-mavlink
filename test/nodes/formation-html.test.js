@@ -111,6 +111,7 @@ test('intervalMs requires a number >= 0 — the runtime reads a present value as
   assert.match(String(validate.call({}, -100)), />= 0/, 'negative pacing reds');
   assert.match(String(validate.call({}, '')), />= 0/, 'blank reds — it would ride as 0');
   assert.match(String(validate.call({}, 'abc')), />= 0/);
+  assert.match(String(validate.call({}, 0.5)), /whole number/, 'a fraction would run the timer at 1 ms');
 });
 
 test('timeoutMs validator requires an integer >= 1 — a saved 0 arms confirm at 0 ms', () => {

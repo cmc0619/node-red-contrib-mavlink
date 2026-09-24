@@ -1723,10 +1723,20 @@
   };
 
   /**
-   * Open-ended lower-bound check — the duration / retry-count shape. The value
-   * must be a number at least `min`, a whole number when `opts.integer` is
-   * set. Blank reds: the editor owns the default (the field's `value:`), so
-   * the runtime reads the saved number and nothing falls back.
+   * The longest delay Node.js timers honour (2^31 - 1 ms). A longer
+   * `setTimeout`/`setInterval` delay is replaced by 1 ms, so "wait a month"
+   * would fire at once.
+   */
+  const MAX_TIMER_MS = 2147483647;
+  RED.mavlink.MAX_TIMER_MS = MAX_TIMER_MS;
+
+  /**
+   * Lower-bound check — the duration / retry-count shape. The value must be a
+   * number at least `min`, a whole number when `opts.integer` is set, and no
+   * more than {@link MAX_TIMER_MS}: every caller is a timer delay or a count,
+   * and a delay past that ceiling runs at 1 ms. Blank reds: the editor owns
+   * the default (the field's `value:`), so the runtime reads the saved number
+   * and nothing falls back.
    *
    * @param {number} min
    * @param {{integer?: boolean}} [opts]
@@ -1737,8 +1747,9 @@
     return function (v, _opt) {
       const n = Number(v);
       const numeric = !RED.mavlink.isBlank(v) && (integer ? Number.isInteger(n) : Number.isFinite(n));
-      if (numeric && n >= min) return true;
-      return `must be ${integer ? 'a whole number' : 'a number'} >= ${min}`;
+      if (!numeric || n < min) return `must be ${integer ? 'a whole number' : 'a number'} >= ${min}`;
+      if (n > MAX_TIMER_MS) return `must be at most ${MAX_TIMER_MS} — Node.js runs a longer timer at 1 ms`;
+      return true;
     };
   };
 
@@ -1825,21 +1836,48 @@
     return function (v, opt) {
       const range = RED.mavlink.validateUint8(0).call(this, v, opt);
       if (range !== true) return range;
-      const blank = RED.mavlink.isBlank(v);
-      if (!blank && Number(v) !== 0) return true;
       const tier = RED.mavlink.liveOr(this, field, this[key], fallbackTier);
       if (ackedTiers.indexOf(tier) === -1) return true;
-      if (!blank) {
+      if (RED.mavlink.effectiveTargetSystem(this, v, tier) !== 0) return true;
+      if (typedTargetSystem(this, v, tier)) {
         return 'broadcast (0) cannot be confirmed — one reply cannot answer for a fleet; '
           + 'use Send, or mavlink-fanout broadcast for per-vehicle replies';
       }
-      if (inheritedTargetSystem(this, tier) === 0) {
-        return 'inherits broadcast (0) from the bound Vehicle Profile — one reply cannot '
-          + 'answer for a fleet; set a sysid here, use Send, or change the profile default';
-      }
-      return true;
+      return 'inherits broadcast (0) from the bound Vehicle Profile — one reply cannot '
+        + 'answer for a fleet; set a sysid here, use Send, or change the profile default';
     };
   };
+
+  /**
+   * The target sysid the runtime will address for this field's value on
+   * `tier`, read the way lib/addressing/resolve.js resolves it: the typed
+   * value, unless it is blank or a companion identity is selected on a wire
+   * tier (the runtime then ignores it), in which case the Vehicle Profile
+   * default a blank inherits. Undefined when nothing resolves.
+   *
+   * @param {object} self  the node config under validation
+   * @param {*} v  the target-sysid field's value
+   * @param {string} tier
+   * @returns {number|undefined}
+   */
+  RED.mavlink.effectiveTargetSystem = function (self, v, tier) {
+    return typedTargetSystem(self, v, tier) ? Number(v) : inheritedTargetSystem(self, tier);
+  };
+
+  /**
+   * Whether the runtime addresses the typed target sysid: it is not blank,
+   * and no companion identity on a wire tier overrides it.
+   *
+   * @param {object} self
+   * @param {*} v
+   * @param {string} tier
+   * @returns {boolean}
+   */
+  function typedTargetSystem(self, v, tier) {
+    if (RED.mavlink.isBlank(v)) return false;
+    const identity = RED.mavlink.liveOr(self, '#node-input-identity', self.identity, '');
+    return tier === 'build' || RED.mavlink.identityRole(identity) !== 'companion';
+  }
 
   /**
    * The static target sysid a blank field inherits, read the way the runtime

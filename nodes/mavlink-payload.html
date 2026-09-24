@@ -21,6 +21,11 @@
     const MAV_BOOL_VALUES = [0, 1, '0', '1'];
     const validateMavBool = RED.mavlink.oneOf(MAV_BOOL_VALUES);
     const VALUE_VALIDATORS = {
+      /** ROI point in degrees, the bounds Command's preset coordinates carry. */
+      'gimbal|roi-set': {
+        lat: RED.mavlink.validateRange(-90, 90),
+        lon: RED.mavlink.validateRange(-180, 180),
+      },
       'camera|track-point': {
         pointX: RED.mavlink.validateRange(0, 1),
         pointY: RED.mavlink.validateRange(0, 1),

@@ -828,6 +828,7 @@ test('heartbeatIntervalMs red-rings blank and non-positive values (walled garden
   assert.match(String(validate(0)), /positive number/, 'a zero-interval timer reds');
   assert.match(String(validate(-5)), /positive number/);
   assert.match(String(validate('abc')), /positive number/);
+  assert.match(String(validate(2147483648)), /at most 2147483647/, 'Node.js would run it at 1 ms');
 });
 
 test('reopening a companion never retypes its saved CompID', () => {

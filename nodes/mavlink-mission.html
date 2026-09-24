@@ -26,20 +26,26 @@
           return true;
         },
       },
-      // A statically configured broadcast (0) can never run a transfer:
-      // download, upload, and set-current are refused for sysid 0 on every
-      // tier (§9 — no vehicle answers as sysid 0), so the pair reds at deploy rather than
-      // on the first message. Clear stays broadcast-legal, and blank passes
-      // (it inherits the profile default). Two args so the reason renders.
+      /**
+       * Download, upload, and set-current cannot address broadcast (0) — no
+       * vehicle answers as sysid 0 (§9) — so the sysid the runtime will
+       * address reds at deploy: a typed 0, or the Vehicle Profile default a
+       * blank or companion identity inherits. Clear stays broadcast-legal.
+       */
       targetSystem: {
         value: '',
         validate(v, opt) {
           const range = RED.mavlink.validateUint8(0).call(this, v, opt);
           if (range !== true) return range;
-          if (RED.mavlink.isBlank(v) || Number(v) !== 0) return true;
           const op = RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download');
           if (op === 'clear') return true;
-          return `broadcast (0) cannot ${op} — no vehicle answers as sysid 0; address one vehicle`;
+          const tier = RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'confirm');
+          if (RED.mavlink.effectiveTargetSystem(this, v, tier) !== 0) return true;
+          if (!RED.mavlink.isBlank(v) && Number(v) === 0) {
+            return `broadcast (0) cannot ${op} — no vehicle answers as sysid 0; address one vehicle`;
+          }
+          return `inherits broadcast (0) from the bound Vehicle Profile — cannot ${op}, no vehicle `
+            + 'answers as sysid 0; set a sysid here or change the profile default';
         },
       },
       // Compid is a wire uint8; the select's catalog values all fit, so this
@@ -93,10 +99,15 @@
           return true;
         },
       },
+      /**
+       * Set current reads seq and needs it: blank reds, a value is a uint16.
+       * Other operations ignore the field.
+       */
       seq: {
         value: 0,
         validate(v, opt) {
           if (RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download') !== 'set-current') return true;
+          if (RED.mavlink.isBlank(v)) return 'is required for Set current — the mission item to make current';
           return RED.mavlink.validateIntRange(0, 65535).call(this, v, opt);
         },
       },

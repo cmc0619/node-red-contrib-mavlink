@@ -716,11 +716,13 @@
           return (Number.isFinite(Number(v)) && Number(v) >= 0.1) || 'must be at least 0.1 Hz';
         },
       },
+      /** Blank reds: Number('') is 0, which is "no TTL" — a stream that never expires. */
       ttlMs: {
         value: 1000,
         validate(v, _opt) {
           if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
-          return (Number.isFinite(Number(v)) && Number(v) >= 0) || 'must be a number of milliseconds (0 = no TTL)';
+          return (!RED.mavlink.isBlank(v) && Number.isFinite(Number(v)) && Number(v) >= 0)
+            || 'must be a number of milliseconds (0 = no TTL)';
         },
       },
     ...RED.mavlink.buildTierDialectDefaults()

@@ -105,7 +105,7 @@
       pitchDeg: { value: 0, validate: RED.mavlink.validateRange(-180, 180) },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       changeMode: { value: false },
-      intervalMs: { value: 100, validate: RED.mavlink.validateAtLeast(0) },
+      intervalMs: { value: 100, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
       // Timeout and Retries rows are always on screen here.
       ...RED.mavlink.ackDefaults(() => true),
     },

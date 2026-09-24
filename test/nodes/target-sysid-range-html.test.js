@@ -45,7 +45,6 @@ const TARGET_FILES = [
   ['mavlink-param.html', 'targetSystem'],
   ['mavlink-payload.html', 'targetSystem'],
   ['mavlink-mission.html', 'targetSystem'],
-  ['mavlink-state.html', 'targetSystem'],
 ];
 
 /**
@@ -69,6 +68,13 @@ function descriptorBlock(html, prop) {
   }
   throw new Error(`unbalanced braces in ${prop} descriptor`);
 }
+
+test('mavlink-state.html: the sysid filter validates as an addressable node 1..255', () => {
+  // Filtering peers on sysid 0 never matches: sysid 0 is never a source (§14.138).
+  const html = fs.readFileSync(path.join(nodesDir, 'mavlink-state.html'), 'utf8');
+  assert.match(descriptorBlock(html, 'targetSystem'), /RED\.mavlink\.validateUint8\(1\)/);
+  assert.match(html, /id="node-input-targetSystem"[^>]*min="1"[^>]*max="255"/);
+});
 
 test('mavlink-in.html: source sysid validates as an addressable node 1..255', () => {
   const html = fs.readFileSync(path.join(nodesDir, 'mavlink-in.html'), 'utf8');
@@ -239,6 +245,20 @@ test('mavlink-command.html: a blank target inheriting a broadcast profile reds o
     'nothing bound yet: the Connection ring owns that, not this one');
   assert.equal(targetSystemValidator('mavlink-command.html', { delivery: 'send', connection: 'c1' }, PROFILE_0)(''), true,
     'broadcast is legal where no ack is awaited, inherited or not');
+});
+
+test('mavlink-command.html: a companion identity addresses the profile target, whatever sysid is typed', () => {
+  // resolve.js ignores the typed sysid under a companion identity and targets
+  // the one derived from the bound Vehicle Profile, so that is what is judged.
+  const saved = { delivery: 'confirm', connection: 'c1', identity: 'comp' };
+  const companion = { comp: { role: 'companion' } };
+  assert.match(
+    String(targetSystemValidator('mavlink-command.html', saved, { ...PROFILE_0, ...companion })('5')),
+    /inherits broadcast/,
+    'the typed 5 never reaches the wire; the companion targets the profile\'s 0'
+  );
+  assert.equal(targetSystemValidator('mavlink-command.html', saved, { ...PROFILE_1, ...companion })('0'), true,
+    'a typed 0 the runtime ignores is not a broadcast');
 });
 
 test('mavlink-param.html: on Build the inherited rung is the node\'s own Vehicle Profile, and only under __vehicle (#15)', () => {

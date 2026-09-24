@@ -21,19 +21,40 @@
     return 'Remote host and port are a pair — set both or neither';
   }
 
-  // The two signing credentials are mutually exclusive (§7): both set is an
-  // ambiguous deploy and which key wins would be a silent guess, so each side
-  // asks whether the other is present. Saved password credentials surface as
-  // `has_*` booleans rather than values, so the check reads the live entry
-  // first — own dialog only, and an emptied box is the operator's answer —
-  // then either saved spelling.
-  function signingSiblingPresent(node, selector, valueKey, hasKey) {
-    const $f = RED.mavlink.ownDialogField(node, selector);
-    if ($f) return !RED.mavlink.isBlank($f.val());
-    const creds = node.credentials || {};
-    let v = creds[valueKey];
-    if (v === undefined) v = creds[hasKey];
-    return Boolean(v);
+  /** Node-RED's password-box placeholder for a saved secret the editor cannot read. */
+  const SAVED_SECRET = '__PWRD__';
+
+  /**
+   * A signing credential as the editor can see it: the live box while this
+   * node's own dialog is open (an emptied box is the operator's answer), else
+   * the credentials Node-RED holds. A saved secret reads as SAVED_SECRET —
+   * Node-RED fills the box with it, and holds only `has_<name>` otherwise.
+   * null when Node-RED holds no credentials for the node (not opened since
+   * load or deploy), so the editor cannot answer.
+   */
+  function signingCredential(node, name) {
+    const $f = RED.mavlink.ownDialogField(node, `#node-config-input-${name}`);
+    if ($f) return $f.val();
+    if (!node.credentials) return null;
+    if (node.credentials[name] !== undefined) return node.credentials[name];
+    return node.credentials[`has_${name}`] ? SAVED_SECRET : '';
+  }
+
+  /**
+   * The runtime hands a present key to Buffer.from(…, 'hex') as saved, so it
+   * is exactly 64 hex characters. A saved secret is not readable here and
+   * passes; its format was checked when it was typed.
+   */
+  function keyHexReason(key) {
+    if (!key || key === SAVED_SECRET || /^[0-9a-fA-F]{64}$/.test(key)) return true;
+    return 'raw key must be exactly 64 hex characters (a raw 32-byte key)';
+  }
+
+  /** The two signing credentials are exclusive: which key wins would be a silent guess. */
+  function bothSetReason(passphrase, key) {
+    if (!passphrase || !key) return true;
+    return 'passphrase and raw key cannot both be set — clear one; the connection '
+      + 'will not guess which key to use';
   }
 
   function companionBoundElsewhere(node, identityIds) {
@@ -56,6 +77,25 @@
 
   function identityFree(conn, identityId) {
     return companionBoundElsewhere(conn, [identityId]) === true;
+  }
+
+  /** The Vehicle Profile this Connection binds, read live while its dialog is open. */
+  function boundVehicle(conn) {
+    const vehicleId = RED.mavlink.liveOr(conn, '#node-config-input-vehicle', conn.vehicle, '');
+    return vehicleId ? RED.nodes.node(vehicleId) : null;
+  }
+
+  /**
+   * A companion sends from the Vehicle Profile's target sysid, and system 0
+   * is never a source (DESIGN 14.138): a fleet-broadcast Vehicle Profile
+   * cannot carry a companion.
+   */
+  function companionSysidZero(vehicleNode, identityIds) {
+    const sysid = vehicleNode ? vehicleNode.defaultTargetSystem : '';
+    if (RED.mavlink.isBlank(sysid) || Number(sysid) !== 0) return true;
+    if (!identityIds.some((id) => RED.mavlink.identityRole(id) === 'companion')) return true;
+    return 'a companion takes its source sysid from the Vehicle Profile’s target sysid, '
+      + 'and 0 is never a source (DESIGN 14.138)';
   }
 
   // The Connection whose dialog is open. Node-RED hands the Identity picker's
@@ -173,7 +213,9 @@
           const cfg = RED.nodes.node(v);
           if (!cfg) return 'no longer exists — reselect an Identity';
           if (cfg.valid === false) return 'is not properly configured';
-          return companionBoundElsewhere(this, [v]);
+          const elsewhere = companionBoundElsewhere(this, [v]);
+          if (elsewhere !== true) return elsewhere;
+          return companionSysidZero(boundVehicle(this), [v]);
         } },
       // Every bound identity must send as its own (sysid, compid). Sharing the
       // pair is a wire collision the driver cannot report: the Connection runs
@@ -192,27 +234,34 @@
         if ($live) v = $live.val();
         const elsewhere = companionBoundElsewhere(this, v);
         if (elsewhere !== true) return elsewhere;
-        const vehicleId = RED.mavlink.liveOr(this, '#node-config-input-vehicle', this.vehicle, '');
-        const vehicleNode = vehicleId ? RED.nodes.node(vehicleId) : null;
+        const vehicleNode = boundVehicle(this);
         // No Vehicle resolved yet — its own required ring owns that, and a
         // companion's sysid cannot be derived without it.
         if (!vehicleNode) return true;
+        const sysidZero = companionSysidZero(vehicleNode, Array.isArray(v) ? v : []);
+        if (sysidZero !== true) return sysidZero;
         const primary = RED.mavlink.liveOr(this, '#node-config-input-localIdentity', this.localIdentity, '');
         const bound = [primary].concat(Array.isArray(v) ? v : []);
         const clash = RED.mavlink.duplicateBoundIdentity(bound, vehicleNode.defaultTargetSystem);
         if (!clash) return true;
         return `‘${clash.a}’ and ‘${clash.b}’ both send as ${clash.sysid}/${clash.compid} — each bound identity needs its own SysID/CompID`;
       } },
-      // Sign outbound needs a key to sign with (§7): checked with both
-      // credential boxes blank is a deploy that cannot start, so it reds here.
-      // The sibling reads follow the exclusivity ring's saved/live resolution.
-      // Two args so the reason renders (§14).
+      /**
+       * The signing rings that block save. Node-RED validates `credentials`
+       * only in the open dialog (red.js validateNode needs `_def._creds`,
+       * which nothing sets), so the key format and the exclusivity ride here
+       * with Sign outbound's own rule: checked needs a key to sign with.
+       * Two args so the reason renders (§14).
+       */
       signOutbound: { value: false, validate(v, _opt) {
+        const passphrase = signingCredential(this, 'signingPassphrase');
+        const key = signingCredential(this, 'signingKeyHex');
+        const format = keyHexReason(key);
+        if (format !== true) return format;
+        const both = bothSetReason(passphrase, key);
+        if (both !== true) return both;
         if (v !== true && v !== 'true') return true;
-        if (signingSiblingPresent(this, '#node-config-input-signingPassphrase',
-          'signingPassphrase', 'has_signingPassphrase')) return true;
-        if (signingSiblingPresent(this, '#node-config-input-signingKeyHex',
-          'signingKeyHex', 'has_signingKeyHex')) return true;
+        if (passphrase === null || passphrase || key) return true;
         return 'requires a signing passphrase or raw key';
       } },
       acceptInvalid: { value: false },
@@ -242,46 +291,23 @@
       } },
       disabled: { value: false },
     },
+    /**
+     * These rings paint the box being typed in; signOutbound's carries the
+     * same rules into node validity. Two args so the reason renders (§14).
+     */
     credentials: {
-      // Exclusivity mirror of signingKeyHex: the red must land on the field
-      // the operator is touching, not only on the sibling. Blank is legal —
-      // signing is optional. Two args so the reason renders (§14).
       signingPassphrase: {
         type: 'password',
         validate(v, _opt) {
-          if (RED.mavlink.isBlank(v)) return true;
-          if (signingSiblingPresent(this, '#node-config-input-signingKeyHex',
-            'signingKeyHex', 'has_signingKeyHex')) {
-            return 'cannot be set alongside a raw key — clear one; the connection '
-              + 'will not guess which key to use';
-          }
-          return true;
+          return bothSetReason(v, signingCredential(this, 'signingKeyHex'));
         },
       },
       signingKeyHex: {
         type: 'password',
-        /**
-         * The two signing rules the driver does not restate (§0): the wire
-         * format, and the exclusivity against the passphrase — the
-         * dependency-between-fields case AGENTS.md names by name.
-         *
-         * Two args so the reason renders (§14).
-         */
         validate(v, _opt) {
-          if (RED.mavlink.isBlank(v)) return true;
-          // The exact saved value: the runtime hands it to Buffer.from(…, 'hex')
-          // as saved, so surrounding whitespace reds here rather than
-          // yielding a short key on the wire.
-          const val = String(v);
-          if (!/^[0-9a-fA-F]{64}$/.test(val)) {
-            return 'must be exactly 64 hex characters (a raw 32-byte key)';
-          }
-          if (signingSiblingPresent(this, '#node-config-input-signingPassphrase',
-            'signingPassphrase', 'has_signingPassphrase')) {
-            return 'cannot be set alongside a passphrase — clear one; the connection '
-              + 'will not guess which key to use';
-          }
-          return true;
+          const format = keyHexReason(v);
+          if (format !== true) return format;
+          return bothSetReason(signingCredential(this, 'signingPassphrase'), v);
         },
       },
     },

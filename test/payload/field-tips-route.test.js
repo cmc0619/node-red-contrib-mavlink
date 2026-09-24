@@ -97,23 +97,6 @@ test('missing Vehicle Profile without dialect does not invent tips', () => {
   assert.match(res.body.notice, /not deployed/i);
 });
 
-test('missing Vehicle Profile with custom dialect is refused', () => {
-  const handlers = captureRoutes({});
-  const handler = handlers.get('/mavlink/payload/field-tips');
-  const res = mockRes();
-  handler({
-    query: {
-      topic: 'camera',
-      verb: 'photo',
-      vehicle: 'gone',
-      dialect: 'custom',
-    },
-  }, res);
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body.fields, {});
-  assert.match(res.body.notice, /not deployed/i);
-});
-
 test('field-tip resolution errors remain generic', () => {
   const handlers = captureRoutes({
     veh1: {

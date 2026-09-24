@@ -16,6 +16,9 @@
       // The 1000 default is this dialog's, not the runtime's.
       const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
       if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of milliseconds';
+      if (n > RED.mavlink.MAX_TIMER_MS) {
+        return `must be at most ${RED.mavlink.MAX_TIMER_MS} — Node.js runs a longer timer at 1 ms`;
+      }
       return true;
     }
 

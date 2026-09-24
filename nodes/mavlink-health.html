@@ -5,6 +5,9 @@
       // (§0), and Number('') is 0 — an already-expired lease, not "no default".
       const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
       if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of seconds';
+      if (n * 1000 > RED.mavlink.MAX_TIMER_MS) {
+        return `must be at most ${RED.mavlink.MAX_TIMER_MS / 1000} s — Node.js runs a longer timer at 1 ms`;
+      }
       return true;
     }
 

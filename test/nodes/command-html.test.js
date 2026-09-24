@@ -590,6 +590,21 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   assert.match(String(params.validate.call(cfg({ preset: 'arm' }), '{oops', {})), /valid JSON/);
 });
 
+test('mavlink-command: message-picker presets red a blank message (zero-filled to HEARTBEAT)', () => {
+  const { params } = loadNodeDefaults('mavlink-command');
+  const verdict = (preset, blob, mode = 'preset') =>
+    params.validate.call({ id: 'c1', mode, preset }, JSON.stringify(blob), {});
+
+  for (const preset of ['request_message', 'set_message_interval', 'stop_message_interval']) {
+    assert.match(String(verdict(preset, {})), /needs a message.*HEARTBEAT/, `${preset} blank`);
+    assert.match(String(verdict(preset, { 2: 5 })), /needs a message/, `${preset} other params only`);
+    assert.equal(verdict(preset, { 1: 33 }), true, `${preset} with a message`);
+    assert.equal(verdict(preset, { 1: 0 }), true, `${preset} explicit HEARTBEAT is a choice`);
+    assert.equal(verdict(preset, {}, 'advanced'), true, `${preset} rule is preset-only`);
+  }
+  assert.equal(verdict('run_prearm_checks', {}), true, 'presets without a picker are untouched');
+});
+
 test('mavlink-command: an unreadable params blob reds in Advanced mode too', () => {
   // Advanced mode reads the same blob through the same JSON.parse; a corrupt
   // blob is drift the editor can already see at deploy (the "command advanced
@@ -799,4 +814,15 @@ test('the MAV_CMD search box is not a node property and the select still is', ()
     'the shared search drives the saved select, MAV_CMD_ optional'
   );
   assert.match(html, /advancedSearch\.setEntries\(catalog\.commands \|\| \[\]\)/, 'every catalog refill feeds the search');
+});
+
+test('completionTimeout: a whole number >= 1, checked only on the Complete tier', () => {
+  const { completionTimeout } = loadNodeDefaults('mavlink-command');
+  const complete = (v) => completionTimeout.validate.call({ delivery: 'complete' }, v, {});
+  assert.equal(complete(60000), true);
+  assert.match(String(complete(0)), />= 1/, 'zero would time every completion out on the first poll');
+  assert.match(String(complete('')), />= 1/);
+  assert.match(String(complete(2147483648)), /at most 2147483647/);
+  assert.equal(completionTimeout.validate.call({ delivery: 'confirm' }, '', {}), true,
+    'the row is hidden and unread off the Complete tier');
 });

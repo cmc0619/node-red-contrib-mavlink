@@ -496,6 +496,20 @@ test('payload values validate normalized tracking fields only for the selected v
   );
 });
 
+test('payload roi-set lat/lon carry the same degree bounds as Command presets', () => {
+  const { values } = require('./html-assert').loadNodeDefaults('mavlink-payload');
+  const validate = (saved) => values.validate.call({ topic: 'gimbal', verb: 'roi-set' }, saved, {});
+  const roi = { lat: 47.4, lon: 8.5, alt: 30 };
+
+  assert.equal(validate(roi), true);
+  assert.equal(validate({ ...roi, lat: -90, lon: 180 }), true, 'bounds are inclusive');
+  assert.match(String(validate({ ...roi, lat: 90.1 })), /^lat must be a number between -90 and 90/);
+  assert.match(String(validate({ ...roi, lat: -91 })), /^lat must be a number between -90 and 90/);
+  assert.match(String(validate({ ...roi, lon: 181 })), /^lon must be a number between -180 and 180/);
+  assert.match(String(validate({ ...roi, lon: -180.5 })), /^lon must be a number between -180 and 180/);
+  assert.equal(validate({ ...roi, alt: 99999 }), true, 'alt carries no degree bound');
+});
+
 test('payload storage booleans validate saved numeric and string MAV_BOOL values', () => {
   const { values } = require('./html-assert').loadNodeDefaults('mavlink-payload');
   const validate = (verb, saved) => values.validate.call({ topic: 'camera', verb }, saved, {});
