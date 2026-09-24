@@ -8,6 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const { loadNodeDefaults } = require('./html-assert');
 
@@ -387,4 +388,127 @@ test('mavlink-build: a message the dialect lost reds too, not just a blank one',
     loadNodeDefaults('mavlink-build', {}, foreign).messageName.validate.call({ id: 'b1' }, 'HEARTBEAT', {}),
     true
   );
+});
+
+/**
+ * Run the Build editor script over a stub dialog, fire the dialect change so
+ * the message catalog loads, and return the `fields` validator that now reads
+ * it. The loader hands `catalog` straight back; dialog chrome is a no-op.
+ *
+ * @param {object} catalog  `{ messages, enums }` as /mavlink/build/messages serves it
+ * @returns {Function}
+ */
+function fieldsValidatorWithCatalog(catalog) {
+  const start = html.indexOf('<script type="text/javascript">');
+  const script = html.slice(html.indexOf('>', start) + 1, html.indexOf('</script>', start));
+  const handlers = {};
+  function $(sel) {
+    const el = { length: 0 };
+    for (const k of ['empty', 'append', 'appendTo', 'off', 'val', 'text', 'find', 'attr']) el[k] = () => el;
+    el.on = (ev, fn) => { handlers[`${sel} ${ev}`] = fn; return el; };
+    return el;
+  }
+  const registered = {};
+  const noop = () => {};
+  vm.runInNewContext(script, {
+    RED: {
+      mavlink: {
+        BAND_OPTIONS: [],
+        oneOf: () => () => true,
+        validateAtLeast: () => () => true,
+        buildTierDialectDefaults: () => ({}),
+        isBlank: (v) => v === undefined || v === null || String(v).trim() === '',
+        liveOr: (_node, _sel, saved) => saved,
+        fillBandSelect: noop,
+        applyBuildTierRowVisibility: noop,
+        populateDialectSelect: noop,
+        fillEnumSelect: noop,
+        mountEnumSearch: () => ({ setEntries: noop }),
+        loadCatalog: (_endpoint, _state, cb) => cb(catalog),
+      },
+      nodes: { registerType(name, def) { registered[name] = def; } },
+    },
+    $,
+  });
+  const def = registered['mavlink-build'];
+  def.oneditprepare.call({ fields: '{}', tier: 'build', band: '2', dialect: 'common', messageName: 'PROBE' });
+  handlers['#node-input-dialect change']();
+  return def.defaults.fields.validate;
+}
+
+const PROBE_CATALOG = {
+  enums: {},
+  messages: [{
+    name: 'PROBE',
+    fields: [
+      { name: 'u8', type: 'uint8_t', arrayLength: null },
+      { name: 'u16', type: 'uint16_t', arrayLength: null },
+      { name: 'i32', type: 'int32_t', arrayLength: null },
+      { name: 'f', type: 'float', arrayLength: null },
+      { name: 'big', type: 'uint64_t', arrayLength: null },
+      { name: 'sbig', type: 'int64_t', arrayLength: null },
+      { name: 'label', type: 'char', arrayLength: 4 },
+      { name: 'arr', type: 'uint16_t', arrayLength: 3 },
+      { name: 'farr', type: 'float', arrayLength: 2 },
+    ],
+  }],
+};
+
+test('Build fields: each value must fit its wire type once the dialect is loaded (A3)', () => {
+  const validate = fieldsValidatorWithCatalog(PROBE_CATALOG);
+  const node = { messageName: 'PROBE' };
+  const check = (fields) => validate.call(node, JSON.stringify(fields), {});
+
+  assert.equal(check({
+    u8: 255, u16: 0, i32: -2147483648, f: 1.5,
+    big: '18446744073709551615', sbig: '-9223372036854775808',
+    label: 'a.b!', arr: [1, 2], farr: [0.5, -1],
+  }), true, 'whole integers, finite floats, 64-bit decimal strings');
+
+  // Buffer truncates a fraction silently: 1.5 in a uint16 would go out as 1.
+  assert.equal(check({ u16: 1.5 }), 'u16 must be a whole number');
+  assert.equal(check({ i32: 47.4 }), 'i32 must be a whole number', 'degrees typed into a degE7 field');
+  // Out of range is Buffer's own refusal at send, not a ring.
+  assert.equal(check({ u8: 300 }), true);
+
+  // A junk array token is kept as a string by the collector; Buffer writes it
+  // as 0 into an integer array and NaN into a float array.
+  assert.equal(check({ arr: [1, '2x', 3] }), 'arr[1] must be a whole number');
+  assert.equal(check({ arr: [1, 2.5] }), 'arr[1] must be a whole number');
+  assert.equal(check({ farr: [1, '2x'] }), 'farr[1] must be a finite number');
+  assert.equal(check({ farr: [1, 'NaN'] }), true, 'a typed NaN is the float "not used" value');
+  assert.equal(check({ f: 'abc' }), 'f must be a finite number');
+
+  // 64-bit fields save a decimal string the runtime reads as a BigInt.
+  assert.equal(check({ big: '12abc' }), 'big must be a whole number');
+
+  // Length is still checked before type.
+  assert.equal(check({ arr: [1, 2, 3, 4] }), 'arr has 4 entries — 3 fit');
+});
+
+test('Build fields: type checks wait for the dialect, like the length check', () => {
+  // Closed dialog: no catalog is in hand, so there is nothing to measure against.
+  const { fields } = loadNodeDefaults('mavlink-build');
+  assert.equal(fields.validate.call({ messageName: 'PROBE' }, '{"u16": 1.5}', {}), true);
+  // A message the catalog does not carry resolves no field types.
+  const validate = fieldsValidatorWithCatalog(PROBE_CATALOG);
+  assert.equal(validate.call({ messageName: 'OTHER' }, '{"u16": 1.5}', {}), true);
+});
+
+test('COMMAND_INT carries only param7 into z; x/y int32 start blank', () => {
+  // COMMAND_INT x/y are raw int32 (degE7 in global frames) and this node sends
+  // raw fields, so carrying param5/6 degrees would put 47 on the wire for 47.39.
+  const renderer = sliceBetween('function commandParamInput', 'function refreshCommandParams');
+  assert.match(renderer, /msgName === 'COMMAND_INT' && spec\.index === 7\)/);
+  assert.match(renderer, /saved = savedFields\.param7;/);
+  assert.doesNotMatch(renderer, /spec\.index >= 5/);
+  assert.doesNotMatch(renderer, /INT build scales/);
+});
+
+test('repeatMs: a whole number of milliseconds, 0 = off', () => {
+  const { repeatMs } = loadNodeDefaults('mavlink-build');
+  const validate = (v) => repeatMs.validate.call({}, v, {});
+  assert.equal(validate(0), true, 'off');
+  assert.equal(validate(1000), true);
+  assert.match(String(validate(0.5)), /whole number/, 'a fraction would run the timer at 1 ms');
 });

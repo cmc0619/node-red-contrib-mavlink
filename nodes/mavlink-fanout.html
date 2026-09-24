@@ -129,21 +129,22 @@
       armedFilter: { value: '', validate: RED.mavlink.oneOf(['', 'true', 'false']) },
       executionMode: {
         value: 'sequential',
-        // Membership first (§5's editor half, as on selectionMode). Then the
-        // Build rule: Broadcast only pairs with the "All" selection, which
-        // Build cannot choose — the reshape below greys the option, and a
-        // retained or hand-set value reds rather than deploying a node the
-        // runtime refuses on every message.
+        // Membership first (§5's editor half, as on selectionMode). Then
+        // Broadcast only pairs with the "All" selection: target_system 0
+        // reaches every vehicle on the link, so a list or filter would be
+        // ignored (DESIGN.md §14.113). Build requires a list, so it reds there
+        // too.
         validate: RED.mavlink.oneOf(['sequential', 'broadcast'], function (v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
-          return v !== 'broadcast' || 'Broadcast needs the "All" selection, which Build cannot use';
+          if (v !== 'broadcast') return true;
+          return RED.mavlink.liveOr(this, '#node-input-selectionMode', this.selectionMode) === 'all'
+            || 'Broadcast needs the "All" selection — target_system 0 reaches every vehicle, so it cannot honour a list or filter';
         }),
       },
       intervalMs: {
         value: 100,
         // Milliseconds >= 0: the input's min="0" is not enforced on save, and
         // a saved negative paces nothing.
-        validate: RED.mavlink.validateAtLeast(0),
+        validate: RED.mavlink.validateAtLeast(0, { integer: true }),
       },
       concurrency: { value: 1, validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
       stopOnError: { value: false },

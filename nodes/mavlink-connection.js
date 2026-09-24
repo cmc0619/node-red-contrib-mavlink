@@ -320,7 +320,7 @@ function buildSigning(config, credentials) {
     // match a fleet whose key did not come from a Mission-Planner-style
     // sha256(passphrase) (e.g. QGC derives via PBKDF2, which a passphrase
     // here cannot reproduce). The editor owns the format and the exclusivity
-    // against the passphrase (mavlink-connection.html credentials).
+    // against the passphrase (mavlink-connection.html, on Sign outbound).
     signing.key = Buffer.from(keyHex, 'hex');
   } else if (passphrase) {
     const { MavLinkPacketSignature } = require('node-mavlink');

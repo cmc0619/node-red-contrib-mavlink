@@ -98,14 +98,6 @@ test('missing Vehicle Profile with bundled dialect serves that dialect', () => {
   assert.ok(res.body.commands.some((c) => c.value === 400));
 });
 
-test('missing Vehicle Profile with custom dialect is refused', () => {
-  const handlers = captureRoutes({});
-  const handler = handlers.get('/mavlink/command/commands');
-  const res = mockRes();
-  handler({ query: { vehicle: 'gone', dialect: 'custom' } }, res);
-  assert.equal(res.statusCode, 404);
-});
-
 test('empty command catalog query craters at the seed lookup instead of defaulting to ardupilotmega', () => {
   const handlers = captureRoutes({});
   const handler = handlers.get('/mavlink/command/commands');

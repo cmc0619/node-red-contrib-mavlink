@@ -590,6 +590,21 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   assert.match(String(params.validate.call(cfg({ preset: 'arm' }), '{oops', {})), /valid JSON/);
 });
 
+test('mavlink-command: message-picker presets red a blank message (zero-filled to HEARTBEAT)', () => {
+  const { params } = loadNodeDefaults('mavlink-command');
+  const verdict = (preset, blob, mode = 'preset') =>
+    params.validate.call({ id: 'c1', mode, preset }, JSON.stringify(blob), {});
+
+  for (const preset of ['request_message', 'set_message_interval', 'stop_message_interval']) {
+    assert.match(String(verdict(preset, {})), /needs a message.*HEARTBEAT/, `${preset} blank`);
+    assert.match(String(verdict(preset, { 2: 5 })), /needs a message/, `${preset} other params only`);
+    assert.equal(verdict(preset, { 1: 33 }), true, `${preset} with a message`);
+    assert.equal(verdict(preset, { 1: 0 }), true, `${preset} explicit HEARTBEAT is a choice`);
+    assert.equal(verdict(preset, {}, 'advanced'), true, `${preset} rule is preset-only`);
+  }
+  assert.equal(verdict('run_prearm_checks', {}), true, 'presets without a picker are untouched');
+});
+
 test('mavlink-command: an unreadable params blob reds in Advanced mode too', () => {
   // Advanced mode reads the same blob through the same JSON.parse; a corrupt
   // blob is drift the editor can already see at deploy (the "command advanced

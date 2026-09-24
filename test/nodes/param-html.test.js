@@ -623,7 +623,7 @@ test('the Index field advertises the same floor the validator enforces', () => {
 test('the action select is pinned to the actions the driver implements', () => {
   assert.match(
     html,
-    /action:\s*\{\s*value:\s*'read',\s*validate:\s*RED\.mavlink\.oneOf\(\[[^\]]*\]\)\s*\}/,
+    /action:\s*\{\s*value:\s*'read',\s*validate:\s*RED\.mavlink\.oneOf\(\[[^\]]*\]/,
     'action carries a oneOf validator'
   );
 
@@ -709,4 +709,81 @@ test('mavlink-param keeps a 10 s window: one deadline over the whole PARAM_VALUE
   const defaults = loadNodeDefaults('mavlink-param');
   assert.equal(defaults.timeoutMs.value, 10000);
   assert.match(String(defaults.timeoutMs.validate.call({ delivery: 'collect', action: 'request-list' }, '', {})), />= 1/, 'blank reds by the shared rule');
+});
+
+/* ---------- value x integer type ---------- */
+
+/**
+ * The value validator with profiles for both firmwares reachable through a
+ * Connection, so wire-tier nodes resolve their firmware the way the dialog does.
+ */
+function typedValueValidator(opts) {
+  return loadNodeDefaults('mavlink-param', {
+    cPx4: { vehicle: 'vPx4' },
+    cAp: { vehicle: 'vAp' },
+    vPx4: { dialect: 'development', firmware: 'px4' },
+    vAp: { dialect: 'ardupilotmega', firmware: 'ardupilot' },
+  }, opts).value.validate;
+}
+
+const px4Set = (paramType) => ({ delivery: 'confirm', connection: 'cPx4', action: 'set', paramType });
+
+test('an integer Type refuses a fraction; its range is Buffer\'s to refuse at send', () => {
+  const validate = typedValueValidator();
+  const reds = (type, v) => assert.equal(validate.call(px4Set(type), v, {}),
+    'must be a whole number for the selected Type', `${type} refuses ${v}`);
+  const passes = (type, v) => assert.equal(validate.call(px4Set(type), v, {}), true, `${type} takes ${v}`);
+
+  reds('MAV_PARAM_TYPE_UINT8', '2.9');
+  reds('MAV_PARAM_TYPE_INT32', '0.5');
+  passes('MAV_PARAM_TYPE_UINT8', '255');
+  passes('MAV_PARAM_TYPE_UINT8', '256');
+  passes('MAV_PARAM_TYPE_REAL32', '2.9');
+  assert.equal(validate.call(px4Set('MAV_PARAM_TYPE_REAL32'), 'abc', {}), false, 'REAL32 keeps the finite check');
+  passes('MAV_PARAM_TYPE_UINT8', '');
+});
+
+test('the Type bound follows the dialog: off on ArduPilot, on where the firmware is unresolved', () => {
+  const validate = typedValueValidator();
+  const int8 = 'MAV_PARAM_TYPE_INT8';
+  assert.equal(validate.call({ delivery: 'confirm', connection: 'cAp', action: 'set', paramType: int8 }, '2.9', {}), true,
+    'ArduPilot through the Connection ignores the Type');
+  assert.equal(validate.call({ delivery: 'build', dialect: 'ardupilotmega', firmware: 'ardupilot', action: 'set', paramType: int8 }, '2.9', {}), true,
+    'and on Build');
+  assert.match(String(validate.call({ delivery: 'build', dialect: 'development', firmware: 'px4', action: 'set', paramType: int8 }, '2.9', {})),
+    /whole number for the selected Type/, 'PX4 on Build');
+  assert.match(String(validate.call({ delivery: 'send', action: 'set', paramType: int8 }, '2.9', {})),
+    /whole number for the selected Type/, 'no firmware resolved: the Type is a real choice');
+  assert.equal(validate.call({ delivery: 'confirm', connection: 'cPx4', action: 'read', paramType: int8 }, '2.9', {}), true,
+    'a read sends no value');
+});
+
+test('the Type bound reads the live Type select while the dialog is open', () => {
+  const validate = typedValueValidator({
+    dom: { '#node-input-paramType': { val: 'MAV_PARAM_TYPE_INT16' } },
+    editStack: [{ id: 'p1' }],
+  });
+  const saved = { id: 'p1', ...px4Set('MAV_PARAM_TYPE_REAL32') };
+  assert.match(String(validate.call(saved, '2.5', {})), /whole number for the selected Type/);
+});
+
+test('Action reds a pairing the Delivery tier cannot wait on (false success otherwise)', () => {
+  const { action } = loadNodeDefaults('mavlink-param');
+  const verdict = (delivery, a) => action.validate.call({ delivery, action: a }, a, {});
+  for (const delivery of ['build', 'send']) {
+    for (const a of ['read', 'set', 'request-list']) assert.equal(verdict(delivery, a), true, `${delivery} + ${a}`);
+  }
+  assert.equal(verdict('confirm', 'read'), true);
+  assert.equal(verdict('confirm', 'set'), true);
+  assert.match(String(verdict('confirm', 'request-list')), /echo-confirm waits on Read one or Set one/);
+  assert.equal(verdict('collect', 'request-list'), true);
+  assert.match(String(verdict('collect', 'read')), /collect waits on Request list/);
+  assert.match(String(verdict('collect', 'set')), /collect waits on Request list/);
+
+  const open = loadNodeDefaults('mavlink-param', {}, {
+    dom: { '#node-input-delivery': { val: 'collect' } },
+    editStack: [{ id: 'p1' }],
+  }).action.validate;
+  assert.match(String(open.call({ id: 'p1', delivery: 'build' }, 'read', {})), /collect waits on Request list/,
+    'reads the live Delivery select while the dialog is open');
 });

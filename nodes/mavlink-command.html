@@ -386,6 +386,11 @@
             return 'with a blank centre this means "here" (NaN), which COMMAND_INT cannot carry — ' +
               'set Send as to COMMAND_LONG, or fill in the centre';
           }
+          /** A blank message-picker param is zero-filled to message id 0 (HEARTBEAT). */
+          const picker = (PRESET_PARAMS[preset] || []).find((spec) => spec.messages);
+          if (picker && !presentParam(values[picker.index])) {
+            return 'needs a message — a blank one is sent as 0 (HEARTBEAT)';
+          }
           const rule = PRESET_LOCATION[preset];
           if (!rule || !locationRequired(rule.require, values)) return true;
           if (!presentParam(values[5]) || !presentParam(values[6])) {

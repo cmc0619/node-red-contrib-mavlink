@@ -7,6 +7,27 @@
 
     const COMMAND_MESSAGES = { COMMAND_LONG: true, COMMAND_INT: true };
 
+    /**
+     * Why one value cannot ride a numeric wire type, or null when it can.
+     * Buffer truncates a fraction and writes a junk token as 0 or NaN without
+     * a word (DESIGN.md 14.55), so the ring is where the operator hears it.
+     * Out-of-range integers need no ring: Buffer refuses them at send.
+     * Integers must be whole; a 64-bit field also takes the decimal string
+     * the runtime reads as a BigInt. Float and double take any finite number,
+     * or the typed token `NaN` — legal on the wire for a float, the "field not
+     * used" value (DESIGN.md 14.56).
+     */
+    function wireValueProblem(type, value) {
+      if (type === 'float' || type === 'double') {
+        if (value === 'NaN') return null;
+        return typeof value === 'number' && Number.isFinite(value) ? null : 'must be a finite number';
+      }
+      const whole = typeof value === 'number'
+        ? Number.isInteger(value)
+        : type.endsWith('64_t') && typeof value === 'string' && /^\s*-?\d+\s*$/.test(value);
+      return whole ? null : 'must be a whole number';
+    }
+
     /** Messages / commands catalog request sequences (DESIGN.md §6 shared loadCatalog). */
     const _msgCatalog = { seq: 0 };
     const _cmdCatalog = { seq: 0 };
@@ -127,11 +148,16 @@
             const msg = (catalog.messages || []).find((m) => m.name === msgName);
             if (!msg) return true;
             for (const spec of msg.fields || []) {
-              if (!spec.arrayLength) continue;
               const value = parsed[spec.name];
               if (value === undefined || value === null) continue;
-              if (value.length > spec.arrayLength) {
+              if (spec.arrayLength && value.length > spec.arrayLength) {
                 return `${spec.name} has ${value.length} entries — ${spec.arrayLength} fit`;
+              }
+              if (spec.type === 'char') continue;
+              const entries = spec.arrayLength ? value : [value];
+              for (let i = 0; i < entries.length; i++) {
+                const problem = wireValueProblem(spec.type, entries[i]);
+                if (problem) return `${spec.arrayLength ? `${spec.name}[${i}]` : spec.name} ${problem}`;
               }
             }
             return true;
@@ -151,9 +177,9 @@
         },
         // A typo here fails silently rather than loudly: Number('10OO') is NaN,
         // NaN > 0 is false, and the repeat timer simply never arms — the node
-        // looks configured and does nothing. Blank is 0, which is the real
-        // "off" value, so blank stays legal.
-        repeatMs:    { value: 0, validate: RED.mavlink.validateAtLeast(0) },
+        // looks configured and does nothing. 0 is the real "off" value; a
+        // fraction would run the timer at 1 ms.
+        repeatMs:    { value: 0, validate: RED.mavlink.validateAtLeast(0, { integer: true }) },
       ...RED.mavlink.buildTierDialectDefaults({ modeField: 'tier' })
     };
 
@@ -355,12 +381,14 @@
         function commandParamInput(msgName, spec, enums) {
           const key = wireFieldForCommandParam(msgName, spec.index);
           let saved = savedFields[key];
-          // Switching the carrier message COMMAND_LONG → COMMAND_INT for the same
-          // MAV_CMD resets lastBuildCommandId, so the param wipe is skipped and the
-          // just-synced param5–7 are still the live values for x/y/z. Both forms hold
-          // degrees here (the INT build scales), so the number carries across as-is.
-          if ((saved === undefined || saved === null || saved === '') && msgName === 'COMMAND_INT' && spec.index >= 5) {
-            saved = savedFields[`param${spec.index}`];
+          /**
+           * COMMAND_INT z is a float like COMMAND_LONG param7, so a switch
+           * between the two carries param7 into it. x/y are int32 raw wire
+           * values (degE7 in global frames) that param5/6 degrees cannot fill,
+           * so they start blank.
+           */
+          if ((saved === undefined || saved === null || saved === '') && msgName === 'COMMAND_INT' && spec.index === 7) {
+            saved = savedFields.param7;
           }
           // The control ladder (checkbox / pulldown / bitmask / magic boolean /
           // number, with the saved-value sentinel) is the shared builder;
@@ -626,7 +654,11 @@
   are comma-separated; fewer entries than the field's length pad with zeros
   (the shape every <code>data</code>/<code>len</code> pair relies on), and more
   entries than fit are refused rather than cut &mdash; here as a red ring, and
-  at send time for a <code>msg.payload</code> array.</p>
+  at send time for a <code>msg.payload</code> array. Every configured value,
+  array entries included, must fit its wire type: a whole number on an integer
+  field (out of range is refused at send), a finite number on a float field. <code>COMMAND_INT</code>
+  <code>x</code>/<code>y</code> are raw int32 wire values (degE7 in global
+  frames), not degrees.</p>
   <p><b>Dialect</b> (Build delivery): pick a bundled dialect from the dropdown.
   Choose <i>from Vehicle Profile…</i> to use a custom XML dialect; the Vehicle
   Profile field then appears. On wire deliveries the connection's profile

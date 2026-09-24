@@ -6,12 +6,24 @@
     name: { value: '' },
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'collect']) },
-      // Without this, a drifted action falls through buildParamMessage's
-      // switch to `return undefined` (§5) and the Build tier reports it as a
-      // succeeded build of `{ payload: undefined }` — phantom success, which
-      // §0 rule 3 forbids. The driver is right to select no behavior; the
-      // red ring is what stops the flow reaching that state.
-      action: { value: 'read', validate: RED.mavlink.oneOf(['read', 'set', 'request-list']) },
+      /**
+       * Without the membership check, a drifted action falls through
+       * buildParamMessage's switch to `return undefined` (§5) and the Build
+       * tier reports it as a succeeded build of `{ payload: undefined }` —
+       * phantom success, which §0 rule 3 forbids. Then the pairing: the
+       * runtime waits only on confirm + read/set and on collect +
+       * request-list. Any other pair on those tiers sends once and reports
+       * success for a confirm or collect that never happened.
+       */
+      action: {
+        value: 'read',
+        validate: RED.mavlink.oneOf(['read', 'set', 'request-list'], function (v) {
+          const delivery = RED.mavlink.liveOr(this, '#node-input-delivery', this?.delivery, 'build');
+          if (delivery === 'confirm' && v === 'request-list') return 'Send and echo-confirm waits on Read one or Set one';
+          if (delivery === 'collect' && v !== 'request-list') return 'Request list and collect waits on Request list';
+          return true;
+        }),
+      },
       // Every Param action is a two-way conversation: a set waits for its
       // PARAM_VALUE echo, a read for the value, a list for the stream. None
       // of them can be answered by "sysid 0", so broadcast reds on the tiers
@@ -91,7 +103,8 @@
          * runtime rather than being an unfilled form. Beyond that the value
          * must be a number, and — when the definition documents bounds — must
          * be inside them. Catching 50 for an 800–2200 PWM parameter here beats
-         * discovering it after the vehicle has taken it.
+         * discovering it after the vehicle has taken it. An integer Type also
+         * requires a whole number (`integerType`).
          *
          * Definitions are advisory, not authority: with none loaded this is
          * a plain numeric check, and a parameter absent from the seed
@@ -109,6 +122,7 @@
           if (RED.mavlink.isBlank(v)) return true;
           const n = Number(v);
           if (!Number.isFinite(n)) return false;
+          if (integerType(this) && !Number.isInteger(n)) return 'must be a whole number for the selected Type';
           const defs = _paramDefsByKey[paramDefsKey(this)];
           const def = defs?.[editedParamId(this)];
           if (!def) return true;
@@ -160,6 +174,29 @@
    * 2000 would fail validation on a value that firmware accepts.
    */
   const _paramDefsByKey = {};
+
+  /**
+   * The integer MAV_PARAM_TYPEs. A bytewise set writes the value into the
+   * type's bytes, which drops a fraction silently (2.9 is stored as 2);
+   * Buffer itself refuses a value outside the type's range.
+   */
+  const INTEGER_PARAM_TYPES = [
+    'MAV_PARAM_TYPE_UINT8', 'MAV_PARAM_TYPE_INT8', 'MAV_PARAM_TYPE_UINT16',
+    'MAV_PARAM_TYPE_INT16', 'MAV_PARAM_TYPE_UINT32', 'MAV_PARAM_TYPE_INT32',
+  ];
+
+  /**
+   * Whether the selected Type is an integer the value is packed into bytewise.
+   * Not on ArduPilot, which ignores the declared type and whose dialog removes
+   * the Type row (§14.80).
+   *
+   * @param {object} node
+   * @returns {boolean}
+   */
+  function integerType(node) {
+    if (RED.mavlink.resolveCatalogTarget({ source: node }).firmware === 'ardupilot') return false;
+    return INTEGER_PARAM_TYPES.indexOf(RED.mavlink.liveOr(node, '#node-input-paramType', node?.paramType)) !== -1;
+  }
 
   /**
    * Which definition set a node uses. The shared resolver already answers this

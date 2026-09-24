@@ -207,7 +207,12 @@ test('mavlink-mission exposes set-current with a uint16 sequence field', () => {
   assert.equal(verdict(65535), true);
   assert.match(String(verdict(1.5)), /integer between 0 and 65535/);
   assert.match(String(verdict(65536)), /integer between 0 and 65535/);
+  // A blank sequence cannot pack MISSION_SET_CURRENT, so Set current requires it.
+  assert.match(String(verdict('')), /required for Set current/);
+  assert.match(String(verdict(undefined)), /required for Set current/);
   for (const operationName of ['download', 'upload', 'clear']) {
+    assert.equal(seq.validate.call({ operation: operationName }, '', {}), true,
+      `${operationName} does not require the unused sequence field`);
     assert.equal(
       seq.validate.call({ operation: operationName }, 65536, {}),
       true,

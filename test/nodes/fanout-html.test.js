@@ -251,10 +251,25 @@ test('selectionMode and executionMode red on membership, then on the Build pairi
   assert.match(String(sel.call({ delivery: 'build' }, 'all', {})), /explicit sysid list on Build/);
 
   assert.equal(exec.call({ delivery: 'send' }, 'sequential', {}), true);
-  assert.equal(exec.call({ delivery: 'send' }, 'broadcast', {}), true);
+  assert.equal(exec.call({ delivery: 'send', selectionMode: 'all' }, 'broadcast', {}), true);
   assert.match(String(exec.call({ delivery: 'send' }, 'parallel', {})), /must be one of/);
   assert.match(String(exec.call({ delivery: 'build' }, 'broadcast', {})), /All.*selection/);
   assert.equal(exec.call({ delivery: 'build' }, 'sequential', {}), true);
+});
+
+test('broadcast execution requires the "All" selection on every tier (§14.113)', () => {
+  // The runtime replaces any selection with all under broadcast, so a list or
+  // filter paired with broadcast would command the whole fleet.
+  const exec = loadNodeDefaults('mavlink-fanout').executionMode.validate;
+
+  for (const delivery of ['build', 'send', 'confirm']) {
+    for (const selectionMode of ['list', 'filter']) {
+      assert.match(String(exec.call({ delivery, selectionMode }, 'broadcast', {})), /All.*selection.*list or filter/,
+        `${delivery}: broadcast over a ${selectionMode} selection reds`);
+      assert.equal(exec.call({ delivery, selectionMode }, 'sequential', {}), true, `${delivery}: sequential keeps ${selectionMode}`);
+    }
+  }
+  assert.equal(exec.call({ delivery: 'send', selectionMode: 'all' }, 'broadcast', {}), true, 'broadcast over all is legal');
 });
 
 test('intervalMs and maxRetries: blank reds, present values carry range red rings', () => {
@@ -271,6 +286,7 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
   assert.equal(interval.call({}, 250, {}), true);
   assert.match(String(interval.call({}, -100, {})), />= 0/, 'negative pacing reds');
   assert.match(String(interval.call({}, 'abc', {})), />= 0/);
+  assert.match(String(interval.call({}, 0.5, {})), /whole number/, 'a fraction would run the timer at 1 ms');
 
   assert.match(String(retries.call(confirm, '', {})), />= 0/, 'blank retries reds');
   assert.equal(retries.call(confirm, 0, {}), true);

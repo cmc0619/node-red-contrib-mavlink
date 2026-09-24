@@ -45,7 +45,6 @@ const TARGET_FILES = [
   ['mavlink-param.html', 'targetSystem'],
   ['mavlink-payload.html', 'targetSystem'],
   ['mavlink-mission.html', 'targetSystem'],
-  ['mavlink-state.html', 'targetSystem'],
 ];
 
 /**
@@ -69,6 +68,13 @@ function descriptorBlock(html, prop) {
   }
   throw new Error(`unbalanced braces in ${prop} descriptor`);
 }
+
+test('mavlink-state.html: the sysid filter validates as an addressable node 1..255', () => {
+  // Filtering peers on sysid 0 never matches: sysid 0 is never a source (§14.138).
+  const html = fs.readFileSync(path.join(nodesDir, 'mavlink-state.html'), 'utf8');
+  assert.match(descriptorBlock(html, 'targetSystem'), /RED\.mavlink\.validateUint8\(1\)/);
+  assert.match(html, /id="node-input-targetSystem"[^>]*min="1"[^>]*max="255"/);
+});
 
 test('mavlink-in.html: source sysid validates as an addressable node 1..255', () => {
   const html = fs.readFileSync(path.join(nodesDir, 'mavlink-in.html'), 'utf8');

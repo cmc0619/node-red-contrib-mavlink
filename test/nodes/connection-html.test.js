@@ -591,7 +591,7 @@ test('mode gates read through liveOr — a foreign dialog cannot poison them (#2
 test('signing credentials are mutually exclusive in both directions, live-aware', () => {
   const creds = loadNodeType('mavlink-connection').credentials;
   const key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
-  const reason = /cannot be set alongside/;
+  const reason = /cannot both be set/;
 
   // Two-arg forms so a returned string renders as the invalid reason (§14).
   assert.equal(creds.signingKeyHex.validate.length, 2);
@@ -695,6 +695,82 @@ test('Sign outbound reds at deploy when checked with no signing credential', () 
   assert.match(String(cleared.signOutbound.validate.call(
     { id: 'c1', credentials: { has_signingPassphrase: true } }, true, {}
   )), reason);
+});
+
+test('signing rings block save: signOutbound carries key format and exclusivity whether or not it is checked', () => {
+  // Node-RED validates `credentials` only in the open dialog (red.js
+  // validateNode needs _def._creds), so the rings that must block Done ride on
+  // a `defaults` property.
+  const key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+  const short = key.slice(1);
+  const defaults = loadNodeDefaults('mavlink-connection');
+  const validate = (conn, v) => defaults.signOutbound.validate.call({ id: 'c1', ...conn }, v, {});
+
+  // After Done, node.credentials holds what was typed.
+  assert.match(String(validate({ credentials: { signingKeyHex: short } }, false)), /64 hex/);
+  assert.match(String(validate({ credentials: { signingKeyHex: ` ${key}` } }, true)), /64 hex/);
+  assert.match(
+    String(validate({ credentials: { signingKeyHex: key, signingPassphrase: 'correct horse' } }, false)),
+    /cannot both be set/
+  );
+  assert.match(
+    String(validate({ credentials: { signingKeyHex: key, has_signingPassphrase: true } }, true)),
+    /cannot both be set/
+  );
+  assert.equal(validate({ credentials: { signingKeyHex: key } }, true), true);
+  assert.equal(validate({ credentials: { signingPassphrase: 'correct horse' } }, true), true);
+
+  // A saved key the editor cannot read is present, not malformed.
+  assert.equal(validate({ credentials: { has_signingKeyHex: true } }, true), true);
+  // No credentials held (never opened since load or deploy): nothing to judge.
+  assert.equal(validate({}, true), true);
+
+  // Own dialog open: the live boxes are the answer, before Done.
+  const open = (dom) => loadNodeDefaults('mavlink-connection', {}, { dom, editStack: [{ id: 'c1' }] });
+  assert.match(
+    String(open({ '#node-config-input-signingKeyHex': { val: short } })
+      .signOutbound.validate.call({ id: 'c1', credentials: {} }, false, {})),
+    /64 hex/
+  );
+  assert.match(
+    String(open({
+      '#node-config-input-signingKeyHex': { val: key },
+      '#node-config-input-signingPassphrase': { val: 'correct horse' },
+    }).signOutbound.validate.call({ id: 'c1', credentials: {} }, false, {})),
+    /cannot both be set/
+  );
+});
+
+test('a saved secret\'s __PWRD__ placeholder is present, never malformed', () => {
+  // Node-RED fills a saved password box with '__PWRD__' and sets has_<name>.
+  const key = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+  const saved = { id: 'c1', credentials: { has_signingKeyHex: true } };
+  const type = loadNodeType('mavlink-connection', {}, {
+    dom: {
+      '#node-config-input-signingKeyHex': { val: '__PWRD__' },
+      '#node-config-input-signingPassphrase': { val: '' },
+    },
+    editStack: [{ id: 'c1' }],
+  });
+  assert.equal(type.credentials.signingKeyHex.validate.call(saved, '__PWRD__', {}), true);
+  assert.equal(type.defaults.signOutbound.validate.call(saved, true, {}), true);
+  assert.equal(type.credentials.signingPassphrase.validate.call(saved, '', {}), true);
+
+  // A passphrase typed beside the saved key is still two keys.
+  const both = loadNodeType('mavlink-connection', {}, {
+    dom: {
+      '#node-config-input-signingKeyHex': { val: '__PWRD__' },
+      '#node-config-input-signingPassphrase': { val: 'correct horse' },
+    },
+    editStack: [{ id: 'c1' }],
+  });
+  assert.match(String(both.defaults.signOutbound.validate.call(saved, false, {})), /cannot both be set/);
+  assert.match(
+    String(both.credentials.signingPassphrase.validate.call(saved, 'correct horse', {})),
+    /cannot both be set/
+  );
+  // Replacing the placeholder with a typed key is judged on what was typed.
+  assert.equal(both.credentials.signingKeyHex.validate.call({ id: 'c9', credentials: {} }, key, {}), true);
 });
 
 test('Local Identity editor exposes heartbeatIntervalMs', () => {

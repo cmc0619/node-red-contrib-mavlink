@@ -435,7 +435,7 @@ test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden
 
   const table = payloadHtml.slice(
     payloadHtml.indexOf('const REQUIRED_VALUES = '),
-    payloadHtml.indexOf('const payloadDefaults')
+    payloadHtml.indexOf('const NAN_WHEN_BLANK = ')
   );
   for (const [key, slots] of Object.entries(expected)) {
     assert.ok(
@@ -489,10 +489,10 @@ test('payload values validate normalized tracking fields only for the selected v
     true,
     'track-rectangle ignores fields owned by another verb'
   );
-  assert.equal(
-    validate('camera', 'track-point', { ...point, pointX: '', pointY: undefined, radius: null }),
-    true,
-    'blank tracking values keep the shared numeric-validator semantics'
+  assert.match(
+    String(validate('camera', 'track-point', { ...point, pointX: '', pointY: undefined, radius: null })),
+    /is blank — it would be sent unset/,
+    'a blank tracking value would go out unset'
   );
 });
 
@@ -514,10 +514,10 @@ test('payload storage booleans validate saved numeric and string MAV_BOOL values
       );
     }
   }
-  assert.equal(
-    validate('storage-format', { storageId: 1, format: '', resetImageLog: undefined }),
-    true,
-    'blank values retain the shared optional-value semantics'
+  assert.match(
+    String(validate('storage-format', { storageId: 1, format: '', resetImageLog: undefined })),
+    /is blank — it would be sent unset/,
+    'a blank value would go out unset'
   );
   assert.equal(
     validate('storage-format', { format: 0, resetImageLog: 0, pointX: -1 }),
@@ -571,4 +571,43 @@ test('payload topic, verb, path, and target compid carry rings (walled-garden sw
 
   assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
   assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
+});
+
+test('a blank Payload slot reds unless its recipe sends NaN for it', () => {
+  const { values } = require('./html-assert').loadNodeDefaults('mavlink-payload');
+  const validate = (topic, verb, saved) => values.validate.call({ topic, verb }, saved, {});
+  assert.match(String(validate('servo', 'set', { instance: 1, pwm: '' })),
+    /pwm is blank — it would be sent unset/, 'a blank PWM is not a value the operator picked');
+  assert.equal(validate('servo', 'set', { instance: 1, pwm: 1500 }), true);
+  assert.equal(validate('gimbal', 'aim', { pitch: -30, yaw: 0, pitchRate: '', yawRate: '', flags: 0 }), true,
+    'a blank aim rate is the dialect\'s NaN "not rate-controlled"');
+});
+
+test('NAN_WHEN_BLANK is a drift pin on the recipes\' NaN defaults', () => {
+  const { PAYLOAD_RECIPES } = require('../../lib/payload');
+  const expected = {};
+  for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
+    const editorKey = key.split('|').slice(0, 2).join('|');
+    for (const slot of [...(recipe.params || []), ...(recipe.fields || [])]) {
+      if (slot && !slot.pinned && Number.isNaN(slot.default)) {
+        expected[editorKey] = expected[editorKey] || new Set();
+        expected[editorKey].add(slot.field);
+      }
+    }
+  }
+  const table = payloadHtml.slice(
+    payloadHtml.indexOf('const NAN_WHEN_BLANK = '),
+    payloadHtml.indexOf('const payloadDefaults')
+  );
+  for (const [key, fields] of Object.entries(expected)) {
+    for (const field of fields) {
+      assert.match(table, new RegExp(`'${key}':[^\\]]*'${field}'`), `${key} ${field} sends NaN for a blank`);
+    }
+  }
+  assert.equal((table.match(/':\s*\[/g) || []).length, Object.keys(expected).length,
+    'the editor table has no entry the recipes do not');
+});
+
+test('an empty bitmask saves 0, "no flags"', () => {
+  assert.match(payloadHtml, /values\[key\] = mask === null \? 0 : mask;/);
 });

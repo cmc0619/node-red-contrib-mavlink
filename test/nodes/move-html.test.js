@@ -1610,3 +1610,19 @@ test('move closed vocabularies and target compid carry rings (walled-garden swee
   assert.equal(defaults.targetComponent.validate.call({}, '190', {}), true);
   assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 0 and 255/);
 });
+
+test('mavlink-move: a blank TTL reds on Stream — Number(\'\') is 0, a stream that never expires', () => {
+  const { ttlMs } = loadNodeDefaults('mavlink-move');
+  const verdict = (v, delivery = 'stream') => ttlMs.validate.call({ id: 'm1', delivery }, v, {});
+
+  assert.equal(ttlMs.validate.length, 2, 'a reason-returning validator declares (v, opt)');
+  assert.match(String(verdict('')), /0 = no TTL/, 'blank');
+  assert.match(String(verdict('  ')), /0 = no TTL/, 'whitespace');
+  assert.match(String(verdict(-1)), /0 = no TTL/, 'negative');
+  assert.equal(verdict(0), true, 'explicit 0 is the "no TTL" choice');
+  assert.equal(verdict('0'), true);
+  assert.equal(verdict(1000), true);
+  for (const delivery of ['build', 'send', 'confirm']) {
+    assert.equal(verdict('', delivery), true, `${delivery} never reads the TTL`);
+  }
+});

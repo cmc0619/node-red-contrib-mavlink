@@ -80,7 +80,12 @@
             return picks.every((name) => STATE_EVENTS.indexOf(name) !== -1) || 'names an event the peer table does not emit';
           }
         },
-        targetSystem: { value: '', validate: RED.mavlink.validateUint8(0) },
+        /**
+         * Source filter: blank is all sysids; 0 is refused because the
+         * Connection drops sysid-0 sources before State sees them
+         * (DESIGN.md §14.138), so a 0 filter never matches.
+         */
+        targetSystem: { value: '', validate: RED.mavlink.validateUint8(1) },
         targetComponent: { value: '', validate: RED.mavlink.validateUint8(0) }
       },
       inputs: 1,
@@ -110,7 +115,7 @@
     <select id="mav-state-events-select" multiple="multiple" size="10" style="width:70%"></select>
     <input type="hidden" id="node-input-events">
   </div>
-  <div class="form-row"><label for="node-input-targetSystem">Filter sysid</label><input type="number" id="node-input-targetSystem" min="0" max="255"></div>
+  <div class="form-row"><label for="node-input-targetSystem">Filter sysid</label><input type="number" id="node-input-targetSystem" min="1" max="255"></div>
   <div class="form-row"><label for="node-input-targetComponent">Filter compid</label><select id="node-input-targetComponent"></select></div>
 </script>
 

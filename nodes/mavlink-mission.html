@@ -93,10 +93,15 @@
           return true;
         },
       },
+      /**
+       * Set current reads seq and needs it: blank reds, a value is a uint16.
+       * Other operations ignore the field.
+       */
       seq: {
         value: 0,
         validate(v, opt) {
           if (RED.mavlink.liveOr(this, '#node-input-operation', this.operation, 'download') !== 'set-current') return true;
+          if (RED.mavlink.isBlank(v)) return 'is required for Set current — the mission item to make current';
           return RED.mavlink.validateIntRange(0, 65535).call(this, v, opt);
         },
       },
