@@ -260,7 +260,10 @@ test('Broadcast forces and locks the All selection; Build forces Sequential (§1
   // selection rather than red-ringing a list or filter after the fact.
   assert.match(html, /if \(d === 'build' && \$exec\.val\(\) === 'broadcast'\) \$exec\.val\('sequential'\);/,
     'Build cannot broadcast, so a retained Broadcast falls back to Sequential');
-  assert.match(html, /if \(exec === 'broadcast'\) \$sel\.val\('all'\);/, 'Broadcast sets the selection to All');
+  assert.match(html, /if \(exec === 'broadcast' && !\$sel\.prop\('disabled'\)\) \$sel\.data\('beforeBroadcast', \$sel\.val\(\)\)\.val\('all'\);/,
+    'Broadcast remembers the selection, then sets it to All');
+  assert.match(html, /if \(exec !== 'broadcast' && \$sel\.prop\('disabled'\)\) \$sel\.val\(\$sel\.data\('beforeBroadcast'\)\);/,
+    'leaving Broadcast restores the list or filter it replaced — no silent fleet-wide Sequential run');
   assert.match(html, /\$sel\.prop\('disabled', exec === 'broadcast'\);/, 'and locks it there');
   assert.doesNotMatch(html, /Broadcast needs the "All" selection/, 'no ring or help text left to explain it');
 });

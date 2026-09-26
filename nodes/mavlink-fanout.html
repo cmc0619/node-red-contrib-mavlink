@@ -238,13 +238,15 @@
          * Build requires the explicit list (see defaults.selectionMode), so
          * the selections that need a live peer table grey out, and Broadcast
          * with them. Broadcast addresses target_system 0, every vehicle on the
-         * link (DESIGN.md §14.113), so it sets and locks the selection to All.
+         * link (DESIGN.md §14.113), so it sets and locks the selection to All,
+         * and leaving Broadcast restores the selection it replaced.
          */
         const $exec = $('#node-input-executionMode');
         const $sel = $('#node-input-selectionMode');
         if (d === 'build' && $exec.val() === 'broadcast') $exec.val('sequential');
         const exec = $exec.val() || 'sequential';
-        if (exec === 'broadcast') $sel.val('all');
+        if (exec === 'broadcast' && !$sel.prop('disabled')) $sel.data('beforeBroadcast', $sel.val()).val('all');
+        if (exec !== 'broadcast' && $sel.prop('disabled')) $sel.val($sel.data('beforeBroadcast'));
         $sel.prop('disabled', exec === 'broadcast');
         const sel = $sel.val() || 'all';
         $('#node-input-selectionMode option[value="all"], #node-input-selectionMode option[value="filter"]')
