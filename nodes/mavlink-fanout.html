@@ -127,19 +127,8 @@
       vehicleType: { value: '', validate: RED.mavlink.validateUint8(0) },
       firmwareFilter: { value: '', validate: RED.mavlink.oneOf(['', 'ardupilot', 'px4']) },
       armedFilter: { value: '', validate: RED.mavlink.oneOf(['', 'true', 'false']) },
-      executionMode: {
-        value: 'sequential',
-        // Membership first (§5's editor half, as on selectionMode). Then
-        // Broadcast only pairs with the "All" selection: target_system 0
-        // reaches every vehicle on the link, so a list or filter would be
-        // ignored (DESIGN.md §14.113). Build requires a list, so it reds there
-        // too.
-        validate: RED.mavlink.oneOf(['sequential', 'broadcast'], function (v, _opt) {
-          if (v !== 'broadcast') return true;
-          return RED.mavlink.liveOr(this, '#node-input-selectionMode', this.selectionMode) === 'all'
-            || 'Broadcast needs the "All" selection — target_system 0 reaches every vehicle, so it cannot honour a list or filter';
-        }),
-      },
+      /** Membership (§5's editor half, as on selectionMode). */
+      executionMode: { value: 'sequential', validate: RED.mavlink.oneOf(['sequential', 'broadcast']) },
       intervalMs: {
         value: 100,
         // Milliseconds >= 0: the input's min="0" is not enforced on save, and
@@ -245,12 +234,19 @@
        */
       function refreshVisibility() {
         const d = $('#node-input-delivery').val() || 'build';
-        const sel = $('#node-input-selectionMode').val() || 'all';
-        const exec = $('#node-input-executionMode').val() || 'sequential';
-        // Build requires the explicit list (see defaults.selectionMode) — grey
-        // the selections that need a live peer table rather than red-ringing
-        // after the fact. Broadcast goes with them: it only pairs with the
-        // "All" selection, which Build cannot choose.
+        /**
+         * Build requires the explicit list (see defaults.selectionMode), so
+         * the selections that need a live peer table grey out, and Broadcast
+         * with them. Broadcast addresses target_system 0, every vehicle on the
+         * link (DESIGN.md §14.113), so it sets and locks the selection to All.
+         */
+        const $exec = $('#node-input-executionMode');
+        const $sel = $('#node-input-selectionMode');
+        if (d === 'build' && $exec.val() === 'broadcast') $exec.val('sequential');
+        const exec = $exec.val() || 'sequential';
+        if (exec === 'broadcast') $sel.val('all');
+        $sel.prop('disabled', exec === 'broadcast');
+        const sel = $sel.val() || 'all';
         $('#node-input-selectionMode option[value="all"], #node-input-selectionMode option[value="filter"]')
           .prop('disabled', d === 'build');
         $('#node-input-executionMode option[value="broadcast"]').prop('disabled', d === 'build');
@@ -343,7 +339,7 @@
   <p>With the <i>Explicit sysid list</i> selection the <b>Members</b> table holds one row per member: its <b>sysid</b>, optional <b>N / E / Up</b> offsets in <b>metres</b>, and an optional <b>raw patch</b> (a JSON object of message fields, wire units — exactly the <code>targets</code> patch shape). Metre offsets are applied at build time against the message's <i>own</i> position: COMMAND_INT <code>x/y/z</code>, COMMAND_LONG <code>param5/6/7</code> (use offsets only on location commands — LONG carries no frame, so Fan-out <i>cannot</i> tell a non-location command's params from coordinates and will offset them anyway; that one is yours to get right), SET_POSITION_TARGET_GLOBAL_INT <code>lat_int/lon_int/alt</code> (up adds to the up-positive altitude), and SET_POSITION_TARGET_LOCAL_NED <code>x/y/z</code> in plain metres (NED: up subtracts from z). Framed carriers must be in a global frame (or strictly LOCAL_NED for the NED setpoint) — local COMMAND_INT frames scale ×1e4 and body frames re-aim "north", so offsets there refuse; use a raw patch. A member with offsets on any other message is refused per message. A row may not combine offsets with a raw patch of position fields — the editor rejects the ambiguity. A <code>msg.payload.targets</code> array still overrides the configured members entirely, and a <code>msg.payload.selection</code> override picks its own group — under either one the configured offsets and raw patches do not apply.</p>
   <p>What the message means is inferred from its name: <code>COMMAND_LONG</code>/<code>COMMAND_INT</code> confirm by COMMAND_ACK; <code>PARAM_SET</code> confirms by its PARAM_VALUE echo (sequential only); offboard setpoints (<code>SET_POSITION_TARGET_LOCAL_NED</code>/<code>_GLOBAL_INT</code>, <code>SET_ATTITUDE_TARGET</code>, <code>SET_ACTUATOR_CONTROL_TARGET</code>) carry no ack and ride the streaming band; everything else addressed is fire-and-forget. Mission <i>transfer steps</i> (<code>MISSION_COUNT</code>, <code>MISSION_ITEM(_INT)</code>, <code>MISSION_REQUEST*</code>, <code>MISSION_ACK</code>, the partial-list pair) and <code>PARAM_REQUEST_LIST</code> are refused — multi-message transactions cannot be replicated. Single-shot mission commands like <code>MISSION_SET_CURRENT</code> and <code>MISSION_CLEAR_ALL</code> replicate normally.</p>
   <p>Fan-out addresses each member's <b>autopilot</b>: the built message's <code>target_component</code> is replaced per member. A message hand-addressed to another component is re-addressed, not honoured — use the single-vehicle nodes for that.</p>
-  <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest; 1 is strictly sequential. <b>Stop on error</b> halts remaining members after the first failure — they report <code>skipped</code> in the aggregate rather than being commanded. Broadcast mode sends one packet with target_system 0 and target_component 1, and requires the <i>All active vehicles</i> selection — a broadcast reaches every vehicle on the link, so it cannot honour a subset, per-target patches, or a PARAM_SET.</p>
+  <p>Sequential mode sends one retargeted message per member at the configured interval; <b>Concurrency</b> lets up to N confirm waits overlap so one slow vehicle doesn't delay the rest; 1 is strictly sequential. <b>Stop on error</b> halts remaining members after the first failure — they report <code>skipped</code> in the aggregate rather than being commanded. Broadcast mode sends one packet with target_system 0 and target_component 1.</p>
   <p>On <b>Build</b> delivery output 0 emits the product — one retargeted message per member for a downstream <b>mavlink-out</b>. Build requires an <i>Explicit sysid list</i> and needs no Connection: the downstream sender owns the wire, and the list already answers "which vehicles". All/filter selection (and Broadcast) live on the wire tiers, where the Connection's peer table is present to answer it. On wire tiers output 0 fires only when every member succeeds. Output 1 always carries the aggregate status with per-vehicle detail.</p>
   <p><b>Identity</b> — selects the GCS or custom identity that stamps source SysID/CompID on outbound frames. Only identities with a <code>gcs</code> or <code>custom</code> role are offered, and the row appears only when the Connection carries more than one of them — with one, or with none (a companion-only Connection), there is nothing to choose and the Connection's own identity is stamped. Hidden on Build delivery (source ids are stamped at the wire by the sending node).</p>
   <p>Selecting Flight Termination, or broadcasting a position setpoint, is the operator's choice — the driver packs and sends what it is given. A stream lock still refuses a second setpoint owner on the same target.</p>

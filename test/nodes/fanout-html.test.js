@@ -251,25 +251,18 @@ test('selectionMode and executionMode red on membership, then on the Build pairi
   assert.match(String(sel.call({ delivery: 'build' }, 'all', {})), /explicit sysid list on Build/);
 
   assert.equal(exec.call({ delivery: 'send' }, 'sequential', {}), true);
-  assert.equal(exec.call({ delivery: 'send', selectionMode: 'all' }, 'broadcast', {}), true);
+  assert.equal(exec.call({ delivery: 'send' }, 'broadcast', {}), true);
   assert.match(String(exec.call({ delivery: 'send' }, 'parallel', {})), /must be one of/);
-  assert.match(String(exec.call({ delivery: 'build' }, 'broadcast', {})), /All.*selection/);
-  assert.equal(exec.call({ delivery: 'build' }, 'sequential', {}), true);
 });
 
-test('broadcast execution requires the "All" selection on every tier (§14.113)', () => {
-  // The runtime replaces any selection with all under broadcast, so a list or
-  // filter paired with broadcast would command the whole fleet.
-  const exec = loadNodeDefaults('mavlink-fanout').executionMode.validate;
-
-  for (const delivery of ['build', 'send', 'confirm']) {
-    for (const selectionMode of ['list', 'filter']) {
-      assert.match(String(exec.call({ delivery, selectionMode }, 'broadcast', {})), /All.*selection.*list or filter/,
-        `${delivery}: broadcast over a ${selectionMode} selection reds`);
-      assert.equal(exec.call({ delivery, selectionMode }, 'sequential', {}), true, `${delivery}: sequential keeps ${selectionMode}`);
-    }
-  }
-  assert.equal(exec.call({ delivery: 'send', selectionMode: 'all' }, 'broadcast', {}), true, 'broadcast over all is legal');
+test('Broadcast forces and locks the All selection; Build forces Sequential (§14.113)', () => {
+  // target_system 0 reaches every vehicle on the link, so the dialog sets the
+  // selection rather than red-ringing a list or filter after the fact.
+  assert.match(html, /if \(d === 'build' && \$exec\.val\(\) === 'broadcast'\) \$exec\.val\('sequential'\);/,
+    'Build cannot broadcast, so a retained Broadcast falls back to Sequential');
+  assert.match(html, /if \(exec === 'broadcast'\) \$sel\.val\('all'\);/, 'Broadcast sets the selection to All');
+  assert.match(html, /\$sel\.prop\('disabled', exec === 'broadcast'\);/, 'and locks it there');
+  assert.doesNotMatch(html, /Broadcast needs the "All" selection/, 'no ring or help text left to explain it');
 });
 
 test('intervalMs and maxRetries: blank reds, present values carry range red rings', () => {
