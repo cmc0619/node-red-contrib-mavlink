@@ -1875,3 +1875,69 @@ test('refreshOptionSelect never selects a fallback that is itself withheld', () 
   assert.deepEqual(plain(select.options).map((o) => o[0]), ['stream']);
   assert.equal(value, 'stream', 'the fallback loses to the only option actually offered');
 });
+
+/**
+ * Selects as plain objects: `options` carries `disabled` the way the DOM does,
+ * and `change` runs the handlers bound with `.on`.
+ */
+function dependentHarness(selects) {
+  const els = {};
+  for (const [selector, spec] of Object.entries(selects)) {
+    els[selector] = {
+      value: spec.value,
+      options: spec.options.map((value) => ({ value, disabled: false })),
+      handlers: [],
+    };
+  }
+  function $(selector) {
+    const el = els[selector];
+    const wrapped = {
+      0: el,
+      val(v) {
+        if (arguments.length === 0) return el.value;
+        el.value = v;
+        return wrapped;
+      },
+      on(event, fn) { el.handlers.push(fn); return wrapped; },
+      trigger() { el.handlers.forEach((fn) => fn()); return wrapped; },
+    };
+    return wrapped;
+  }
+  const context = { RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node: () => null } }, $, console, setTimeout };
+  context.window = context;
+  vm.runInNewContext(resourceScript, context);
+  const enabled = (selector) => els[selector].options.filter((o) => !o.disabled).map((o) => o.value);
+  const pick = (selector, value) => { els[selector].value = value; els[selector].handlers.forEach((fn) => fn()); };
+  return { RED: context.RED, els, enabled, pick };
+}
+
+test('dependentSelect greys what the parent rules out and re-picks the first enabled option on a parent change', () => {
+  const { RED, els, enabled, pick } = dependentHarness({
+    '#delivery': { value: 'send', options: ['build', 'send', 'confirm', 'collect'] },
+    '#action': { value: 'set', options: ['read', 'set', 'request-list'] },
+  });
+  RED.mavlink.dependentSelect('#action', ['#delivery'],
+    (d) => ({ confirm: ['read', 'set'], collect: ['request-list'] })[d] || null);
+  assert.deepEqual(enabled('#action'), ['read', 'set', 'request-list'], 'null allows every option');
+  assert.equal(els['#action'].value, 'set', 'opening keeps a legal saved value');
+
+  pick('#delivery', 'collect');
+  assert.deepEqual(enabled('#action'), ['request-list']);
+  assert.equal(els['#action'].value, 'request-list', 'Set one cannot stay under collect');
+
+  pick('#delivery', 'confirm');
+  assert.equal(els['#action'].value, 'read', 'a parent change re-picks the first enabled option');
+});
+
+test('dependentSelect repairs an illegal saved value on open, and chains through a child that is also a parent', () => {
+  const { RED, els } = dependentHarness({
+    '#delivery': { value: 'build', options: ['build', 'send'] },
+    '#exec': { value: 'broadcast', options: ['sequential', 'broadcast'] },
+    '#sel': { value: 'all', options: ['list', 'filter', 'all'] },
+  });
+  RED.mavlink.dependentSelect('#exec', ['#delivery'], (d) => (d === 'build' ? ['sequential'] : null));
+  assert.equal(els['#exec'].value, 'sequential', 'Build cannot hold Broadcast');
+  RED.mavlink.dependentSelect('#sel', ['#exec', '#delivery'],
+    (e, d) => (e === 'broadcast' ? ['all'] : d === 'build' ? ['list'] : null));
+  assert.equal(els['#sel'].value, 'list', 'Build holds the list');
+});

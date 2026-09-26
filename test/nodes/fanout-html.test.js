@@ -232,40 +232,25 @@ test('addItem syncs the mirror so an untouched new row cannot dodge validation',
     'addItem must sync the mirror before the new row can reach oneditsave unvalidated');
 });
 
-test('selectionMode and executionMode red on membership, then on the Build pairing rules', () => {
+test('selectionMode and executionMode red on membership only (§5)', () => {
   // §5's editor half: the runtime dispatches these tokens with affirmative
   // cases only, so a hand-edited stray must red at deploy — the audit's
   // `{mode: "lits"}` shape, on the config surface the editor owns.
   const defaults = loadNodeDefaults('mavlink-fanout');
   const sel = defaults.selectionMode.validate;
   const exec = defaults.executionMode.validate;
-
-  for (const mode of ['all', 'list', 'filter']) {
-    assert.equal(sel.call({ delivery: 'send' }, mode, {}), true, mode);
-  }
-  assert.match(String(sel.call({ delivery: 'send' }, 'lits', {})), /must be one of/);
-  assert.match(String(sel.call({ delivery: 'build' }, 'nonsense', {})), /must be one of/,
-    'membership reds before the Build rule is consulted');
-  // The Build pairing rule still holds behind the membership check.
-  assert.equal(sel.call({ delivery: 'build' }, 'list', {}), true);
-  assert.match(String(sel.call({ delivery: 'build' }, 'all', {})), /explicit sysid list on Build/);
-
-  assert.equal(exec.call({ delivery: 'send' }, 'sequential', {}), true);
-  assert.equal(exec.call({ delivery: 'send' }, 'broadcast', {}), true);
-  assert.match(String(exec.call({ delivery: 'send' }, 'parallel', {})), /must be one of/);
+  for (const mode of ['all', 'list', 'filter']) assert.equal(sel.call({}, mode, {}), true, mode);
+  assert.match(String(sel.call({}, 'lits', {})), /must be one of/);
+  for (const mode of ['sequential', 'broadcast']) assert.equal(exec.call({}, mode, {}), true, mode);
+  assert.match(String(exec.call({}, 'parallel', {})), /must be one of/);
 });
 
-test('Broadcast forces and locks the All selection; Build forces Sequential (§14.113)', () => {
-  // target_system 0 reaches every vehicle on the link, so the dialog sets the
-  // selection rather than red-ringing a list or filter after the fact.
-  assert.match(html, /if \(d === 'build' && \$exec\.val\(\) === 'broadcast'\) \$exec\.val\('sequential'\);/,
-    'Build cannot broadcast, so a retained Broadcast falls back to Sequential');
-  assert.match(html, /if \(exec === 'broadcast' && !\$sel\.prop\('disabled'\)\) \$sel\.data\('beforeBroadcast', \$sel\.val\(\)\)\.val\('all'\);/,
-    'Broadcast remembers the selection, then sets it to All');
-  assert.match(html, /if \(exec !== 'broadcast' && \$sel\.prop\('disabled'\)\) \$sel\.val\(\$sel\.data\('beforeBroadcast'\)\);/,
-    'leaving Broadcast restores the list or filter it replaced — no silent fleet-wide Sequential run');
-  assert.match(html, /\$sel\.prop\('disabled', exec === 'broadcast'\);/, 'and locks it there');
-  assert.doesNotMatch(html, /Broadcast needs the "All" selection/, 'no ring or help text left to explain it');
+test('the dialog offers only legal pairs: Build takes Sequential and the list, Broadcast takes All (§14.113)', () => {
+  assert.match(html, /dependentSelect\('#node-input-executionMode', \['#node-input-delivery'\],\s*\(delivery\) => \(delivery === 'build' \? \['sequential'\] : null\)\)/);
+  assert.match(html, /dependentSelect\('#node-input-selectionMode', \['#node-input-executionMode', '#node-input-delivery'\],\s*\(exec, delivery\) => \(exec === 'broadcast' \? \['all'\] : delivery === 'build' \? \['list'\] : null\)\)/);
+  // Narrowest first: leaving Broadcast re-picks the list, never the fleet.
+  assert.match(html, /<select id="node-input-selectionMode"><option value="list">[^<]*<\/option><option value="filter">[^<]*<\/option><option value="all">/);
+  assert.doesNotMatch(html, /beforeBroadcast|Broadcast needs the "All" selection|explicit sysid list on Build/);
 });
 
 test('intervalMs and maxRetries: blank reds, present values carry range red rings', () => {

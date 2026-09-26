@@ -767,23 +767,10 @@ test('the Type bound reads the live Type select while the dialog is open', () =>
   assert.match(String(validate.call(saved, '2.5', {})), /whole number for the selected Type/);
 });
 
-test('Action reds a pairing the Delivery tier cannot wait on (false success otherwise)', () => {
+test('the dialog offers only the Actions the Delivery tier waits on (false success otherwise)', () => {
+  assert.match(html, /dependentSelect\('#node-input-action', \['#node-input-delivery'\],\s*\(delivery\) => \(\{ confirm: \['read', 'set'\], collect: \['request-list'\] \}\)\[delivery\] \|\| null\)/);
+  // Narrowest first: a Delivery change re-picks Read one, which changes nothing on the vehicle.
+  assert.match(html, /<select id="node-input-action"><option value="read">[^<]*<\/option><option value="set">[^<]*<\/option><option value="request-list">/);
   const { action } = loadNodeDefaults('mavlink-param');
-  const verdict = (delivery, a) => action.validate.call({ delivery, action: a }, a, {});
-  for (const delivery of ['build', 'send']) {
-    for (const a of ['read', 'set', 'request-list']) assert.equal(verdict(delivery, a), true, `${delivery} + ${a}`);
-  }
-  assert.equal(verdict('confirm', 'read'), true);
-  assert.equal(verdict('confirm', 'set'), true);
-  assert.match(String(verdict('confirm', 'request-list')), /echo-confirm waits on Read one or Set one/);
-  assert.equal(verdict('collect', 'request-list'), true);
-  assert.match(String(verdict('collect', 'read')), /collect waits on Request list/);
-  assert.match(String(verdict('collect', 'set')), /collect waits on Request list/);
-
-  const open = loadNodeDefaults('mavlink-param', {}, {
-    dom: { '#node-input-delivery': { val: 'collect' } },
-    editStack: [{ id: 'p1' }],
-  }).action.validate;
-  assert.match(String(open.call({ id: 'p1', delivery: 'build' }, 'read', {})), /collect waits on Request list/,
-    'reads the live Delivery select while the dialog is open');
+  assert.equal(action.validate.call({ delivery: 'collect' }, 'set', {}), true, 'the ring is membership only');
 });
