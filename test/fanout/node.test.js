@@ -145,16 +145,16 @@ test('wrapper selection sysids outside 1..255 select nobody rather than refusing
   assert.ok(sentWrapper, 'the input still reports');
 });
 
-test('build+all without connection craters — the editor reds the pair at deploy (§6)', () => {
+test('build+all without connection craters — the dialog holds Build to the list (§6)', () => {
   // Build + a non-list selection has nowhere to resolve members from: the
-  // live peer table is the only source. The editor reds it
-  // (mavlink-fanout.html `selectionMode`: "must be an explicit sysid list on
-  // Build"), so the driver simply has no connection to read and craters.
+  // live peer table is the only source. The dialog only offers the explicit
+  // list on Build (mavlink-fanout.html dependentSelect), so the driver simply
+  // has no connection to read and craters.
   const html = require('node:fs').readFileSync(
     require('node:path').join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
     'utf8'
   );
-  assert.match(html, /must be an explicit sysid list on Build/);
+  assert.match(html, /delivery === 'build' \? \['list'\]/);
 });
 
 test('wrapper identityId is passed through to connection.send options', async () => {

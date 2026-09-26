@@ -38,18 +38,11 @@
         // 'list' — the delivery default is Build, and Build requires the list,
         // so a fresh node must not be born invalid behind a greyed dropdown.
         value: 'list',
-        // Membership first (§5's editor half: the runtime dispatches this
-        // token with affirmative cases only, so a hand-edited stray must red
-        // here). Then the Build rule: Build emits to a downstream mavlink-out,
-        // so the Connection's only remaining job is the member directory — and
-        // an explicit list is the one selection that does not need it.
-        // Requiring the list on Build is what lets `connection` above share
-        // the standard blank-on-Build rule. All/filter selection stays
-        // on the wire tiers, where a Connection is present anyway.
-        validate: RED.mavlink.oneOf(['all', 'list', 'filter'], function (v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
-          return v === 'list' || 'must be an explicit sysid list on Build';
-        }),
+        // Membership (§5's editor half: the runtime dispatches this token
+        // with affirmative cases only). The dialog holds Build to the explicit
+        // list (dependentSelect in oneditprepare), which is what lets
+        // `connection` above share the standard blank-on-Build rule.
+        validate: RED.mavlink.oneOf(['all', 'list', 'filter']),
       },
       members: {
         // One row per member: {sysid, north?, east?, up?, patch?}. Offsets are
@@ -234,24 +227,8 @@
        */
       function refreshVisibility() {
         const d = $('#node-input-delivery').val() || 'build';
-        /**
-         * Build requires the explicit list (see defaults.selectionMode), so
-         * the selections that need a live peer table grey out, and Broadcast
-         * with them. Broadcast addresses target_system 0, every vehicle on the
-         * link (DESIGN.md §14.113), so it sets and locks the selection to All,
-         * and leaving Broadcast restores the selection it replaced.
-         */
-        const $exec = $('#node-input-executionMode');
-        const $sel = $('#node-input-selectionMode');
-        if (d === 'build' && $exec.val() === 'broadcast') $exec.val('sequential');
-        const exec = $exec.val() || 'sequential';
-        if (exec === 'broadcast' && !$sel.prop('disabled')) $sel.data('beforeBroadcast', $sel.val()).val('all');
-        if (exec !== 'broadcast' && $sel.prop('disabled')) $sel.val($sel.data('beforeBroadcast'));
-        $sel.prop('disabled', exec === 'broadcast');
-        const sel = $sel.val() || 'all';
-        $('#node-input-selectionMode option[value="all"], #node-input-selectionMode option[value="filter"]')
-          .prop('disabled', d === 'build');
-        $('#node-input-executionMode option[value="broadcast"]').prop('disabled', d === 'build');
+        const sel = $('#node-input-selectionMode').val() || 'list';
+        const exec = $('#node-input-executionMode').val() || 'sequential';
         // Build never uses a Connection now (the list is the directory), so
         // the picker hides like every other sender's does on Build (§6).
         $('#row-fanout-connection').toggle(d !== 'build');
@@ -282,6 +259,15 @@
         RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: IDENTITY_ROLES });
         refreshVisibility();
       });
+      /**
+       * Build emits to a downstream mavlink-out, so the explicit list is its
+       * member directory and Broadcast (target_system 0, every vehicle on the
+       * link, DESIGN.md §14.113) has no place there. Broadcast addresses All.
+       */
+      RED.mavlink.dependentSelect('#node-input-executionMode', ['#node-input-delivery'],
+        (delivery) => (delivery === 'build' ? ['sequential'] : null));
+      RED.mavlink.dependentSelect('#node-input-selectionMode', ['#node-input-executionMode', '#node-input-delivery'],
+        (exec, delivery) => (exec === 'broadcast' ? ['all'] : delivery === 'build' ? ['list'] : null));
       refreshVehicleTypeOptions();
       RED.mavlink.refreshIdentitySelect(node, { rolesAllowed: IDENTITY_ROLES });
       refreshVisibility();
@@ -311,7 +297,7 @@
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row" id="row-fanout-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-fanout-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity" style="width:70%"></select></div>
-  <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="all">All active vehicles</option><option value="list">Explicit sysid list</option><option value="filter">Filter</option></select></div>
+  <div class="form-row"><label for="node-input-selectionMode">Selection</label><select id="node-input-selectionMode"><option value="list">Explicit sysid list</option><option value="filter">Filter</option><option value="all">All active vehicles</option></select></div>
   <div class="form-row" id="row-fanout-members">
     <label style="vertical-align:top;">Members</label>
     <div style="display:inline-block;width:70%;">
