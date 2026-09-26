@@ -4,6 +4,57 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [0.7.3] "Opus 5.5 to the rescue" - 2026-09-26
+
+### Added
+
+- **Shared transfer skeleton.** Log, FTP, parameter backup/restore, and the
+  other request/reply machines share one settle/cancel/retry base so a cancel
+  cannot send after settle and closing frames leave after the settled flag
+  flips.
+- **Editor `dependentSelect`.** Parent dropdowns grey out child options they
+  rule out; Param Action/Delivery and Fan-out Broadcast/Selection use it
+  instead of node-local forcing.
+
+### Changed
+
+- **Mission download is INT-only (§14.148).** The machine asks for
+  `MISSION_ITEM_INT` only — no legacy `MISSION_REQUEST` fallback on silence.
+- **Firmware is ArduPilot or PX4 (§14.150).** The Vehicle Profile `custom`
+  firmware choice and the dead `custom` dialect token are gone; re-pick
+  ArduPilot or PX4.
+- **Param targets one component (§14.149).** Component 0 is refused in the
+  editor (including inherited 0); a list aimed at 0 no longer collects the
+  first responder's table as if it were the target.
+- **Editor walled garden tightened.** Rings stay only where a bad save would
+  be silent: Fan-out broadcast needs All, Command message pick, Build
+  whole-number/finite field values, Param Action/Delivery pairing and integer
+  Types, Connection signing on Sign outbound, Move blank TTL, Payload blank
+  slots, Mission blank seq, State sysid filter, whole-millisecond timers.
+  Rings that only duplicated a loud Buffer or timeout refusal are gone.
+- **Fan-out Broadcast locks Selection to All.** Choosing Broadcast sets and
+  disables Selection; Build falls a retained Broadcast back to Sequential.
+- **Command params and custom XML parse once.** `params` JSON is parsed at
+  node construction; Vehicle Profile custom XML keeps parsed include results
+  for the compile pass instead of parsing the chain twice.
+- **Connection internals drop test-only defaults.** Values the Connection
+  runtime always supplies are required arguments, not `||` fallbacks tests
+  alone exercised.
+- **Driver hygiene sweep.** Wire field inits use §5 switches; Wire collaborator
+  methods are required on the typedef; TCP close-path typeof guards go;
+  `mavlink-in` `fieldName` is read as saved and the ring refuses padding.
+
+### Fixed
+
+- **PX4 Set Mode completion packing (§14.110).** Completion compares the
+  packed main/sub pair keyed on the profile firmware.
+- **Transfer cancel races.** A synchronous cancel inside a progress callback
+  no longer arms another send; log END and FTP TERMINATESESSION flip settled
+  before the closing frame goes out.
+- **Fan-out MANUAL_CONTROL target, peer-table sweep revival, Health stale
+  identity, formation fixed-anchor heading, param echo epsilon, and mixed
+  seed/snapshot include chains** from the post-0.7.2 review pass.
+
 ## [0.7.2] "Slimming down and exampling up" - 2026-09-17
 
 ### Added
