@@ -154,13 +154,6 @@
     $verb.val(valid ? saved : (verbs[0] ? verbs[0].value : ''));
   };
 
-  RED.mavlink.payloadVerbIgnoresCarrier = function (topic, verb, path) {
-    // The two message-kind aim paths carry no MAV_CMD, so COMMAND_INT/LONG is
-    // meaningless for them: manager pitch/yaw and the attitude quaternion.
-    const p = path || 'legacy';
-    return topic === 'gimbal' && verb === 'aim' && (p === 'manager' || p === 'attitude');
-  };
-
   /**
    * Title text for a multi-select bitmask control (Ctrl/Cmd-click hint).
    * @param {string} [description]

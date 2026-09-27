@@ -316,12 +316,12 @@
 
       // Carrier is observable only when the command carries a location; for
       // everything else COMMAND_INT and COMMAND_LONG are byte-identical in
-      // params 1–4. Pin the hidden control to what is actually sent so §6's
-      // "hidden is not honored" holds without a runtime branch.
+      // params 1–4, and a message-kind aim path rides no MAV_CMD at all (the
+      // route's carrierMatters is false for both). Pin the hidden control to
+      // what is actually sent so §6's "hidden is not honored" holds without a
+      // runtime branch.
       function applyCarrier(data) {
-        const sel = selection();
-        const matters = !RED.mavlink.payloadVerbIgnoresCarrier(sel.topic, sel.verb, sel.path)
-          && Boolean(data?.carrierMatters);
+        const matters = Boolean(data?.carrierMatters);
         if (!matters) $('#node-input-sendAs').val('int');
         $('#row-payload-sendAs').toggle(matters);
         applyFrameRow(matters);

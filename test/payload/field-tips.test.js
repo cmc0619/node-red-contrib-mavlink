@@ -202,7 +202,7 @@ test('the carrier is only a real choice where the command carries a location', (
   assert.equal(carrierMattersFor(bundle, 'gimbal', 'roi-set', ''), true);
   for (const [topic, verb, path] of [
     ['camera', 'photo', ''], ['camera', 'set-mode', ''], ['gimbal', 'aim', 'legacy'],
-    ['gimbal', 'aim', 'manager'], ['servo', 'set', ''], ['winch', 'operate', ''],
+    ['gimbal', 'aim', 'manager'], ['gimbal', 'aim', 'attitude'], ['servo', 'set', ''], ['winch', 'operate', ''],
   ]) {
     assert.equal(carrierMattersFor(bundle, topic, verb, path), false, `${topic}/${verb}/${path}`);
   }
