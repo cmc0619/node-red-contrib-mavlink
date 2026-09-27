@@ -465,6 +465,10 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'tcp' }, '70000', {})), portReason);
   // Serial hides the control, so a stale value must not red what cannot be seen.
   assert.equal(defaults.bindPort.validate.call({ id: 'c1', mode: 'serial' }, '', {}), true);
+  // A TCP client dials out and binds no port; UDP and a TCP server listen on it.
+  assert.equal(defaults.bindPort.validate.call({ id: 'c1', mode: 'tcp', remoteHost: '10.0.0.2' }, '', {}), true);
+  assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'tcp' }, '', {})), /required/);
+  assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'udp', remoteHost: '10.0.0.2' }, '', {})), /required/);
 
   assert.equal(defaults.bindHost.validate.call({ id: 'c1', mode: 'udp' }, '0.0.0.0', {}), true);
   assert.match(

@@ -115,10 +115,19 @@
         if (!RED.mavlink.isBlank(v)) return true;
         return 'bind host is required — 0.0.0.0 means all interfaces';
       } },
+      /**
+       * A TCP client (remote host set; the pair ring owns the port) dials out
+       * and never binds a port, so a blank bind port is its correct state.
+       * Sibling read as remoteHost's below.
+       */
       bindPort: { value: 14550, validate(v, opt) {
         const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
-        if (RED.mavlink.isBlank(v)) return 'bind port is required for UDP/TCP';
+        if (RED.mavlink.isBlank(v)) {
+          const $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
+          if (mode === 'tcp' && !RED.mavlink.isBlank($host ? $host.val() : this.remoteHost)) return true;
+          return 'bind port is required for UDP and a TCP server';
+        }
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
       } },
       // Sibling reads go through ownDialogField, not `live || saved` (the
