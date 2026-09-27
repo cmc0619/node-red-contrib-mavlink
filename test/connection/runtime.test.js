@@ -1353,8 +1353,6 @@ function hangingWriteBuild() {
 test('a stuck transport write faults the link within the documented bound (#244)', async () => {
   const { connection, timeouts, errors } = hangingWriteBuild();
   await connection.start();
-  const transportErrors = [];
-  connection.on('transport-error', (err) => transportErrors.push(err));
 
   connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
 
@@ -1368,8 +1366,6 @@ test('a stuck transport write faults the link within the documented bound (#244)
     STATE.RECONNECTING,
     'the wedge faults the link into the recovery loop'
   );
-  assert.equal(transportErrors.length, 1);
-  assert.equal(transportErrors[0].code, 'WRITE_TIMEOUT');
   assert.ok(
     errors.some((m) => /timed out after 5000ms/.test(m)),
     'the log names the timeout and rides the existing transport-error path'

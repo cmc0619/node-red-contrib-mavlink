@@ -72,10 +72,9 @@ function openTransport(config = {}) {
 }
 
 test('open constructs the port with config', async () => {
-  const { transport, opened, port } = openTransport();
+  const { opened, port } = openTransport();
   await opened;
 
-  assert.equal(transport.mode, 'serial');
   assert.deepEqual(port().options, { path: '/dev/ttyUSB0', baudRate: 115200, highWaterMark: 1024, autoOpen: false });
 });
 

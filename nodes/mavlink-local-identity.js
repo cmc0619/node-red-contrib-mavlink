@@ -73,8 +73,6 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     // (mavlink-local-identity.html) — just convert it.
     node.heartbeatIntervalMs = Number(config.heartbeatIntervalMs);
 
-    node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
-
     /**
      * HEARTBEAT content this identity owns (DESIGN.md §7 Heartbeat): the
      * MAV_TYPE and MAV_AUTOPILOT names, resolved to wire values by the

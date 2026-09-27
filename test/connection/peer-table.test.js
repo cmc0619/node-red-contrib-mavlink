@@ -513,33 +513,24 @@ test('a component that has only heartbeated snapshots null telemetry', () => {
 });
 
 test('snapshot copies each statustext row while preserving history order and trimming', () => {
-  const table = new PeerTable({ now: () => 0, statustextHistory: 2 });
+  const table = new PeerTable({ now: () => 0 });
   const update = (severity, text) => table.update(
     { name: 'STATUSTEXT', sysid: 1, compid: 1, fields: { severity, text } },
     EP1
   );
-  update(2, 'first');
-  update(3, 'second');
-  update(4, 'third');
+  /** 21 lines against the 20-line history: the oldest is trimmed. */
+  for (let i = 0; i <= 20; i += 1) update(i % 8, `line ${i}`);
+  const kept = Array.from({ length: 20 }, (_, n) => ({ severity: (n + 1) % 8, text: `line ${n + 1}` }));
 
   const first = table.snapshot();
   const another = table.snapshot();
   const rows = first[0].components[0].statustext;
-  assert.deepEqual(rows, [
-    { severity: 3, text: 'second' },
-    { severity: 4, text: 'third' },
-  ]);
+  assert.deepEqual(rows, kept);
 
   rows[0].severity = 99;
   rows[0].text = 'edited downstream';
-  assert.deepEqual(another[0].components[0].statustext, [
-    { severity: 3, text: 'second' },
-    { severity: 4, text: 'third' },
-  ]);
-  assert.deepEqual(table.getComponent(1, 1).statustext, [
-    { severity: 3, text: 'second' },
-    { severity: 4, text: 'third' },
-  ]);
+  assert.deepEqual(another[0].components[0].statustext, kept);
+  assert.deepEqual(table.getComponent(1, 1).statustext, kept);
 });
 
 test('projected sentinels match the seed dialect invalid markers', () => {

@@ -151,7 +151,6 @@ module.exports = function registerMavlinkConnection(RED) {
       };
       node.onHealthExpired = () => () => {};
       node.crcFailureCount = () => 0;
-      node.on('close', (done) => done());
       return;
     }
 
