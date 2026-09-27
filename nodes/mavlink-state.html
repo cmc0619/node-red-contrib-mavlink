@@ -51,6 +51,21 @@
       $('#node-input-events').val(values.join(','));
     }
 
+    /**
+     * The Filter rows belong to the snapshot: the feed emits every peer's
+     * events. A hidden row never reds, so a value left from snapshot mode
+     * cannot hold a feed node red over a field it never reads.
+     *
+     * @param {function(*, object=): (true|string)} validate
+     * @returns {function(*, object=): (true|string)}
+     */
+    function snapshotFilter(validate) {
+      return function (v, opt) {
+        if (RED.mavlink.liveOr(this, '#node-input-mode', this.mode) === 'feed') return true;
+        return validate.call(this, v, opt);
+      };
+    }
+
     RED.nodes.registerType('mavlink-state', {
       category: 'mavlink',
       paletteLabel: 'state',
@@ -86,8 +101,8 @@
          * (DESIGN.md §14.138); compid 0 because no peer registers component 0
          * (§14.144). Either filter would match nothing.
          */
-        targetSystem: { value: '', validate: RED.mavlink.validateUint8(1) },
-        targetComponent: { value: '', validate: RED.mavlink.validateUint8(1) }
+        targetSystem: { value: '', validate: snapshotFilter(RED.mavlink.validateUint8(1)) },
+        targetComponent: { value: '', validate: snapshotFilter(RED.mavlink.validateUint8(1)) }
       },
       inputs: 1,
       outputs: 2,
@@ -98,6 +113,13 @@
         const node = this;
         buildEventsMultiSelect(node);
         $('#mav-state-events-select').on('change', syncEventsHiddenFromSelect);
+        function refreshRows() {
+          const feed = $('#node-input-mode').val() === 'feed';
+          $('#row-state-events').toggle(feed);
+          $('#row-state-filter-sysid, #row-state-filter-compid').toggle(!feed);
+        }
+        $('#node-input-mode').on('change', refreshRows);
+        refreshRows();
         RED.mavlink.reloadCompIdSelect($('#node-input-targetComponent'), {
           initialSaved: node.targetComponent,
           emptyLabel: 'Any component',
@@ -111,13 +133,13 @@
   <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
   <div class="form-row"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row"><label for="node-input-mode">Mode</label><select id="node-input-mode"><option value="snapshot">Snapshot on input</option><option value="feed">Event feed</option></select></div>
-  <div class="form-row">
+  <div class="form-row" id="row-state-events">
     <label for="mav-state-events-select">Events</label>
     <select id="mav-state-events-select" multiple="multiple" size="10" style="width:70%"></select>
     <input type="hidden" id="node-input-events">
   </div>
-  <div class="form-row"><label for="node-input-targetSystem">Filter sysid</label><input type="number" id="node-input-targetSystem" min="1" max="255"></div>
-  <div class="form-row"><label for="node-input-targetComponent">Filter compid</label><select id="node-input-targetComponent"></select></div>
+  <div class="form-row" id="row-state-filter-sysid"><label for="node-input-targetSystem">Filter sysid</label><input type="number" id="node-input-targetSystem" min="1" max="255"></div>
+  <div class="form-row" id="row-state-filter-compid"><label for="node-input-targetComponent">Filter compid</label><select id="node-input-targetComponent"></select></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-state">
@@ -127,6 +149,8 @@
     <li>Continue — snapshot peers (on input) or feed records as they arrive.</li>
     <li>Status — terminal status on every snapshot outcome (success or failure). Feed mode uses output 0 only for the event stream.</li>
   </ol>
+  <h3>Snapshot filter</h3>
+  <p><b>Filter sysid</b> and <b>Filter compid</b> narrow a snapshot to one vehicle or component; <code>msg.payload.sysid</code> and <code>msg.payload.compid</code> override them per input. They apply to snapshot mode only, so the dialog hides them in feed mode: a feed emits the events of every peer on the Connection.</p>
   <h3>Snapshot telemetry</h3>
   <p>Each snapshot component carries the last-received telemetry in canonical units; a key is <code>null</code> when its message has never been seen, and a field is <code>null</code> when the vehicle sent the wire sentinel for "unknown".</p>
   <ul>

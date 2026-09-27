@@ -101,6 +101,18 @@ test('events red-rings blank and a token the peer table never emits', () => {
   assert.match(String(events.validate.call(feed, ['stale'], {})), /comma-joined/);
 });
 
+test('the Filter rows are the snapshot\'s: hidden in feed mode, and never red there (R43)', () => {
+  // The feed takes no filter: a Filter sysid of 2 on a feed still emitted
+  // vehicle 7's STATUSTEXT, a saved setting silently ignored.
+  assert.match(html, /\$\('#row-state-filter-sysid, #row-state-filter-compid'\)\.toggle\(!feed\)/);
+  assert.match(html, /\$\('#node-input-mode'\)\.on\('change', refreshRows\)/);
+  assert.match(html, /snapshot mode only/);
+  const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-state');
+  assert.equal(targetSystem.validate.call({ mode: 'feed' }, 0, {}), true);
+  assert.equal(targetComponent.validate.call({ mode: 'feed' }, 0, {}), true);
+  assert.match(String(targetSystem.validate.call({ mode: 'snapshot' }, 0, {})), /between 1 and 255/);
+});
+
 test('target filters carry the uint8 range ring, compid included', () => {
   const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-state');
   assert.equal(targetComponent.validate.call({}, '', {}), true, 'blank = any');
@@ -136,7 +148,7 @@ function openStateDialog(node) {
   const hidden = { value: undefined };
   function chain() {
     const c = {};
-    for (const k of ['empty', 'append', 'on', 'val', 'each', 'hide', 'show', 'prop', 'attr']) c[k] = () => c;
+    for (const k of ['empty', 'append', 'on', 'val', 'each', 'hide', 'show', 'prop', 'attr', 'toggle']) c[k] = () => c;
     c.length = 0;
     return c;
   }
