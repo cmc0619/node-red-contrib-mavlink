@@ -229,14 +229,30 @@ test('explicit updates overwrite one stable profile holding file across URL chan
   assert.deepEqual(files, ['profile-stable.json']);
 });
 
-test('a document with no definitions is written as zero definitions', async (t) => {
+test('a document with no definitions reports zero and keeps the last good holding file', async (t) => {
   const userDir = tempUserDir(t);
+  await updateParamDefs(userDir, 'profile-empty-doc', 'https://example.test/good.json', {
+    fetchFn: async () => documentFor('LAST_GOOD'),
+  });
 
   const result = await updateParamDefs(userDir, 'profile-empty-doc', 'https://example.test/empty.json', {
     fetchFn: () => Promise.resolve({}),
   });
   assert.equal(result.count, 0);
-  assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), true);
+  const stored = await readParamDefs(userDir, 'profile-empty-doc');
+  assert.deepEqual([...stored.keys()], ['LAST_GOOD']);
+});
+
+test('a profile id carrying path segments cannot address a file outside the holding directory', async (t) => {
+  const userDir = tempUserDir(t);
+  fs.writeFileSync(path.join(userDir, 'flows.json'), '[]');
+
+  await updateParamDefs(userDir, '../../flows', 'https://example.test/good.json', {
+    fetchFn: async () => documentFor('PWNED'),
+  });
+
+  assert.equal(fs.readFileSync(path.join(userDir, 'flows.json'), 'utf8'), '[]');
+  assert.deepEqual([...(await readParamDefs(userDir, 'flows')).keys()], ['PWNED']);
 });
 
 test('a failed update preserves the last good profile holding file', async (t) => {
