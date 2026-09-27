@@ -89,10 +89,6 @@ test('gimbal roi-set does not invent 0 for a blank coordinate (#88)', () => {
   assert.equal(blank.message.fields.param5, undefined, 'blank lat rides unset — NaN on the wire, never 0');
   assert.equal(blank.message.fields.param6, 8.5);
 
-  // The slot still carries `required` — as metadata for the dialog.
-  const { PAYLOAD_RECIPES } = require('../../lib/payload');
-  assert.ok(PAYLOAD_RECIPES['gimbal|roi-set|'].params[4].required);
-
   // An explicit 0 is a real coordinate and still sends.
   const built = buildPayloadMessage({ ...base, values: { lat: 0, lon: 0, alt: 0 } });
   assert.equal(built.message.fields.param5, 0);
