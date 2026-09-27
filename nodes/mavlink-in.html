@@ -268,7 +268,9 @@
     <dt>topic <span class="property-type">string</span></dt>
     <dd>Message name, e.g. <code>HEARTBEAT</code>. With <b>Show unknown ids</b> ticked, a message id the bound Vehicle Profile's dialect does not carry also arrives, as <code>UNKNOWN_&lt;id&gt;</code> with <code>payload = {msgid, payload}</code> (raw bytes) — usually a sign the vehicle speaks a newer or different dialect than the profile. Such frames cannot be CRC-checked (the checksum seed lives in the message definition), so treat their contents as diagnostic.</dd>
     <dt>payload <span class="property-type">object</span></dt>
-    <dd>Decoded field values keyed by field name (snake_case).</dd>
+    <dd>Decoded field values keyed by the dialect's field names (mostly snake_case). 64-bit
+      fields (<code>uint64_t</code>, <code>int64_t</code>) arrive as BigInt, which
+      <code>JSON.stringify</code> refuses — convert them before a JSON path.</dd>
     <dt>sysid <span class="property-type">number</span></dt>
     <dd>Source system id.</dd>
     <dt>compid <span class="property-type">number</span></dt>
@@ -309,8 +311,8 @@
   from the previous delivery for the same (message, sysid, compid) tuple.
   <b>Compare fields</b> restricts the comparison to the listed fields (comma
   separated). Blank compares every field <i>except</i> the timestamps
-  (<code>time_boot_ms</code>, <code>time_usec</code>, <code>time_unix_usec</code>,
-  <code>timestamp</code>), which advance on every frame and would otherwise make
+  (<code>time_boot_ms</code>, <code>time_boot_us</code>, <code>time_usec</code>,
+  <code>time_unix_usec</code>, <code>timestamp</code>, <code>uptime</code>), which advance on every frame and would otherwise make
   every message look changed and pass the whole stream. Naming a timestamp in
   <b>Compare fields</b> compares it verbatim, so the clock is reachable when you
   actually want it — and a message whose only fields are timestamps delivers

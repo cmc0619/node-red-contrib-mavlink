@@ -525,7 +525,7 @@
   <div class="form-row">
     <label for="node-config-input-signOutbound">&nbsp;</label>
     <input type="checkbox" id="node-config-input-signOutbound" style="display:inline-block; width:auto; vertical-align:top;" />
-    <span>Sign outbound (requires a passphrase, or the connection fails closed)</span>
+    <span>Sign outbound (requires a passphrase or raw key)</span>
   </div>
   <div class="form-row">
     <label for="node-config-input-acceptInvalid">&nbsp;</label>
@@ -571,7 +571,8 @@
   <h3>Transport</h3>
   <p><b>UDP</b>, <b>TCP</b>, and <b>serial</b> share the same driver-side scheduling
   contract. UDP binds a local port and may set an optional remote default target.
-  TCP with a remote host/port is a client; with only bind settings it is a server.
+  TCP with a remote host/port is a client, which dials out and needs no bind
+  port; with only bind settings it is a server.
   Serial opens a device path (optional <code>serialport</code> dependency) at the
   configured baud; peer-table endpoints are that path. The path box suggests the
   host's detected ports when that dependency is installed, and still accepts any
@@ -630,9 +631,19 @@
   checked and do not advance replay state. With a signing key, inbound
   signatures are verified and unsigned traffic is rejected, including
   <code>RADIO_STATUS</code>. <i>Accept invalid signatures</i> is a separate
-  recovery override whose admitted traffic is untrusted and advisory only. The
-  passphrase is stored in Node-RED encrypted credentials, never in exported
-  flow JSON.</p>
+  recovery override whose admitted traffic is untrusted and advisory only.</p>
+  <p>The key is a <b>Passphrase</b> or a <b>Raw key</b> of 64 hex characters (the
+  32-byte secret itself) — one or the other, never both. <b>Sign outbound</b>
+  needs one of them. Both are stored in Node-RED encrypted credentials, never in
+  exported flow JSON, so an imported flow arrives without its key: until one is
+  entered, a Connection that signs outbound drops every frame it would send (the
+  log says <code>serialize failed</code>) while its badge still reads connected.
+  <b>Link ID</b> (0–255) is the link byte written into every signature.</p>
+
+  <h3>Peers</h3>
+  <p>A peer component not heard from for <b>Stale (ms)</b> is marked stale; one not heard
+  from for <b>Expire (ms)</b> is dropped from the peer table. Expire must be
+  longer than Stale, so a peer always goes stale before it is dropped.</p>
 
   <h3>Disable</h3>
   <p>Disabling constructs no runtime at all — no listening or timers — since

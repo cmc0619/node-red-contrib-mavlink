@@ -418,8 +418,13 @@
       takes every document's parameter names but none of their bounds or
       choice lists, since the documents disagree on those.</li>
     <li><b>Firmware</b> — ArduPilot or PX4 (suggests a dialect).</li>
-    <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers.</li>
-    <li><b>Dialect / Version</b> — Advanced: seed or a downloaded snapshot date.</li>
-    <li><b>Param defs URL</b> — pre-filled from firmware and vehicle; used when you click Update to refresh this profile's local definitions.</li>
+    <li><b>Dialect / Version</b> — the dialect, and the seed or a downloaded snapshot date to
+      compile it from.</li>
+    <li><b>Components</b> — further dialects compiled into the same profile; dialects the
+      chosen one already includes are not offered.</li>
+    <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers. A
+      Companion identity sends as this SysID, so a Connection binding one reds when it is 0.</li>
+    <li><b>Param defs URL</b> (Advanced) — pre-filled from firmware and vehicle; used when you
+      click Update to refresh this profile's local definitions.</li>
   </ul>
 </script>
