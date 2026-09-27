@@ -126,6 +126,25 @@ test('build+list with a hidden saved Connection still builds every listed member
   assert.equal(connection.sends.length, 0, 'Build sends nothing');
 });
 
+test('build with payload targets and no connection builds each target, whatever the selection mode', async () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-fanout')(RED);
+  const node = new (RED.nodes.types['mavlink-fanout'])({
+    connection: '',
+    delivery: 'build',
+    selectionMode: 'all',
+    executionMode: 'sequential',
+    intervalMs: 0,
+  });
+  let sent;
+  await emitInput(node, {
+    payload: { message: builtCommand(), targets: [4, { sysid: 5, param1: 2 }] },
+  }, (messages) => { sent = messages; });
+
+  assert.equal(sent[1].result, 'succeeded');
+  assert.deepEqual(sent[0].map((m) => m.payload.fields.target_system), [4, 5], 'the targets are the directory');
+});
+
 test('a payload that is not a built message reports a failed aggregate', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });

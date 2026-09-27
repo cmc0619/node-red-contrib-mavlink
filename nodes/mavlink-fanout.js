@@ -23,9 +23,7 @@ module.exports = function registerMavlinkFanout(RED) {
     delivery.onActionInput(node, async (msg, send, done) => {
       const { message, opts } = unwrapPayload(msg.payload);
       const selection = opts.selection === undefined ? selectionFrom(config) : opts.selection;
-      const selectionMode = selection.mode;
       const effectiveDelivery = valueFrom(opts, config, 'delivery');
-      const listSelected = selectionMode === 'list' || opts.targets !== undefined;
 
       let effectiveConnection = connectionNode;
       switch (effectiveDelivery) {
@@ -34,12 +32,17 @@ module.exports = function registerMavlinkFanout(RED) {
           // exception): it replicates against a synthetic peer table, never
           // a live one — a Connection kept hidden from an earlier tier would
           // drop every listed member it has not heard.
-          if (listSelected) {
+          if (opts.targets !== undefined) {
             effectiveConnection = buildListStub(
-              opts.targets !== undefined
-                ? opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
-                : selection.sysids
+              opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
             );
+            break;
+          }
+          switch (selection.mode) {
+            case 'list':
+              effectiveConnection = buildListStub(selection.sysids);
+              break;
+            default: break; // This space intentionally left blank (§5)
           }
           break;
         default: break; // This space intentionally left blank (§5)
@@ -115,12 +118,15 @@ function selectionFrom(config) {
   // No `|| 'all'`: the editor always saves a member, and the runtime maps
   // nothing — a blank saved mode crashes at dispatch, like any non-member.
   const mode = config.selectionMode;
-  return {
-    mode,
-    // List selection reads its sysids from the members table rows.
-    sysids: mode === 'list' ? config.members.map((member) => member.sysid) : undefined,
-    filter,
-  };
+  /** List selection reads its sysids from the members table rows. */
+  let sysids;
+  switch (mode) {
+    case 'list':
+      sysids = config.members.map((member) => member.sysid);
+      break;
+    default: break; // This space intentionally left blank (§5)
+  }
+  return { mode, sysids, filter };
 }
 
 /**
