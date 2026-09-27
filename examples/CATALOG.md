@@ -35,8 +35,8 @@ reference these by name rather than re-explaining them each time.
 `takeoff`, `land`, `rtl`, `set_home`, `change_speed`, `orbit`, `mission_start`, `pause`,
 `resume`, `request_message`, `set_message_interval`, `stop_message_interval`,
 `reboot_autopilot`, `flight_termination`. `reposition` is **not** a Command preset: Move
-owns the goto, and the library row survives only as the `DO_REPOSITION` metadata
-`mavlink-formation` builds from (`listed: false`). The old `yaw`/`rotate` presets are
+owns the goto, and `mavlink-formation` builds its `DO_REPOSITION` through Move's
+builder. The old `yaw`/`rotate` presets are
 **gone**: `CONDITION_YAW`
 rides advanced mode now (`advancedCommand: "115"`, param4 = 0 absolute / 1 relative).
 Advanced mode is `mode: "advanced"`, `advancedCommand: "<MAV_CMD numeric>"`. `params` is

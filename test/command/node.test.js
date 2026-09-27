@@ -70,14 +70,14 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
-  // reposition (MAV_CMD_DO_REPOSITION) carries lat/lon in params 5/6 —
+  // Set Home (MAV_CMD_DO_SET_HOME) carries lat/lon in params 5/6 —
   // entered as degrees, scaled to degE7 by the INT carrier (§9).
   const node = new Node({
     params: '{}',
     sendAs: 'int',
     frame: '3', // GLOBAL_RELATIVE_ALT
     mode: 'preset',
-    preset: 'reposition',
+    preset: 'set_home',
     delivery: 'build',
     dialect: 'common',
     targetSystem: '1',
@@ -274,7 +274,7 @@ test('two consecutive INT inputs both fail loud when dialect lookup fails', asyn
     sendAs: 'int',
     frame: '3',
     mode: 'preset',
-    preset: 'reposition',
+    preset: 'set_home',
     delivery: 'send',
     connection: 'conn',
     targetSystem: '1',

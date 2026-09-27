@@ -760,7 +760,7 @@ test('mavlink-command: PRESET_PARAMS covers exactly the presets the dropdown off
   assert.ok(table, 'PRESET_PARAMS must be extractable');
 
   const fromEditor = [...table[0].matchAll(/^\s{4}(\w+):/gm)].map((m) => m[1]).sort();
-  const offered = PRESETS.filter((p) => p.listed !== false).map((p) => p.id).sort();
+  const offered = PRESETS.map((p) => p.id).sort();
   assert.deepEqual(fromEditor, offered, 'every offered preset has a row, and no row outlives its preset');
 });
 

@@ -111,7 +111,7 @@ function deploy(ackResults, config = {}, extraNodes = {}) {
     params: '{}',
     sendAs: config.sendAs || 'long',
     mode: 'preset',
-    preset: 'reposition',
+    preset: 'set_home',
     delivery: 'confirm',
     connection: 'conn',
     targetSystem: '1',
