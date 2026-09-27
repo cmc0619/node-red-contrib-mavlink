@@ -597,8 +597,8 @@
         // Three states, in order of how much the firmware knows.
         //
         // On a bytewise firmware the type decides the bit pattern, so picking
-        // it wrong mis-stores the value: §14 measured a REAL32-typed set of an
-        // integer parameter arriving as the denormal 1.401298464324817e-45.
+        // it wrong mis-stores the value: a REAL32-typed set of a PX4 integer
+        // parameter stores the float's bits as the integer (§14.80, §14.84).
         // PX4 publishes a type for every parameter, so the answer is stated and
         // the operator is never offered a way to contradict it.
         //
@@ -1062,5 +1062,5 @@
   definitions overrides the shipped ones, since that download came from the
   firmware you are actually flying. When nothing can be offered, the field says
   why, under the input.</p>
-  <p>Three source formats are read, sniffed from the document itself rather than from its <code>Content-Type</code>: ArduPilot's <code>apm.pdef.json</code> (objects keyed by param id), PX4's <code>parameters.json</code> (a <code>parameters</code> array carrying <code>name</code> inside each entry), and PX4's <code>parameters.xml</code> (<code>&lt;parameter&gt;</code> elements inside <code>&lt;group&gt;</code>). For PX4 use <code>https://artifacts.px4.io/Firmware/_general/parameters.xml</code> — the <code>.json</code> is published only as an <code>.xz</code> archive, which is refused by name rather than parsed.</p>
+  <p>Three source formats are read, sniffed from the document itself rather than from its <code>Content-Type</code>: ArduPilot's <code>apm.pdef.json</code> (objects keyed by param id), PX4's <code>parameters.json</code> (a <code>parameters</code> array carrying <code>name</code> inside each entry), and PX4's <code>parameters.xml</code> (<code>&lt;parameter&gt;</code> elements inside <code>&lt;group&gt;</code>). For PX4 use <code>https://artifacts.px4.io/Firmware/_general/parameters.xml</code> — the <code>.json</code> is published only as an <code>.xz</code> archive, which is not a parameter document this node can read, and fails the update at the parse.</p>
 </script>

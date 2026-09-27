@@ -107,13 +107,15 @@ module.exports = function registerMavlinkMission(RED) {
         connectionNode: connNode,
       });
 
-      // The vehicle judges type support: the type rides as given (msg is
-      // trusted) and a stack that does not carry it answers with a
-      // MAV_MISSION_UNSUPPORTED ack or the transfer deadline — operational
-      // failures the existing paths report loud (§9). The editor's Type
-      // dropdown is the firmware protector (§11). No `|| 'mission'` default,
-      // and no refusal here: a key that names no member forwards unchanged
-      // (missionTypeValue §5) — never absent-decoded-as-0 at the vehicle.
+      /**
+       * The vehicle judges type support: the type rides as given (msg is
+       * trusted) and a stack that does not carry it answers with a
+       * MAV_MISSION_UNSUPPORTED ack or runs out the step budget — operational
+       * failures the existing paths report loud (§9). Nothing gates the type
+       * by firmware. No `|| 'mission'` default, and no refusal here: a key
+       * that names no member forwards unchanged (missionTypeValue §5) — never
+       * absent-decoded-as-0 at the vehicle.
+       */
       const missionType = missionTypeValue(missionTypeKey);
 
       // Set Current selects the mission plan, so it shares the mission lock
