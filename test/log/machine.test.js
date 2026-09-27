@@ -341,6 +341,25 @@ test('a packet lost mid-window is re-requested when the window\'s last packet ar
   assert.deepEqual(requests, [[0, LOG_REQUEST_BYTES], [900, 90], [LOG_REQUEST_BYTES, LOG_REQUEST_BYTES]]);
 });
 
+test('a download reports phases, not one progress record per LOG_DATA packet (R48)', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  const phases = [];
+  stub.onSend((message, deliver) => {
+    if (message.name !== 'LOG_REQUEST_DATA') return;
+    for (let ofs = 0; ofs < 900; ofs += 90) deliver(data(7, ofs, Buffer.alloc(90, 1)));
+    deliver(data(7, 900, 'end'));
+  });
+
+  const outcome = await new LogDownload(machineOptions(stub, clock, {
+    id: 7,
+    onProgress: (update) => phases.push(update.phase),
+  })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.deepEqual(phases, ['request-data']);
+});
+
 test('a gap fill after EOF is one request per gap, not one per packet received (SPS-12)', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
@@ -405,12 +424,12 @@ test('download settles and cleans up when inbound progress handling throws', asy
   const machine = new LogDownload(machineOptions(stub, clock, {
     id: 7,
     onProgress(update) {
-      if (update.phase === 'data') throw new Error('progress callback failed');
+      if (update.phase === 'eof') throw new Error('progress callback failed');
     },
   }));
   const done = machine.start();
 
-  assert.doesNotThrow(() => stub.inject(data(7, 0, 'valid log data')));
+  assert.doesNotThrow(() => stub.inject(data(7, 0, Buffer.alloc(0))));
   const outcome = await done;
 
   assert.equal(outcome.result, 'failed');

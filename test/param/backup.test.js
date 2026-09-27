@@ -104,13 +104,17 @@ test('backup decodes bytewise integer values and returns them in wire-index orde
     deliver(valueFrame({ index: 0, count: 2, paramId: 'A', paramType: 5, value: paramValueToWire(4000000000, 5) }));
   });
 
-  const outcome = await new ParamBackup(machineOptions(stub, clock)).start();
+  const phases = [];
+  const outcome = await new ParamBackup(machineOptions(stub, clock, {
+    onProgress: (update) => phases.push(update.phase),
+  })).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.params, [
     { paramId: 'A', paramType: 5, value: 4000000000 },
     { paramId: 'B', paramType: 6, value: -7 },
   ]);
+  assert.deepEqual(phases, ['request-list'], 'no progress record per PARAM_VALUE (R48)');
   assert.deepEqual(stub.sentNames(), ['PARAM_REQUEST_LIST']);
   assert.equal(stub.subscriberCount(), 0);
   assert.equal(clock.pending(), 0);
