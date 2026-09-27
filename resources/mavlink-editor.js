@@ -2000,7 +2000,7 @@
     const defaults = {
       dialect: {
         value: '',
-        validate(v) {
+        validate(v, _opt) {
           if (currentMode(this) === 'build') return Boolean(v);
           return true;
         },
@@ -2035,7 +2035,7 @@
     if (opts.withFirmware) {
       defaults.firmware = {
         value: '',
-        validate(v) {
+        validate(v, _opt) {
           const dialect = currentDialect(this);
           if (currentMode(this) === 'build' && dialect && dialect !== '__vehicle') return Boolean(v);
           return true;

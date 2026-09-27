@@ -98,7 +98,7 @@
          * a plain numeric check, and a parameter absent from the seed
          * is never rejected for being unknown.
          */
-        validate(v) {
+        validate(v, _opt) {
           // Only PARAM_SET carries param_value, and only a set shows the row.
           // Configure a set with an out-of-range value, switch to Read one,
           // and without this the node stays red over a field that is no longer

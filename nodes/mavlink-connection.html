@@ -166,7 +166,7 @@
         }
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
       } },
-      serialPath: { value: '', validate(v) {
+      serialPath: { value: '', validate(v, _opt) {
         const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode !== 'serial') return true;
         return !RED.mavlink.isBlank(v);

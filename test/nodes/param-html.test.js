@@ -197,13 +197,13 @@ function mountValidator(liveParamId, nodeFor, fields = {}) {
   // silently point this harness at a different function.
   const valueKey = html.indexOf('value: {');
   assert.ok(valueKey > 0, 'the value default is present');
-  const valueStart = html.indexOf('validate(v) {', valueKey);
+  const valueStart = html.indexOf('validate(v, _opt) {', valueKey);
   assert.ok(valueStart > valueKey, 'the value validator is present');
   const valueEnd = html.indexOf('\n        },', valueStart);
   // Unguarded, a moved closing brace makes this -1: the slice loses its last
   // character and the failure surfaces as a SyntaxError that names nothing.
   assert.ok(valueEnd > valueStart, 'the value validator terminates at the expected anchor');
-  const body = html.slice(valueStart + 'validate(v) {'.length, valueEnd);
+  const body = html.slice(valueStart + 'validate(v, _opt) {'.length, valueEnd);
   assert.match(body, /_paramDefsByKey/, 'the extracted body is the definition-aware validator');
 
   const context = {
