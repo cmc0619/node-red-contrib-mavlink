@@ -299,7 +299,11 @@ test('rows reshape by selection, execution, and delivery (§6)', () => {
     'members table and its tip only for list selection'
   );
   assert.match(html, /\$\('#row-fanout-typeFilter'\)\.toggle\(sel === 'filter'\)/, 'type filter only for filter selection');
-  assert.match(html, /\$\('#row-fanout-interval'\)\.toggle\(exec === 'sequential'\)/, 'interval only for sequential');
+  assert.match(
+    html,
+    /\$\('#row-fanout-interval'\)\.toggle\(exec === 'sequential' && d !== 'build'\)/,
+    'interval only where sequential sends are paced on the wire'
+  );
   assert.match(
     html,
     /\$\('#row-fanout-concurrency'\)\.toggle\(exec === 'sequential' && d === 'confirm'\)/,

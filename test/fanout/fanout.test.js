@@ -237,6 +237,20 @@ test('sequential execution paces retargeted sends between members', async () => 
   assert.deepEqual(connection.sends.map((s) => s.message.fields.target_component), [1, 1, 1]);
 });
 
+test('the build tier does not pause between members — nothing reaches the wire to pace', async () => {
+  const waits = [];
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection: connectionStub([peer(1), peer(2), peer(3)]),
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'build',
+    intervalMs: 25,
+    wait: async (ms) => waits.push(ms),
+  });
+  assert.equal(result.count, 3);
+  assert.deepEqual(waits, []);
+});
+
 test('retargeting does not invent target_component on a system-only message', async () => {
   const connection = connectionStub([peer(1)]);
 
