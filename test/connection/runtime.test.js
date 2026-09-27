@@ -328,8 +328,8 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
     }
   );
   await udp.start();
-  const sweep = udpIntervals.find((t) => t.ms === 5000);
-  assert.ok(sweep, 'stale/sweep interval should be registered');
+  const sweep = udpIntervals.at(-1);
+  assert.equal(sweep.ms, 1000, 'the sweep runs at most 1 s apart, not on the 5 s stale threshold');
   sweep.fn();
   assert.equal(sweeps.length, 1, 'UDP sweep must call evictIdleDecoders');
   assert.equal(sweeps[0][1], 15000, 'idle decoder TTL matches peer-table expire default');
@@ -364,11 +364,28 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
     }
   );
   await tcp.start();
-  const tcpSweep = tcpIntervals.find((t) => t.ms === 5000);
-  assert.ok(tcpSweep, 'TCP still runs peer-table sweep');
+  const tcpSweep = tcpIntervals.at(-1);
+  assert.equal(tcpSweep.ms, 1000, 'TCP still runs peer-table sweep');
   tcpSweep.fn();
   assert.equal(sweeps.length, 0, 'TCP sweep must not age-evict stream decoders');
   tcp.close();
+});
+
+test('a stale threshold under 1 s sweeps at its own period (R46)', async () => {
+  const intervals = [];
+  const { connection } = build(
+    { heartbeat: { staleMs: 400, expireMs: 1200 } },
+    {
+      setInterval: (fn, ms) => {
+        intervals.push(ms);
+        return { unref() {} };
+      },
+      clearInterval() {},
+    }
+  );
+  await connection.start();
+  assert.equal(intervals.at(-1), 400);
+  connection.close();
 });
 
 test('heartbeat scheduler interval is driven by the bound identity snapshot', async () => {
