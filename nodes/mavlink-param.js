@@ -201,7 +201,7 @@ module.exports = function registerMavlinkParam(RED) {
         case 'build|read':
         case 'build|set':
         case 'build|request-list': {
-          const message = buildParamMessage(requestWith(undefined));
+          const message = buildParamMessage(requestWith());
           completeBuild(node, send, message, 'param', { message });
           break;
         }
