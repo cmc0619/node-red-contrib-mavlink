@@ -735,6 +735,19 @@ test('an integer Type refuses a fraction; its range is Buffer\'s to refuse at se
   passes('MAV_PARAM_TYPE_UINT8', '');
 });
 
+test('the Param id ring refuses what the dialog would uppercase or trim for lookup (E4)', () => {
+  const { paramId } = loadNodeDefaults('mavlink-param');
+  const set = { delivery: 'send', action: 'set' };
+  assert.equal(paramId.validate.call(set, 'FLTMODE1', {}), true);
+  assert.equal(paramId.validate.call(set, 'SCR_USER1', {}), true);
+  for (const v of ['fltmode1', ' FLTMODE1', 'FLTMODE1 ', 'Fltmode1']) {
+    assert.match(String(paramId.validate.call(set, v, {})), /uppercase with no spaces/, JSON.stringify(v));
+  }
+  assert.match(String(paramId.validate.call(set, 'A'.repeat(17), {})), /length of 16/);
+  assert.equal(paramId.validate.call({ delivery: 'send', action: 'request-list' }, 'lower', {}), true,
+    'a list names no parameter');
+});
+
 test('the Value ring takes two arguments, so Node-RED honours its whole-number reason (R13)', () => {
   // A one-argument validator's returned string is coerced with `!!` and reads
   // as valid: a PX4 INT32 value of 2.5 deployed and 2 went on the wire.
