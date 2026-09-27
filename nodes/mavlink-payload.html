@@ -20,10 +20,14 @@
     const REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
     /**
      * The slots whose recipe sends NaN for a blank — the dialect's "unused"
-     * value (gimbal aim rates: not rate-controlled). Every other blank slot
-     * would go out unset.
+     * value, keyed `topic|verb|path` like the recipes. The two manager aim
+     * paths choose angle or rate control by leaving the other pair blank.
+     * Every other blank slot would go out unset.
      */
-    const NAN_WHEN_BLANK = { 'gimbal|aim': ['pitchRate', 'yawRate', 'rollRate'] };
+    const NAN_WHEN_BLANK = {
+      'gimbal|aim|manager': ['pitch', 'yaw', 'pitchRate', 'yawRate'],
+      'gimbal|aim|manager-cmd': ['pitch', 'yaw', 'pitchRate', 'yawRate'],
+    };
     const MAV_BOOL_VALUES = [0, 1, '0', '1'];
     const validateMavBool = RED.mavlink.oneOf(MAV_BOOL_VALUES);
     const VALUE_VALIDATORS = {
@@ -98,7 +102,8 @@
                 }
               }
             }
-            const nanWhenBlank = NAN_WHEN_BLANK[key] || [];
+            const path = key === 'gimbal|aim' ? RED.mavlink.liveOr(this, '#node-input-path', this.path, 'legacy') : '';
+            const nanWhenBlank = NAN_WHEN_BLANK[`${key}|${path}`] || [];
             for (const field of Object.keys(values)) {
               if (RED.mavlink.isBlank(values[field]) && nanWhenBlank.indexOf(field) === -1) {
                 return `${field} is blank — it would be sent unset; enter a value`;

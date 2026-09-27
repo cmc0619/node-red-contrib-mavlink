@@ -579,19 +579,25 @@ test('a blank Payload slot reds unless its recipe sends NaN for it', () => {
   assert.match(String(validate('servo', 'set', { instance: 1, pwm: '' })),
     /pwm is blank — it would be sent unset/, 'a blank PWM is not a value the operator picked');
   assert.equal(validate('servo', 'set', { instance: 1, pwm: 1500 }), true);
-  assert.equal(validate('gimbal', 'aim', { pitch: -30, yaw: 0, pitchRate: '', yawRate: '', flags: 0 }), true,
-    'a blank aim rate is the dialect\'s NaN "not rate-controlled"');
+  const aim = (path, saved) => values.validate.call({ topic: 'gimbal', verb: 'aim', path }, saved, {});
+  for (const path of ['manager', 'manager-cmd']) {
+    assert.equal(aim(path, { pitch: -30, yaw: 0, pitchRate: '', yawRate: '', flags: 0, gimbalDeviceId: 0 }), true,
+      `${path}: a blank aim rate is the dialect's NaN "not rate-controlled"`);
+    assert.equal(aim(path, { pitch: '', yaw: '', pitchRate: 0.1, yawRate: 0.2, flags: 0, gimbalDeviceId: 0 }), true,
+      `${path}: a blank angle pair is rate control (R17)`);
+  }
+  assert.match(String(aim('legacy', { pitch: '', roll: 0, yaw: 0 })), /pitch is blank/,
+    'DO_MOUNT_CONTROL has no NaN sentinel for its angles');
 });
 
 test('NAN_WHEN_BLANK is a drift pin on the recipes\' NaN defaults', () => {
   const { PAYLOAD_RECIPES } = require('../../lib/payload');
   const expected = {};
   for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
-    const editorKey = key.split('|').slice(0, 2).join('|');
     for (const slot of [...(recipe.params || []), ...(recipe.fields || [])]) {
       if (slot && !slot.pinned && Number.isNaN(slot.default)) {
-        expected[editorKey] = expected[editorKey] || new Set();
-        expected[editorKey].add(slot.field);
+        expected[key] = expected[key] || new Set();
+        expected[key].add(slot.field);
       }
     }
   }
