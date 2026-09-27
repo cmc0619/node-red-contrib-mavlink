@@ -35,7 +35,7 @@
 const { makeStatusRecord } = require('../lib/command/status-record');
 const { getPreset, presetGroups, buildParamArray } = require('../lib/command/presets');
 const { mergeParams } = require('../lib/command/merge-params');
-const { awaitAckWithBadge, cancelSlot, settleAck } = require('../lib/command/ack');
+const { awaitAckWithBadge, cancelSlot, settleAck, SUPERSEDED } = require('../lib/command/ack');
 const { checkCompletion, waitForCompletion } = require('../lib/command/completion');
 const {
   buildCommandLong,
@@ -438,12 +438,24 @@ module.exports = function registerMavlinkCommand(RED) {
         }
         const compOutcome = await completionWait.promise.finally(() => slot.release(completionWait));
 
-        // A redeploy cancelled the wait (close() calls the completion
-        // cancel), or the wait settled before any cancel could land —
+        // A newer input superseded the wait: the command already ran, so
+        // report it on output 1 like a superseded ack wait (settleAck).
+        // A redeploy cancelled it (close() calls the completion cancel),
+        // or the wait settled before any cancel could land —
         // waitForCompletion polls once at creation, so an already-satisfied
         // completion resolves synchronously and the settle-once cancel()
-        // becomes a no-op. Either way this run is stale:
-        // finish quietly, same rule as the ack cancel above (M1).
+        // becomes a no-op. Either way this run is stale: finish quietly,
+        // same rule as a redeploy-cancelled ack wait (§14.47).
+        if (compOutcome.cancelled && compOutcome.detail === SUPERSEDED) {
+          send([null, {
+            ...ackRecord,
+            result: 'cancelled',
+            resultCode: null,
+            confirmedBy: undefined,
+            elapsed: Date.now() - startMs,
+            detail: SUPERSEDED,
+          }]);
+        }
         if (compOutcome.cancelled || myGen !== _generation) {
           done();
           return;

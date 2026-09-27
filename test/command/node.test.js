@@ -1134,6 +1134,86 @@ test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)',
   assert.equal(emitted, false, 'nothing is emitted onto a node being torn down');
 });
 
+/** A confirm/complete Arm node on connStubWithInject, for the R9 cases. */
+function armNode(delivery) {
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { armed: false });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    connection: 'conn',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery,
+    targetSystem: '1',
+    targetComponent: '1',
+    timeoutMs: '60000',
+    maxRetries: '0',
+    completionTimeout: '60000',
+  });
+  return { conn, node };
+}
+
+test('a vehicle\'s MAV_RESULT_CANCELLED is a terminal answer on output 1, not a quiet redeploy (R9)', async () => {
+  const { conn, node } = armNode('confirm');
+  const outputs = [];
+  let doneArgs;
+  node.emit('input', { payload: {} }, (m) => outputs.push(m), (...args) => { doneArgs = args; });
+  await tick();
+
+  conn.injectAck({ command: 400, result: 6 }, 1, 1);
+  await tick();
+
+  assert.equal(outputs.length, 1);
+  assert.equal(outputs[0][0], null);
+  assert.equal(outputs[0][1].result, 'cancelled');
+  assert.equal(outputs[0][1].resultCode, 6, 'the vehicle said it');
+  assert.equal(outputs[0][1].confirmedBy, 'ack');
+  assert.deepEqual(doneArgs, []);
+  node.emit('close', () => {});
+});
+
+test('a superseded Confirm wait reports cancelled/superseded on output 1 (R9, Q2)', async () => {
+  const { conn, node } = armNode('confirm');
+  const first = [];
+  let firstDone;
+  node.emit('input', { payload: {} }, (m) => first.push(m), (...args) => { firstDone = args; });
+  await tick();
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  await tick();
+
+  assert.equal(conn.sent.length, 2, 'both commands went on the wire');
+  assert.equal(first.length, 1);
+  assert.equal(first[0][0], null);
+  assert.equal(first[0][1].result, 'cancelled');
+  assert.equal(first[0][1].detail, 'superseded');
+  assert.equal(first[0][1].resultCode, null);
+  assert.deepEqual(firstDone, [], 'a supersession is not a failure for Catch');
+  node.emit('close', () => {});
+});
+
+test('a superseded Complete-tier completion wait reports cancelled/superseded too (R9, Q2)', async () => {
+  const { conn, node } = armNode('complete');
+  const first = [];
+  node.emit('input', { payload: {} }, (m) => first.push(m), () => {});
+  await tick();
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  await tick();
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  await tick();
+  await tick();
+
+  assert.equal(first.length, 1);
+  assert.equal(first[0][1].result, 'cancelled');
+  assert.equal(first[0][1].detail, 'superseded');
+  node.emit('close', () => {});
+});
+
 test('IN_PROGRESS moves the badge and the terminal record carries result_param2 (§9)', async () => {
   const conn = connStubWithInject();
   const RED = redStub({ conn });
