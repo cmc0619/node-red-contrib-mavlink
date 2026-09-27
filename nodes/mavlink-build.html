@@ -632,7 +632,9 @@
         entry's number, a bitmask field one mask number, a 64-bit field a
         decimal string. Set to <code>false</code> to suppress the node silently.</dd>
     <dt class="optional">band <span class="property-type">number</span></dt>
-    <dd>Queue band override (0–4).</dd>
+    <dd>Queue band override: 0 Emergency, 2 Control, 3 Streaming, 4 Bulk. Band 1 (Liveness)
+      holds one frame per identity for the Connection's own HEARTBEAT, so any other frame sent
+      there is replaced by the next heartbeat.</dd>
     <dt class="optional">target <span class="property-type">object</span></dt>
     <dd><code>{ sysid, compid }</code> destination (Send). Read at the message
         root, like <code>band</code>, not under <code>payload</code>.</dd>
