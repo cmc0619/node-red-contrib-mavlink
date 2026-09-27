@@ -6,7 +6,6 @@ const assert = require('node:assert/strict');
 const mav = require('node-mavlink');
 const { loadBundled } = require('../../lib/metadata/bundled');
 const { compileXml } = require('../../lib/metadata/compile');
-const { normalizeType } = require('../../lib/codec/types');
 const { synthesizeWireClasses } = require('../../lib/connection/wire-classes');
 const { createWire } = require('../../lib/connection/wire');
 
@@ -20,7 +19,7 @@ const { createWire } = require('../../lib/connection/wire');
 function defaultFields(message) {
   const fields = {};
   for (const f of message.fields) {
-    const t = normalizeType(f.type);
+    const t = f.type;
     if (t === 'char') {
       fields[f.name] = f.arrayLength ? '' : '\0';
     } else if (f.arrayLength) {
