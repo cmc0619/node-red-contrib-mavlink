@@ -269,6 +269,23 @@ test('server peer disconnect emits endpoint-gone for stream-decoder cleanup', as
   assert.deepEqual(gone, { address: '10.0.0.1', port: 1 });
 });
 
+test('server peer error (ECONNRESET) emits endpoint-gone once, then close stays quiet (R52)', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+  const events = [];
+  transport.on('endpoint-gone', (ep) => events.push(ep));
+
+  const reset = new Error('read ECONNRESET');
+  reset.code = 'ECONNRESET';
+  a.emit('error', reset);
+  a.emit('close');
+  assert.deepEqual(events, [{ address: '10.0.0.1', port: 1 }], 'the errored client releases its decoder exactly once');
+});
+
 test('client disconnect emits endpoint-gone for stream-decoder cleanup', async () => {
   const net = mockNet();
   const transport = new TcpTransport(
