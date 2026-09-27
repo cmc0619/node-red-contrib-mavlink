@@ -74,6 +74,19 @@ module.exports = function registerMavlinkBuild(RED) {
     const repeatMs = Number(config.repeatMs);
     let repeatTimer = null;
 
+    /**
+     * The badge text last applied. A run that would apply the same badge
+     * again sends no status update: at a 50 Hz repeat, one per tick is 50
+     * status messages a second to every open editor.
+     * @type {?string}
+     */
+    let lastBadge = null;
+    function badge(situation, text) {
+      if (text === lastBadge) return;
+      lastBadge = text;
+      applyActionStatus(node, situation, text);
+    }
+
     /** @type {import('../lib/metadata/compile').DialectBundle} */
     const bundle = dialectForTier(RED, tier, config, connectionNode);
     const messageMeta = bundle.messages[messageName];
@@ -106,6 +119,7 @@ module.exports = function registerMavlinkBuild(RED) {
        * tail-return it.
        */
       function failRun(err, extra = {}) {
+        lastBadge = null;
         failInput(node, emit, err, triggerMsg ? done : (e) => node.error(e.message, {}), { message: messageName, ...extra });
         return false;
       }
@@ -134,7 +148,7 @@ module.exports = function registerMavlinkBuild(RED) {
             message: messageName,
             tier: 'build',
           });
-          applyActionStatus(node, 'preview', `built ${messageName}`);
+          badge('preview', `built ${messageName}`);
           emit([outMsg, sr]);
           return true;
         }
@@ -157,9 +171,7 @@ module.exports = function registerMavlinkBuild(RED) {
             tier: 'send',
             band,
           });
-          applyActionStatus(node, 'ok', repeatMs > 0
-            ? `${messageName} ${Math.round(1000 / repeatMs)}Hz`
-            : messageName);
+          badge('ok', repeatMs > 0 ? `${messageName} every ${repeatMs} ms` : messageName);
           emit([outMsg, sr]);
           return true;
         }
