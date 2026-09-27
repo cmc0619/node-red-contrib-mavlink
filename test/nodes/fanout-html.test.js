@@ -251,8 +251,9 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
   const defaults = loadNodeDefaults('mavlink-fanout');
   const interval = defaults.intervalMs.validate;
   const retries = defaults.maxRetries.validate;
-  // The shared ack fields ring on Send & confirm, the tier whose rows show.
-  const confirm = { delivery: 'confirm' };
+  // The shared ack fields ring on Send & confirm, the tier whose rows show;
+  // Retries only on sequential, since a broadcast is never re-sent.
+  const confirm = { delivery: 'confirm', executionMode: 'sequential' };
 
   assert.match(String(interval.call({}, '', {})), />= 0/, 'blank interval reds');
   assert.equal(interval.call({}, 0, {}), true, '0 is a legitimate no-pause interval');
@@ -267,6 +268,16 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
   assert.match(String(retries.call(confirm, -1, {})), />= 0/);
   assert.match(String(retries.call(confirm, 1.5, {})), /whole number/, 'a fractional retry count reds');
   assert.equal(retries.call({ delivery: 'send' }, 1.5, {}), true, 'a hidden row never reds');
+  assert.equal(
+    retries.call({ delivery: 'confirm', executionMode: 'broadcast' }, 1.5, {}),
+    true,
+    'hidden on broadcast, so it never reds there'
+  );
+  assert.match(
+    String(defaults.timeoutMs.validate.call({ delivery: 'confirm', executionMode: 'broadcast' }, '', {})),
+    />= 1/,
+    'the timeout still rings on a broadcast confirm'
+  );
 });
 
 test('concurrency is a bounded integer with a strictly-sequential default of 1', () => {
@@ -289,7 +300,11 @@ test('rows reshape by selection, execution, and delivery (§6)', () => {
     'concurrency only where confirm waits can overlap'
   );
   assert.match(html, /\$\('#row-fanout-timeout'\)\.toggle\(d === 'confirm'\)/, 'timeout only for confirm tier');
-  assert.match(html, /\$\('#row-fanout-retries'\)\.toggle\(d === 'confirm'\)/, 'retries only for confirm tier');
+  assert.match(
+    html,
+    /\$\('#row-fanout-retries'\)\.toggle\(d === 'confirm' && exec === 'sequential'\)/,
+    'retries only where a silent member is re-sent: sequential confirm'
+  );
   assert.match(
     html,
     /\$\('#row-fanout-identity'\)\.toggle\(\s*d !== 'build'\s*&& RED\.mavlink\.hasIdentityChoice\([\s\S]*?IDENTITY_ROLES\)\s*\)/,

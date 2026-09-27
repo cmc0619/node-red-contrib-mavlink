@@ -1267,6 +1267,84 @@ test('PARAM_SET echo confirm compares wire values — a clamped value does not c
   assert.equal(clamped.members[0].result, 'unconfirmed');
 });
 
+test('a silent PARAM_SET echo wait re-sends up to the retry budget, then reports unconfirmed', async () => {
+  const connection = {
+    peerTable: peerTableStub([peer(5)]),
+    vehicle: { firmware: null },
+    sends: [],
+    send(message, options) { this.sends.push({ message, options }); },
+    resolveSourceIds: () => null,
+    subscribe() { return () => {}; },
+  };
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtParamSet(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 5,
+    maxRetries: 2,
+  });
+  assert.equal(connection.sends.length, 3, 'the first send plus two re-sends');
+  assert.ok(connection.sends.every((s) => s.message.fields.param_id === 'FOO'));
+  assert.equal(result.members[0].result, 'unconfirmed');
+});
+
+test('a PARAM_SET re-send answered by its echo confirms the member', async () => {
+  const handlers = [];
+  const connection = {
+    peerTable: peerTableStub([peer(5)]),
+    vehicle: { firmware: null },
+    sends: [],
+    send(message, options) {
+      this.sends.push({ message, options });
+      // The first frame is lost; the vehicle echoes the re-send.
+      if (this.sends.length === 2) {
+        handlers.forEach((h) => h({ sysid: 5, compid: 1, name: 'PARAM_VALUE', fields: { param_id: 'FOO', param_value: 7, param_type: 9 } }));
+      }
+    },
+    resolveSourceIds: () => null,
+    subscribe(filter, handler) {
+      handlers.push(handler);
+      return () => {};
+    },
+  };
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtParamSet(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 5,
+    maxRetries: 3,
+  });
+  assert.equal(connection.sends.length, 2);
+  assert.equal(result.members[0].result, 'accepted');
+  assert.equal(result.members[0].confirmedBy, 'echo');
+});
+
+test('a PARAM_SET re-send that throws settles the member failed, never escaping the timer', async () => {
+  const connection = {
+    peerTable: peerTableStub([peer(5)]),
+    vehicle: { firmware: null },
+    sends: 0,
+    send() {
+      this.sends += 1;
+      if (this.sends > 1) throw new Error('link down');
+    },
+    resolveSourceIds: () => null,
+    subscribe() { return () => {}; },
+  };
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtParamSet(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    timeoutMs: 5,
+    maxRetries: 3,
+  });
+  assert.equal(result.members[0].result, 'failed');
+  assert.match(result.members[0].detail, /retry send failed: link down/);
+});
+
 test('PARAM_SET echo confirm on a bytewise integer does not let two different NaN-band values collide (mavlink-audit-20260905 #5)', async () => {
   // MAV_PARAM_TYPE_INT32 (6). Both patterns land in the float32 NaN band
   // (exponent all-ones, mantissa nonzero) once bit-cast into the wire's
