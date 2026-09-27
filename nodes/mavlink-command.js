@@ -62,23 +62,30 @@ const {
 const { BAND } = require('../lib/connection/bands');
 
 /**
- * Return the command ID for the current node config, and the preset row when
- * Preset mode names one.
+ * The preset row this node sends: the named preset, or for Advanced a row
+ * synthesized from the chosen MAV_CMD — every param exposed, and no pins,
+ * blank sentinels, retry opt-out or completion condition — so both modes
+ * run the same code.
  *
  * @param {object} config  node config from editor
- * @returns {{commandId: number, preset: ?object}}
+ * @returns {import('../lib/command/presets').Preset|undefined}
  */
 function resolveCommand(config) {
   switch (config.mode) {
-    case 'advanced':
-      return { commandId: Number(config.advancedCommand), preset: null };
-    case 'preset': {
-      const preset = getPreset(config.preset);
-      return { commandId: preset.commandId, preset };
+    case 'advanced': {
+      const commandId = Number(config.advancedCommand);
+      return {
+        command: `MAV_CMD(${commandId})`,
+        name: `#${commandId}`,
+        commandId,
+        exposedParams: [1, 2, 3, 4, 5, 6, 7],
+      };
     }
+    case 'preset':
+      return getPreset(config.preset);
     default: break; // This space intentionally left blank (§5)
   }
-  return { commandId: NaN, preset: null }; // nothing matched: no behavior selected (§5)
+  return undefined; // nothing matched: no behavior selected (§5)
 }
 
 module.exports = function registerMavlinkCommand(RED) {
@@ -98,12 +105,8 @@ module.exports = function registerMavlinkCommand(RED) {
     // The editor guarantees both (§6, ruled 2026-08-12): a node missing its
     // command or its wire message wears Node-RED's red triangle, and there is
     // no deploy-time badge or refusing input handler restating it here.
-    const { commandId, preset } = resolveCommand(config);
-    const commandName =
-      preset ? preset.command : `MAV_CMD(${commandId})`;
-    const displayName = preset ? preset.name : `#${commandId}`;
-    const noAutoRetry = preset ? preset.noAutoRetry : false;
-    const completionKey = preset ? preset.completionKey : null;
+    const preset = resolveCommand(config);
+    const { commandId, name: displayName, completionKey } = preset;
 
     const connNode = RED.nodes.getNode(config.connection);
     // Configured params are deploy-constant: parse the JSON once, not per
@@ -214,10 +217,7 @@ module.exports = function registerMavlinkCommand(RED) {
       // was asked for, and the wire filler is indistinguishable from a real 0
       // there (custom_mode 0 is ArduPilot STABILIZE).
       const requested = [1, 2, 3, 4, 5, 6, 7].map((i) => userParams[i]);
-      if (preset) {
-        return { wire: buildParamArray(preset, userParams), requested };
-      }
-      return { wire: requested.map((v) => (v !== undefined ? v : 0)), requested };
+      return { wire: buildParamArray(preset, userParams), requested };
     }
 
     async function handleInput(msg, send, done) {
@@ -244,7 +244,7 @@ module.exports = function registerMavlinkCommand(RED) {
       const startMs = Date.now();
 
       /** The command and target every record of this input names. */
-      const recordFields = { command: commandName, commandId, target };
+      const recordFields = { command: preset.command, commandId, target };
 
       /**
        * This input's status record: command, target and the elapsed time
@@ -330,7 +330,12 @@ module.exports = function registerMavlinkCommand(RED) {
       function completionFrame() {
         switch (profile.firmware) {
           case 'px4': return MAV_FRAME.GLOBAL;
-          case 'ardupilot': return configuredCarrier === CARRIER.INT ? frame : undefined;
+          case 'ardupilot':
+            switch (configuredCarrier) {
+              case CARRIER.INT: return frame;
+              default: break; // This space intentionally left blank (§5)
+            }
+            break;
           default: break; // This space intentionally left blank (§5)
         }
         return undefined; // nothing matched: no behavior selected (§5)
@@ -356,13 +361,13 @@ module.exports = function registerMavlinkCommand(RED) {
           target,
           identityId,
           timeoutMs,
-          maxRetries: noAutoRetry ? 0 : maxRetries,
+          maxRetries: preset.noAutoRetry ? 0 : maxRetries,
         });
 
         // A lost ack is checked against the peer table (§9): state that
         // already shows the condition means the ack was lost on the return
         // leg and the command ran.
-        if (ackOutcome.result === 'timeout' && completionKey) {
+        if (ackOutcome.result === 'timeout') {
           const stateCheck = checkCompletion(
             completionKey,
             requestedParams,
