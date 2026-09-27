@@ -614,7 +614,7 @@ harness run order**, batched by `PROFILE.restart` so cold vehicle resets stay se
 
 - **File:** `examples/sitl/15-param-echo-timeout.json` · **Tab:** `SITL 15 Param echo timeout`
 - **Story:** Confirm live `LOIT_SPEED_MS` first (AP-1 reachable), then set missing
-  `WPNAV_SPEED` on Copter 4.7.0; confirm must finish as `timed-out` / `echo timeout`.
+  `WPNAV_SPEED` on Copter 4.7.0; confirm must finish as `failed`, stalled at param `WPNAV_SPEED` after its echo retries.
 - **Nodes:** config triplet, 2× `param` set(confirm), `inject`, `debug`.
 
 ### sitl/16 — Payload gimbal legacy (AP-31)
