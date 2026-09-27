@@ -1576,6 +1576,20 @@ test('mavlink-move: an all-blank Attitude reds — every ignore bit set commands
   );
 });
 
+test('mavlink-move: a yaw-only Steer reds on ArduPilot, where it is measured inert (RG-a)', () => {
+  const lookup = { ...FAMILY_LOOKUP, 'conn-px4': { vehicle: 'veh-px4' }, 'veh-px4': { firmware: 'px4', dialect: 'common' } };
+  const { action } = loadNodeDefaults('mavlink-move', lookup);
+  const steer = (connection, over) => action.validate.call(
+    { id: 'm1', action: 'steer', delivery: 'send', connection, ...over }, 'steer', {}
+  );
+  assert.match(String(steer('conn-copter', { yaw: '90' })), /use the Turn action/);
+  assert.equal(steer('conn-copter', { yaw: '90', yawRate: '10' }), true, 'with a rate it is not the measured shape');
+  assert.equal(steer('conn-copter', { yawRate: '10' }), true, 'a rate alone is not the measured shape');
+  assert.equal(steer('conn-copter', { yaw: '90', vNorth: '1', vEast: '0', vUp: '0' }), true, 'yaw riding a velocity');
+  assert.equal(steer('conn-px4', { yaw: '90' }), true, 'PX4 honours a yaw setpoint');
+  assert.equal(steer(undefined, { yaw: '90' }), true, 'no profile gates nothing');
+});
+
 test('mavlink-move: Attitude needs thrust except on a Plane, and a whole rate trio on Copter (R26)', () => {
   const lookup = { ...FAMILY_LOOKUP, 'conn-px4': { vehicle: 'veh-px4' }, 'veh-px4': { firmware: 'px4', dialect: 'common' } };
   const { thrust, action } = loadNodeDefaults('mavlink-move', lookup);
