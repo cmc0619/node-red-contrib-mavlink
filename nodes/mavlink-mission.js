@@ -294,7 +294,9 @@ module.exports = function registerMavlinkMission(RED) {
 
 /**
  * Build a status record for output 1. Every record carries the operation and
- * mission type so a downstream `switch` can branch (§9).
+ * mission type so a downstream `switch` can branch (§9): the type as the
+ * operator named it, stamped after the machine's fields so the numeric
+ * `missionType` a machine reports cannot replace it on some records only.
  *
  * @param {object} node  the emitting node (its registered type stamps the record)
  * @param {string} operation
@@ -306,9 +308,9 @@ module.exports = function registerMavlinkMission(RED) {
 function record(node, operation, missionTypeKey, target, fields) {
   return makeStatusRecord(node.type, {
     operation,
-    missionType: missionTypeKey,
     target,
     ...fields,
+    missionType: missionTypeKey,
   });
 }
 

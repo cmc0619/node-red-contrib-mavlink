@@ -134,6 +134,25 @@ test('set-current confirm waits for the matching addressless MISSION_CURRENT ech
   assert.equal(terminal[1].seq, 0);
 });
 
+test('every status record names the mission type as configured, progress and terminal alike (R65)', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 1, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'MISSION_CLEAR_ALL') {
+      deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: 1, target_system: 0, target_component: 0 } });
+    }
+  });
+  const Node = loadNode(conn);
+  const node = new Node({
+    operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'fence', timeoutMs: 20, maxRetries: 1,
+  });
+  const { outputs } = await runInput(node, { payload: {} });
+
+  const records = outputs.map((m) => m[1]).filter(Boolean);
+  assert.deepEqual(records.map((r) => r.result), ['progress', 'succeeded']);
+  assert.deepEqual(records.map((r) => r.missionType), ['fence', 'fence']);
+});
+
 test('Build tier plans nothing for a missing operation instead of planning an upload', async () => {
   // A catch-all `else` treated every unknown operation as upload, so a node
   // with no operation answered Build with a zero-item MISSION_COUNT plan. The
