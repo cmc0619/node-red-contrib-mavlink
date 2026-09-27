@@ -634,7 +634,10 @@
     <dt class="optional">band <span class="property-type">number</span></dt>
     <dd>Queue band override (0–4).</dd>
     <dt class="optional">target <span class="property-type">object</span></dt>
-    <dd><code>{ sysid, compid }</code> destination.</dd>
+    <dd><code>{ sysid, compid }</code> destination (Send). Read at the message
+        root, like <code>band</code>, not under <code>payload</code>.</dd>
+    <dt class="optional">identityId <span class="property-type">string</span></dt>
+    <dd>Local Identity node id the frame is sent as (Send), at the message root.</dd>
   </dl>
   <h3>Outputs</h3>
   <ol class="node-ports">
