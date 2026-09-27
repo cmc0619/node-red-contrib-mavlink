@@ -3,10 +3,11 @@
  *
  * Node-RED serves this file at
  * `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` (DESIGN.md §6,
- * https://nodered.org/docs/creating-nodes/resources). Each node HTML loads it
- * with a relative `<script src>`; Node-RED's `appendConfig` defers every inline
- * node script until this external script's `onload` fires, so `RED.mavlink.*`
- * is defined before any `registerType` runs.
+ * https://nodered.org/docs/creating-nodes/resources). Only
+ * `mavlink-local-identity.html` loads it, with a relative `<script src>`, and
+ * package.json lists that node first: Node-RED's `appendConfig` defers every
+ * later inline node script until this external script's `onload` fires, so
+ * `RED.mavlink.*` is defined before any `registerType` runs (§14.32).
  *
  * This is the browser (editor) half of the toolkit. It owns the config-node
  * picker, the enum/dialect catalog helpers, the role × tier matrix source
@@ -23,7 +24,7 @@
   /**
    * Shared enum option label. Server catalogs should already include labels,
    * but local/generated entries use the same §6 NAME (value) format
-   * (Node twin: `lib/metadata/commands-list.js` `enumOptionLabel`).
+   * (Node twin: `lib/metadata/commands-list.js` `commandLabel`).
    *
    * @param {{name: string, value: number|string}} entry
    * @returns {string}
@@ -1746,6 +1747,9 @@
    * transfer step and a parameter stream are not a command ack, and their
    * windows are theirs.
    *
+   * One field, one name: where the pair is an ack window, every dialog labels
+   * it `ACK timeout` (ms) and `Max retries`.
+   *
    * `shown(node)` says whether the two rows are on screen in the dialog's
    * live state — the tiers that actually wait. A row the operator cannot
    * see never reds: a value cleared on one tier must not red a node that
@@ -1925,21 +1929,6 @@
   };
 
   /**
-   * Shared Build-tier dialect / vehicle / firmware default descriptors and
-   * validators for `registerType({ defaults })`. Every Build-tier builder
-   * gets the same rule: dialect required on Build; the Vehicle Profile is
-   * required only when the dialect is the `__vehicle` escape; and — for
-   * Param / Mission — Firmware is required when a concrete non-empty dialect
-   * is chosen (the Firmware XOR against the Vehicle Profile escape, §6).
-   *
-   * Merge the result into the node's `defaults` object (Object.assign).
-   *
-   * @param {object} [opts]
-   * @param {'delivery'|'tier'} [opts.modeField='delivery']  Build node uses tier
-   * @param {boolean} [opts.withFirmware]  add the Param/Mission Firmware field
-   * @returns {object} default descriptors to merge into registerType defaults
-   */
-  /**
    * The `connection` default descriptor: required on the wire tiers,
    * meaningless on Build. Shared by the tier senders (via
    * buildTierDialectDefaults) and Fan-out, which has no dialect field.
@@ -1979,6 +1968,21 @@
     };
   };
 
+  /**
+   * Shared Build-tier dialect / vehicle / firmware default descriptors and
+   * validators for `registerType({ defaults })`. Every Build-tier builder
+   * gets the same rule: dialect required on Build; the Vehicle Profile is
+   * required only when the dialect is the `__vehicle` escape; and — for
+   * Param / Mission — Firmware is required when a concrete non-empty dialect
+   * is chosen (the Firmware XOR against the Vehicle Profile escape, §6).
+   *
+   * Merge the result into the node's `defaults` object (Object.assign).
+   *
+   * @param {object} [opts]
+   * @param {'delivery'|'tier'} [opts.modeField='delivery']  Build node uses tier
+   * @param {boolean} [opts.withFirmware]  add the Param/Mission Firmware field
+   * @returns {object} default descriptors to merge into registerType defaults
+   */
   RED.mavlink.buildTierDialectDefaults = function (opts) {
     opts = opts || {};
     const modeField = opts.modeField || 'delivery';
