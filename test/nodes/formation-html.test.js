@@ -100,6 +100,21 @@ test('heading: required on a fixed anchor, blank legal on a leader anchor, 0-360
   assert.match(String(heading('fixed', -1)), /between 0 and 360/);
 });
 
+test('fixed anchor on a sphere or pitched shape: alt must be at least the spacing (E5)', () => {
+  const { alt } = loadNodeDefaults('mavlink-formation');
+  const on = (over, v) => alt.validate.call({ anchorMode: 'fixed', shape: 'line', spacing: 10, pitchDeg: 0, ...over }, v, {});
+
+  assert.equal(alt.validate.length, 2, 'a reason-returning validator declares (v, opt)');
+  assert.equal(on({}, 5), true, 'a level planar shape keeps every slot at the anchor altitude');
+  assert.match(String(on({ shape: 'sphere' }, 5)), /at least the spacing/);
+  assert.equal(on({ shape: 'sphere' }, 10), true);
+  assert.match(String(on({ pitchDeg: 30 }, 9)), /at least the spacing/);
+  assert.equal(on({ pitchDeg: 30 }, 30), true);
+  assert.match(String(on({}, '')), /needs an altitude/, 'blank still reds first');
+  assert.equal(alt.validate.call({ anchorMode: 'leader', shape: 'sphere', spacing: 10 }, 1, {}), true,
+    'a leader anchor hides the field');
+});
+
 test('intervalMs requires a number >= 0 — the runtime reads a present value as Number()', () => {
   // Blank would ride as Number('') = 0 and a negative paces nothing: an
   // unthrottled fleet send either way. min="0" is not enforced on save.
