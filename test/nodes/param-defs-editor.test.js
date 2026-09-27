@@ -43,7 +43,7 @@ test('Vehicle parameter Update is single-flight and restores both result states'
   vm.runInNewContext(vehicleHtml.slice(start, end), {
     $,
     $paramDefsStatus: status,
-    RED: { mavlink: { adminApiUrl: (value) => value } },
+    RED: { mavlink: {} },
     node: { id: 'profile-1' },
   });
 

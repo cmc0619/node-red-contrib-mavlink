@@ -798,19 +798,6 @@
   };
 
   /**
-   * Build an admin API URL under Node-RED's configured httpAdminRoot.
-   * Absolute `/mavlink/...` paths 404 when the editor is mounted at e.g. `/red`.
-   *
-   * @param {string} path  absolute-looking path, e.g. `/mavlink/enums`
-   * @returns {string}
-   */
-  RED.mavlink.adminApiUrl = function (path) {
-    let root = (RED.settings?.httpAdminRoot) || '/';
-    if (root.slice(-1) !== '/') root += '/';
-    return root + String(path || '').replace(/^\//, '');
-  };
-
-  /**
    * Populate a Build-tier dialect select without inventing a default dialect.
    * Empty remains selected until the editor's required validator accepts a
    * concrete dialect or the Vehicle Profile escape (§6).
@@ -856,7 +843,7 @@
       $select.val(saved);
     }
 
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), (data) => {
+    $.getJSON('mavlink/dialects', (data) => {
       finish((data?.dialects) || []);
     }).fail(() => {
       finish([]);
@@ -890,7 +877,7 @@
       }
       return;
     }
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, (data) => {
+    $.getJSON('mavlink/enums', query, (data) => {
       if (token?.cancelled) return;
       cb({
         dialect: data.dialect,
@@ -1307,8 +1294,9 @@
    * Caller owns only its request sequence: `{ seq: 0 }`. The catalog travels
    * through the callback.
    *
-   * @param {string} endpoint  admin path (`/mavlink/build/messages` or
-   *   `/mavlink/command/commands`)
+   * @param {string} endpoint  relative admin path (`mavlink/build/messages` or
+   *   `mavlink/command/commands`). Relative on purpose: Node-RED's ajaxSetup
+   *   prefixes the admin root and adds the auth token only to relative URLs.
    * @param {{value: object|null, seq: number}} state
    * @param {function(object):void} cb
    * @param {object} [opts]
@@ -1348,7 +1336,7 @@
       return;
     }
 
-    $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, (data) => {
+    $.getJSON(endpoint, target.query, (data) => {
       if (seq !== state.seq) return;
       cb(fromData(data || {}));
     }).fail((_xhr, _status, err) => {

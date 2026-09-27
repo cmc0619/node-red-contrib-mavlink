@@ -7,7 +7,7 @@
       // mavlink-in is wire-only (no Build tier): the bound Connection's Vehicle
       // Profile is the sole catalog source (§6). No connection / no profile
       // resolves to an empty catalog — never a silent `ardupilotmega`.
-      RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+      RED.mavlink.loadCatalog('mavlink/build/messages', _msgCatalog, cb, {
         isBuild: false,
         listKey: 'messages'
       });

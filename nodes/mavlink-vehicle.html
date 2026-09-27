@@ -162,7 +162,7 @@
         }
 
         function loadLibrary(done) {
-          $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog'))
+          $.getJSON('mavlink/xml-catalog')
             .done((data) => {
               library = (data?.dialects) || [];
               $status.text(library.length ? '' : 'Dialect library empty — Update catalog when online.');
@@ -221,7 +221,7 @@
           e.preventDefault();
           $status.text('Downloading MAVLink XML from mavlink/mavlink...');
           $.ajax({
-            url: RED.mavlink.adminApiUrl('/mavlink/xml-catalog/update'),
+            url: 'mavlink/xml-catalog/update',
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({})
@@ -250,7 +250,7 @@
           e.preventDefault();
           $status.text('Rebuilding compiled dialects...');
           $.ajax({
-            url: RED.mavlink.adminApiUrl('/mavlink/dialect-cache/rebuild'),
+            url: 'mavlink/dialect-cache/rebuild',
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({})
@@ -275,7 +275,7 @@
           $update.prop('disabled', true);
           $paramDefsStatus.text('Downloading parameter definitions...');
           $.ajax({
-            url: RED.mavlink.adminApiUrl('/mavlink/param/defs/update'),
+            url: 'mavlink/param/defs/update',
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({ vehicle: node.id, url })

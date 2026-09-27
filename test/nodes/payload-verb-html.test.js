@@ -67,7 +67,7 @@ test('editor catalog names every lib/payload recipe verb under its own topic', (
   // each node's HTML (the HTML only calls refreshVerbOptions). Evaluate the
   // table rather than grep for it: `set` and `operate` repeat across topics,
   // so a text match on the verb alone cannot tell servo's from relay's.
-  const context = { RED: { mavlink: {}, settings: { httpAdminRoot: '/' } }, $: () => ({}) };
+  const context = { RED: { mavlink: {} }, $: () => ({}) };
   vm.runInNewContext(
     fs.readFileSync(path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'), 'utf8'),
     context
@@ -100,7 +100,7 @@ test('gimbal path picker offers every aim path, including the acked command form
 test('gimbal device ids keep manual entry and add live manager suggestions', () => {
   assert.match(payloadHtml, /id="payload-gimbal-device-ids"/, 'manual number input can use the datalist');
   assert.match(payloadHtml, /\.attr\('list', 'payload-gimbal-device-ids'\)/, 'gimbal device field is suggestion-enabled');
-  assert.match(payloadHtml, /adminApiUrl\('\/mavlink\/gimbal-managers'\)/, 'manager route is used');
+  assert.match(payloadHtml, /'mavlink\/gimbal-managers'/, 'manager route is used');
   assert.match(payloadHtml, /\{ connection \}/, 'the selected Connection scopes discovery');
   assert.match(payloadHtml, /manager\.gimbalDeviceId/, 'discovered device IDs populate suggestions');
   assert.match(payloadHtml, /manager\.sysid/, 'suggestions retain the manager system address');

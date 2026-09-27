@@ -52,7 +52,7 @@
     // (fresh node — no connection, no dialect), while the preset list is
     // target-free and must load for exactly those opens.
     const seq = ++_presets.seq;
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/command/presets'), (data) => {
+    $.getJSON('mavlink/command/presets', (data) => {
       if (seq !== _presets.seq) return;
       _currentPresetGroups = data.groups || [];
       cb(_currentPresetGroups);
@@ -82,13 +82,13 @@
    * @param {function({commands:Array, enums:Object, dialect:string}):void} cb
    */
   function loadCommandsCatalog(site, cb) {
-    RED.mavlink.loadCatalog('/mavlink/command/commands', site, cb, {
+    RED.mavlink.loadCatalog('mavlink/command/commands', site, cb, {
       listKey: 'commands'
     });
   }
 
   function loadMessagesCatalog(cb) {
-    RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+    RED.mavlink.loadCatalog('mavlink/build/messages', _msgCatalog, cb, {
       listKey: 'messages'
     });
   }

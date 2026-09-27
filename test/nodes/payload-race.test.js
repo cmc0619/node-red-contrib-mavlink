@@ -123,7 +123,6 @@ function makeHarness() {
   const registered = {};
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       validators: { number: () => () => true, regex: () => () => true },
       _: (k) => k,
@@ -213,13 +212,13 @@ test('a stale field-tips response from a verb the operator already left does not
 
   // First load, for 'photo'.
   harness.$('#node-input-dialect').trigger('change');
-  const first = harness.forUrl('/mavlink/payload/field-tips')[0];
+  const first = harness.forUrl('mavlink/payload/field-tips')[0];
   assert.ok(first, 'dialect change loads the field tips');
 
   // Operator moves to 'zoom' before the photo response lands.
   harness.$('#node-input-verb').val('zoom');
   harness.$('#node-input-verb').trigger('change');
-  const second = harness.forUrl('/mavlink/payload/field-tips')[1];
+  const second = harness.forUrl('mavlink/payload/field-tips')[1];
   assert.ok(second, 'verb change starts its own field-tips fetch');
 
   // zoom's (later, correct) response lands first...
@@ -237,12 +236,12 @@ test('field-tips responses that resolve in request order still render normally',
   harness.openDialog(payloadNode());
 
   harness.$('#node-input-dialect').trigger('change');
-  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  harness.forUrl('mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
   assert.deepEqual(harness.fieldKeys(), ['speed']);
 
   harness.$('#node-input-verb').val('zoom');
   harness.$('#node-input-verb').trigger('change');
-  harness.forUrl('/mavlink/payload/field-tips')[1].ok(fieldTips({ zoomLevel: { default: 0 } }));
+  harness.forUrl('mavlink/payload/field-tips')[1].ok(fieldTips({ zoomLevel: { default: 0 } }));
   assert.deepEqual(harness.fieldKeys(), ['zoomLevel']);
 });
 
@@ -251,7 +250,7 @@ test('a value typed into a field survives an unrelated Vehicle Profile change on
   harness.openDialog(payloadNode());
 
   harness.$('#node-input-dialect').trigger('change');
-  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  harness.forUrl('mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
   assert.equal(harness.field('speed').val(), 0);
 
   // The operator types into the rendered control.
@@ -260,7 +259,7 @@ test('a value typed into a field survives an unrelated Vehicle Profile change on
   // An unrelated control changes; it re-renders the same verb's fields
   // (dialect unchanged, so the field-tips response looks the same).
   harness.$('#node-input-vehicle').trigger('change');
-  const reload = harness.forUrl('/mavlink/payload/field-tips')[1];
+  const reload = harness.forUrl('mavlink/payload/field-tips')[1];
   assert.ok(reload, 'vehicle change reloads field tips');
   reload.ok(fieldTips({ speed: { default: 0 } }));
 
@@ -273,11 +272,11 @@ test('a value typed into a field survives an unrelated Dialect change on the sam
   harness.openDialog(payloadNode());
 
   harness.$('#node-input-dialect').trigger('change');
-  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  harness.forUrl('mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
 
   harness.field('speed').val(7);
   harness.$('#node-input-dialect').trigger('change');
-  harness.forUrl('/mavlink/payload/field-tips')[1].ok(fieldTips({ speed: { default: 0 } }));
+  harness.forUrl('mavlink/payload/field-tips')[1].ok(fieldTips({ speed: { default: 0 } }));
 
   assert.equal(harness.field('speed').val(), 7,
     'the typed value must not be reverted to the dialog-open stash');
@@ -289,12 +288,12 @@ test('a closed dialog\'s late field-tips response cannot paint fields into the d
   // Dialog A opens and requests its fields, then closes before they arrive.
   harness.openDialog(payloadNode({ id: 'pl-A' }));
   harness.$('#node-input-dialect').trigger('change');
-  const fromA = harness.forUrl('/mavlink/payload/field-tips')[0];
+  const fromA = harness.forUrl('mavlink/payload/field-tips')[0];
 
   // Dialog B (another Payload node) opens over a fresh form and requests its own.
   harness.openDialog(payloadNode({ id: 'pl-B', verb: 'zoom' }));
   harness.$('#node-input-dialect').trigger('change');
-  const fromB = harness.forUrl('/mavlink/payload/field-tips')[1];
+  const fromB = harness.forUrl('mavlink/payload/field-tips')[1];
 
   // A's response lands after B opened. A per-dialog sequence cannot see B's
   // open, so A's callback would render through the shared #payload-fields
@@ -312,13 +311,13 @@ test('Done pressed while a new recipe\'s metadata is in flight does not save the
   harness.openDialog(node);
 
   harness.$('#node-input-dialect').trigger('change');
-  harness.forUrl('/mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
+  harness.forUrl('mavlink/payload/field-tips')[0].ok(fieldTips({ speed: { default: 0 } }));
   harness.field('speed').val(42);
 
   // Recipe changes; zoom's metadata is requested but has not arrived.
   harness.$('#node-input-verb').val('zoom');
   harness.$('#node-input-verb').trigger('change');
-  assert.equal(harness.forUrl('/mavlink/payload/field-tips').length, 2, 'the new recipe was requested');
+  assert.equal(harness.forUrl('mavlink/payload/field-tips').length, 2, 'the new recipe was requested');
 
   // Done now. The photo controls must already be gone: `mode` / `action` are
   // shared keys whose enums differ per device, so a scrape of the previous

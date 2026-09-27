@@ -173,7 +173,6 @@ function makeHarness() {
   const registered = {};
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       validators: { number: () => () => true, regex: () => () => true },
       _: (k) => k,
@@ -191,7 +190,7 @@ function makeHarness() {
   context.window = context;
   vm.runInNewContext(resourceSrc, context);
   // Chrome-only helpers, stubbed at their contract boundary. The catalog
-  // machinery under test (loadCatalog, resolveCatalogTarget, adminApiUrl,
+  // machinery under test (loadCatalog, resolveCatalogTarget,
   // populateDialectSelect, fillEnumSelect) stays real.
   Object.assign(context.RED.mavlink, {
     reloadTargetCompId() {},
@@ -246,18 +245,18 @@ test('a closed dialog\'s late preset response cannot reprogram the dialog now op
   // Dialog B (another Command node) opens over a fresh form; its own preset
   // request is now the live one.
   h.openDialog(commandNode({ preset: 'takeoff' }));
-  assert.equal(h.forUrl('/mavlink/command/presets').length, 2, 'each open requested the presets');
+  assert.equal(h.forUrl('mavlink/command/presets').length, 2, 'each open requested the presets');
 
   // A's response lands after B opened. Without a fence, A's builder filled
   // B's select through the global selectors and selected A's saved preset —
   // Done would then save 'disarm' on the takeoff node.
-  h.forUrl('/mavlink/command/presets')[0].ok({ groups: PRESET_GROUPS });
+  h.forUrl('mavlink/command/presets')[0].ok({ groups: PRESET_GROUPS });
   assert.notEqual(h.$('#node-input-preset').val(), 'disarm',
     'the closed dialog\'s saved preset must not land in the open dialog');
 
   // B's own response still builds B's dropdown as ever.
-  h.forUrl('/mavlink/command/presets')[1].ok({ groups: PRESET_GROUPS });
-  const catalogRequests = h.forUrl('/mavlink/command/commands');
+  h.forUrl('mavlink/command/presets')[1].ok({ groups: PRESET_GROUPS });
+  const catalogRequests = h.forUrl('mavlink/command/commands');
   catalogRequests[catalogRequests.length - 1].ok(COMMANDS_CATALOG);
   assert.equal(h.$('#node-input-preset').val(), 'takeoff', 'the live dialog keeps its own preset');
 });
@@ -274,8 +273,8 @@ test('concurrent catalog fetches from different call sites do not cancel each ot
   // and loadCatalog's seq guard discards the callback that fills the MAV_CMD
   // list, leaving the dialog without a command list. Per-site sequences keep
   // both fetches live.
-  h.forUrl('/mavlink/command/presets')[0].ok({ groups: PRESET_GROUPS });
-  const catalogRequests = h.forUrl('/mavlink/command/commands');
+  h.forUrl('mavlink/command/presets')[0].ok({ groups: PRESET_GROUPS });
+  const catalogRequests = h.forUrl('mavlink/command/commands');
   assert.equal(catalogRequests.length, 2,
     'the dropdown fill and the preset tips each fetch on their own sequence');
   catalogRequests.forEach((req) => req.ok(COMMANDS_CATALOG));

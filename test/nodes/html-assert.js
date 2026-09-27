@@ -171,7 +171,6 @@ function loadNodeType(nodeName, nodeLookup = {}, opts = {}) {
 
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       // Node-RED's built-ins, as the editor evaluates them (editor/js/validators.js):
       // a blank is accepted only when the validator was built with blankAllowed,

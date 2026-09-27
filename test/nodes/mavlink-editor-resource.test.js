@@ -58,7 +58,6 @@ function loadResource(values = {}, nodeLookup = {}, opts = {}) {
   };
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: {
         node(id) {
@@ -479,7 +478,7 @@ test('loadCatalog empty target returns without fetching', () => {
   );
   const state = { seq: 0 };
   const got = [];
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
     listKey: 'messages',
   });
@@ -503,11 +502,11 @@ test('loadCatalog fetches for every nonempty call', () => {
   );
   const state = { seq: 0 };
   const got = [];
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
     listKey: 'messages',
   });
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
     listKey: 'messages',
   });
@@ -534,12 +533,12 @@ test('loadCatalog seq-guard drops a stale success', () => {
   );
   const state = { seq: 0 };
   const got = [];
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(['a', c]), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(['a', c]), {
     isBuild: true,
     listKey: 'messages',
   });
   values['#node-input-dialect'] = 'ardupilotmega';
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(['b', c]), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(['b', c]), {
     isBuild: true,
     listKey: 'messages',
   });
@@ -584,7 +583,6 @@ function loadVerbResource(values) {
   $.getJSON = () => ({ fail() { return this; } });
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: { node() { return null; } },
     },
@@ -668,7 +666,7 @@ test('missingEnumOptionLabel is the single #N (not in dialect) wording', () => {
 test('ensureSavedEnumOption appends only when the value is absent', () => {
   const options = [];
   const context = {
-    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    RED: { mavlink: {}, nodes: { node() { return null; } } },
     $: null,
   };
   const $select = {
@@ -908,7 +906,7 @@ test('fillBandSelect rebuilds options and restores the saved band', () => {
     },
   };
   const context = {
-    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    RED: { mavlink: {}, nodes: { node() { return null; } } },
     $(html) {
       if (typeof html === 'string' && html.startsWith('<option')) {
         const opt = { _val: '', _text: '' };
@@ -931,7 +929,6 @@ test('applyCompanionTargetVisibility hides both rows for wire companion', () => 
   const toggles = {};
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: {
         node(id) {
@@ -1643,7 +1640,7 @@ test('fillEnumSelect: preferLive decides which value survives a refill', () => {
    */
   function refill(live, saved, preferLive) {
     const { $ } = makeDom({ '#sel': live });
-    const context = { RED: { settings: { httpAdminRoot: '/' } }, $ };
+    const context = { RED: {}, $ };
     installEditorHelpers(context);
     const $sel = $('#sel');
     context.RED.mavlink.fillEnumSelect($sel, ENTRIES, {
@@ -1758,7 +1755,7 @@ function selectHarness(live) {
   }
   $.getJSON = () => ({ fail() { return this; } });
   const context = {
-    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node: () => null } },
+    RED: { mavlink: {}, nodes: { node: () => null } },
     $,
     console,
     setTimeout,
@@ -1903,7 +1900,7 @@ function dependentHarness(selects) {
     };
     return wrapped;
   }
-  const context = { RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node: () => null } }, $, console, setTimeout };
+  const context = { RED: { mavlink: {}, nodes: { node: () => null } }, $, console, setTimeout };
   context.window = context;
   vm.runInNewContext(resourceScript, context);
   const enabled = (selector) => els[selector].options.filter((o) => !o.disabled).map((o) => o.value);
@@ -1940,4 +1937,21 @@ test('dependentSelect repairs an illegal saved value on open, and chains through
   RED.mavlink.dependentSelect('#sel', ['#exec', '#delivery'],
     (e, d) => (e === 'broadcast' ? ['all'] : d === 'build' ? ['list'] : null));
   assert.equal(els['#sel'].value, 'list', 'Build holds the list');
+});
+
+// ── admin URLs ───────────────────────────────────────────────────────────────
+
+test('no editor admin URL starts with "/": Node-RED prefixes the admin root and adds the auth token only to relative URLs', () => {
+  const nodesDir = path.join(__dirname, '..', '..', 'nodes');
+  const sources = [['resources/mavlink-editor.js', resourceScript]].concat(
+    fs.readdirSync(nodesDir).filter((f) => f.endsWith('.html'))
+      .map((f) => [`nodes/${f}`, fs.readFileSync(path.join(nodesDir, f), 'utf8')])
+  );
+  let relative = 0;
+  for (const [name, src] of sources) {
+    assert.doesNotMatch(src, /['"`]\/mavlink\//, `${name} carries an absolute /mavlink/ URL`);
+    assert.doesNotMatch(src, /adminApiUrl|httpAdminRoot/, `${name} rebuilds the admin root by hand`);
+    relative += (src.match(/['"`]mavlink\//g) || []).length;
+  }
+  assert.ok(relative >= 16, `the editor's admin calls are all relative (found ${relative})`);
 });

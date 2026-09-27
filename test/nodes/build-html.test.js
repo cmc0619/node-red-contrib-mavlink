@@ -93,7 +93,7 @@ test('Build messageName defaults to HEARTBEAT and is a <select>', () => {
 });
 
 test('Build reshapes fields from message metadata and handles COMMAND_LONG/INT', () => {
-  assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/);
+  assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/build\/messages['"]/);
   assert.match(html, /function refreshFieldForm/);
   assert.match(html, /spec\.enum/);
   assert.match(html, /COMMAND_LONG/);
@@ -206,14 +206,6 @@ test('Build fieldInput keeps a saved enum value the table lacks (#198)', () => {
   );
 });
 
-test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'catalog fetches use shared loadCatalog');
-  assert.ok(
-    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
-    'bare absolute /mavlink getJSON paths must be gone'
-  );
-});
-
 test('Build\'s registered validator is the shared one, by its behaviour', () => {
   // The old local validator was `if (tier !== 'build') return !!v`, which also
   // disabled Node-RED's config-node reference check — build was the only node
@@ -269,12 +261,12 @@ test('Build catalog targeting delegates to the shared loader (no local copy)', (
   // isBuild flag and must not paste the skeleton.
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"][\s\S]*isBuild:\s*buildTierIsBuild\(\)/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/build\/messages['"][\s\S]*isBuild:\s*buildTierIsBuild\(\)/,
     'Build messages catalog uses shared loadCatalog with tier-derived isBuild'
   );
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"][\s\S]*isBuild:\s*buildTierIsBuild\(\)/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/command\/commands['"][\s\S]*isBuild:\s*buildTierIsBuild\(\)/,
     'Build commands catalog uses shared loadCatalog with tier-derived isBuild'
   );
   assert.match(
@@ -283,7 +275,7 @@ test('Build catalog targeting delegates to the shared loader (no local copy)', (
     'isBuild is derived from the Build node tier field'
   );
   assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
-  assert.doesNotMatch(html, /\$\.getJSON\(\s*RED\.mavlink\.adminApiUrl/, 'no hand-rolled catalog getJSON');
+  assert.doesNotMatch(html, /\$\.getJSON\(\s*['"]mavlink\/(build|command)/, 'no hand-rolled catalog getJSON');
   assert.doesNotMatch(html, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
   // "Not configured yet" is the required-field validation's job (red field +
   // node marker) — no bespoke pending mechanism in the dialog.

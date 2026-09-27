@@ -29,7 +29,6 @@ const resourceScript = fs.readFileSync(
 function installEditorHelpers(context) {
   if (!context.RED) context.RED = {};
   if (!context.RED.mavlink) context.RED.mavlink = {};
-  if (!context.RED.settings) context.RED.settings = { httpAdminRoot: '/' };
   vm.runInNewContext(resourceScript, context);
   return context;
 }

@@ -244,7 +244,7 @@ test('Command catalog state keeps only its request sequences', () => {
   const html = readHtml('mavlink-command');
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
   // Per call site, so concurrent fetches from different sites cannot outdate

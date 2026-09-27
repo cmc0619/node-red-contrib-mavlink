@@ -399,7 +399,7 @@
       function fillSerialPorts() {
         if (portsRequested) return;
         portsRequested = true;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/serial-ports'), (data) => {
+        $.getJSON('mavlink/serial-ports', (data) => {
           const $list = $('#mav-conn-serial-ports').empty();
           ((data?.ports) || []).forEach((port) => {
             $('<option></option>').val(port.path).text(port.manufacturer || '').appendTo($list);

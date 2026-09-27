@@ -58,7 +58,6 @@ function loadNodeHtml(file, opts) {
   }
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: {
         registerType: (type, def) => { registered[type] = def; },
