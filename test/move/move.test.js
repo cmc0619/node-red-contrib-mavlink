@@ -382,7 +382,8 @@ test('quaternionFromEuler composes mixed angles in aerospace ZYX order, pinned t
 test('Move streams on the Streaming band until TTL and emits a zero-velocity stop', () => {
   const sends = [];
   let timer;
-  let now = 0;
+  let expire;
+  let expiryMs;
   const handle = { unref() { /* not a real timer */ } };
   const stream = createMoveStream({
     connection: {
@@ -400,7 +401,6 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
     identityId: 'gcs',
     rateHz: 10,
     ttlMs: 250,
-    now: () => now,
     setInterval(fn) {
       timer = fn;
       return handle;
@@ -408,17 +408,23 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
     clearInterval(cleared) {
       assert.equal(cleared, handle);
     },
+    setTimeout(fn, ms) {
+      expire = fn;
+      expiryMs = ms;
+      return { unref() { /* not a real timer */ } };
+    },
+    clearTimeout() { /* injected */ },
   });
 
   stream.start();
   assert.equal(sends.length, 1);
   assert.equal(sends[0].options.band, BAND.STREAMING);
   assert.equal(sends[0].message.fields.vz, -3);
+  // The TTL owns its own timer: the brake lands at ttlMs, not on the next tick.
+  assert.equal(expiryMs, 250);
 
-  now = 100;
   timer();
-  now = 260;
-  timer();
+  expire();
 
   assert.equal(stream.active, false);
   assert.equal(sends.length, 3);
@@ -432,3 +438,23 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
 
 
 
+
+test('TTL expiry is not rounded up to the next tick: 1 Hz with TTL 30 ms brakes long before 1 s (R30)', async () => {
+  const sent = [];
+  const started = Date.now();
+  // The stream's timers are unref'd; this one holds the event loop open.
+  const keepAlive = setTimeout(() => { /* held open */ }, 2000);
+  const elapsed = await new Promise((resolve) => {
+    createMoveStream({
+      message: buildMoveMessage({ frame: 1, mode: 'velocity', target: { sysid: 1, compid: 1 }, velocity: { north: 1, east: 0, up: 0 } }),
+      connection: { send: (m) => sent.push(m) },
+      rateHz: 1,
+      ttlMs: 30,
+      onExpire: () => resolve(Date.now() - started),
+    }).start();
+  });
+  clearTimeout(keepAlive);
+  assert.ok(elapsed < 500, `braked at ${elapsed} ms`);
+  assert.equal(sent.length, 2, 'the first setpoint, then the brake');
+  assert.equal(sent[1].fields.type_mask, 3527);
+});
