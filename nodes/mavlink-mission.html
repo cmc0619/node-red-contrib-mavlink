@@ -7,8 +7,9 @@
   const MISSION_FENCE_COMMANDS = [5000, 5001, 5002, 5003, 5004, 5005];
   const MISSION_RALLY_COMMAND = 5100;
 
-  // Dialect + Vehicle + Firmware validators are the shared Build-tier rule
-  // (§6 Firmware XOR); Mission's mode field is `delivery` (default confirm).
+  // Dialect + Vehicle validators are the shared Build-tier rule; Mission's
+  // mode field is `delivery` (default confirm). A mission plan is built the
+  // same for every firmware, so Build asks for none.
   const missionDefaults = {
     name: { value: '' },
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
@@ -118,7 +119,7 @@
       },
       timeoutMs: { ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire).timeoutMs, value: '1500' },
       maxRetries: { ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire).maxRetries, value: '5' },
-    ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
+    ...RED.mavlink.buildTierDialectDefaults()
   };
 
   RED.nodes.registerType('mavlink-mission', {
@@ -158,7 +159,6 @@
           dialect,
           dialectRow: '#row-mission-dialect',
           vehicleRow: '#row-vehicle',
-          firmwareRow: '#row-mission-firmware',
           connectionRow: '#row-connection'
         });
         /* Mission-owned wire rows stay local */
@@ -221,7 +221,6 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build (plan only)</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row" id="row-mission-dialect"><label for="node-input-dialect">Dialect</label><select id="node-input-dialect" style="width:70%"></select></div>
   <div class="form-row" id="row-vehicle"><label for="node-input-vehicle">Vehicle</label><input type="text" id="node-input-vehicle"></div>
-  <div class="form-row" id="row-mission-firmware"><label for="node-input-firmware">Firmware</label><select id="node-input-firmware"><option value=""></option><option value="ardupilot">ArduPilot</option><option value="px4">PX4</option></select></div>
   <div class="form-row" id="row-connection"><label for="node-input-connection">Connection</label><input type="text" id="node-input-connection"></div>
   <div class="form-row" id="row-identity"><label for="node-input-identity">Identity</label><select id="node-input-identity"></select></div>
   <div class="form-row"><label for="node-input-operation">Operation</label><select id="node-input-operation"><option value="download">Download</option><option value="upload">Upload</option><option value="clear">Clear</option><option value="set-current">Set current</option></select></div>
@@ -237,7 +236,7 @@
 <script type="text/html" data-help-name="mavlink-mission">
   <p>Downloads, uploads, clears, or selects the current item of a mission plan over the MAVLink mission protocol — the one exchange the vehicle drives. Set Current does not apply to fence or rally plans.</p>
   <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code> or matching <code>MISSION_CURRENT</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
-  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
+  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b>, or choose <i>from Vehicle Profile…</i> to inherit the dialect and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type is not gated by firmware: a vehicle that does not carry fence or rally refuses the transfer itself, and the refusal rides to output 1.</p>
   <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>. An explicit empty array sends <code>MISSION_COUNT</code> 0 (the wire erase). A message that omits <code>items</code> over blank config does not invent an empty list. Use <b>Clear</b> to erase a plan on purpose.</p>
   <p><b>Clear</b> erases the selected plan on the vehicle. Selecting the Clear operation is the confirmation — any input triggers it.</p>

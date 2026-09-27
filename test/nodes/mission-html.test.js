@@ -29,16 +29,13 @@ test('mavlink-mission calls refreshIdentitySelect on connection change', () => {
   assert.doesNotMatch(html, /function refreshIdentitySelect/, 'no local identity-refresh copy');
 });
 
-test('mavlink-mission dialect + vehicle + firmware defaults come from the shared helper', () => {
-  // dialect/vehicle/firmware descriptors + the §6 Firmware XOR validator are
-  // the shared Build-tier rule, merged via buildTierDialectDefaults with
-  // withFirmware. Validator behaviour is proven in
-  // mavlink-editor-resource.test.js.
-  assert.match(
-    html,
-    /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\{\s*withFirmware:\s*true\s*\}\)/,
-    'Mission defaults must merge buildTierDialectDefaults({ withFirmware: true })'
-  );
+test('mavlink-mission dialect + vehicle defaults come from the shared helper, with no Firmware (PM-8)', () => {
+  // A mission plan is built the same for every firmware and the runtime
+  // reads no config.firmware, so Build does not ask for one. Validator
+  // behaviour is proven in mavlink-editor-resource.test.js.
+  assert.match(html, /\.\.\.RED\.mavlink\.buildTierDialectDefaults\(\)/);
+  assert.equal(loadNodeDefaults('mavlink-mission').firmware, undefined);
+  assert.doesNotMatch(html, /node-input-firmware|firmwareRow/);
 });
 
 test('mavlink-mission has refreshVisibility and companion row hiding', () => {
@@ -76,10 +73,7 @@ test('mavlink-mission Build visibility delegates shared rows to applyBuildTierRo
   );
   assert.match(html, /dialectRow:\s*'#row-mission-dialect'/, 'dialect row selector passed');
   assert.match(html, /vehicleRow:\s*'#row-vehicle'/, 'vehicle row selector passed');
-  assert.match(html, /firmwareRow:\s*'#row-mission-firmware'/, 'firmware row selector passed');
   assert.match(html, /connectionRow:\s*'#row-connection'/, 'connection row selector passed');
-  assert.match(html, /id="row-mission-firmware"/, 'template must have a firmware row');
-  assert.match(html, /id="node-input-firmware"/, 'template must have the firmware select');
   assert.doesNotMatch(
     html,
     /\$\('#row-mission-dialect'\)\.toggle/,

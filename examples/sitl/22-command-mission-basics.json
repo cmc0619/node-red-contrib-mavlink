@@ -223,7 +223,6 @@
     "identity": "",
     "dialect": "",
     "vehicle": "",
-    "firmware": "",
     "x": 450,
     "y": 400,
     "wires": [
@@ -278,7 +277,6 @@
     "identity": "",
     "dialect": "",
     "vehicle": "",
-    "firmware": "",
     "x": 460,
     "y": 520,
     "wires": [

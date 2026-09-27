@@ -434,7 +434,7 @@ test('a Firmware select offers blank, and says nothing in it', () => {
     .map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8')])
     .filter(([, src]) => /id="node-input-firmware"/.test(src));
 
-  assert.ok(withFirmware.length >= 2, 'more than one node offers a Firmware field');
+  assert.ok(withFirmware.length >= 1, 'a node offers a Firmware field');
   for (const [name, src] of withFirmware) {
     const select = /<select id="node-input-firmware">([\s\S]*?)<\/select>/.exec(src);
     assert.ok(select, `${name}: Firmware is a select`);
