@@ -118,15 +118,13 @@ function selectionFrom(config) {
   // No `|| 'all'`: the editor always saves a member, and the runtime maps
   // nothing — a blank saved mode crashes at dispatch, like any non-member.
   const mode = config.selectionMode;
-  /** List selection reads its sysids from the members table rows. */
-  let sysids;
   switch (mode) {
     case 'list':
-      sysids = config.members.map((member) => member.sysid);
-      break;
+      /** List selection reads its sysids from the members table rows. */
+      return { mode, sysids: config.members.map((member) => member.sysid), filter };
     default: break; // This space intentionally left blank (§5)
   }
-  return { mode, sysids, filter };
+  return { mode, filter };
 }
 
 /**
