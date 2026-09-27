@@ -138,13 +138,9 @@ test('identity ids: a foreign role select cannot invalidate a companion (#217)',
   const companion = { id: 'ci', role: 'companion' };
   assert.equal(defaults.sourceSystemId.validate.call(companion, '', {}), true);
   // CompID carries no companion allowance — the operator picks the onboard
-  // slot in every role — so it reds on blank regardless of which dialog is
-  // open. The scoping being tested is SysID's.
-  assert.match(
-    String(defaults.sourceComponentId.validate.call(companion, '', {})),
-    /names no component/,
-    'and its reason does not claim the requirement is role-conditional'
-  );
+  // slot in every role — so it is `required` in every role, whichever dialog
+  // is open. The scoping being tested is SysID's.
+  assert.equal(defaults.sourceComponentId.required, true);
 });
 
 test('identity ids: the own-dialog role switch still validates live', () => {

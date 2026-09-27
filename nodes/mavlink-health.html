@@ -1,13 +1,5 @@
 <script type="text/javascript">
   (function () {
-    function positiveSecondsValidator(v, _opt) {
-      // Blank reds: the runtime opens the lease timer at this value as saved
-      // (§0), and Number('') is 0 — an already-expired lease, not "no default".
-      const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
-      if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of seconds';
-      return true;
-    }
-
     // One place decides single- vs multi-identity so the three sites that turn
     // on it — row visibility, save-time clear, and the validator — cannot drift
     // apart. A Connection with at most one bound identity has no
@@ -49,7 +41,7 @@
         name:       { value: '' },
         connection: { value: '', type: 'mavlink-connection', required: true },
         identity:   { value: '', type: 'mavlink-local-identity', validate: boundIdentityValidator },
-        ttlS:       { value: 5, validate: positiveSecondsValidator },
+        ttlS:       { value: 5, validate: RED.mavlink.validatePositive('seconds') },
       },
       inputs: 1,
       outputs: 2,

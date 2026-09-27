@@ -1956,6 +1956,19 @@ test('dependentSelect repairs an illegal saved value on open, and chains through
   assert.equal(els['#sel'].value, 'list', 'Build holds the list');
 });
 
+// ── validatePositive ─────────────────────────────────────────────────────────
+
+test('validatePositive: a finite number above zero; blank, zero, negative and junk red with the unit', () => {
+  const { RED } = loadResource();
+  const v = RED.mavlink.validatePositive('seconds');
+  assert.equal(v.length, 2);
+  assert.equal(v('0.5', {}), true);
+  assert.equal(v(5, {}), true);
+  for (const bad of ['', ' ', '0', '-1', 'abc', 'Infinity', undefined]) {
+    assert.equal(v(bad, {}), 'must be a positive number of seconds', JSON.stringify(bad));
+  }
+});
+
 // ── admin URLs ───────────────────────────────────────────────────────────────
 
 test('no editor admin URL starts with "/": Node-RED prefixes the admin root and adds the auth token only to relative URLs', () => {

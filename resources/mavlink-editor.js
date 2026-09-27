@@ -1735,6 +1735,22 @@
   };
 
   /**
+   * A finite number above zero — an interval or lease the runtime arms its
+   * timer with as saved. Blank reds: `Number('')` is 0, an already-expired
+   * timer, and the field's `value:` is where its default lives.
+   *
+   * @param {string} unit  named in the reason, e.g. `'milliseconds'`
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validatePositive = function (unit) {
+    return function (v, _opt) {
+      const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      if (Number.isFinite(n) && n > 0) return true;
+      return `must be a positive number of ${unit}`;
+    };
+  };
+
+  /**
    * The two fields every node that waits on an acknowledgement carries —
    * Command, Payload, Param, Fan-out, Formation, Move — spread into each
    * dialog's `defaults` so the six cannot drift. `timeoutMs`: whole

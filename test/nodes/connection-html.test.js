@@ -517,15 +517,15 @@ test('link id is a wire byte; peer-freshness thresholds are required positive in
   // it to the wire as saved, so out-of-range would truncate silently.
   assert.equal(defaults.linkId.validate.call({ id: 'c1' }, '0', {}), true);
   assert.equal(defaults.linkId.validate.call({ id: 'c1' }, '255', {}), true);
-  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '256', {})), /byte — 0 to 255/);
-  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '', {})), /byte — 0 to 255/);
+  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '256', {})), /between 0 and 255/);
+  assert.equal(defaults.linkId.required, true, 'blank reds through the built-in required ring');
 
   assert.equal(defaults.staleMs.value, 5000);
   assert.equal(defaults.expireMs.value, 15000);
   for (const field of ['staleMs', 'expireMs']) {
     assert.match(
       String(defaults[field].validate.call({ id: 'c1' }, '', {})),
-      /required/,
+      /whole number >= 1/,
       `${field} blank reds — the editor owns the default the runtime sweeps on`
     );
     assert.equal(defaults[field].validate.call({ id: 'c1', staleMs: 1000 }, '5000', {}), true);

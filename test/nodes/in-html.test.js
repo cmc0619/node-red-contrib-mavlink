@@ -149,6 +149,6 @@ test('fieldName red-rings anything but a single field name; blank = any', () => 
   assert.equal(fieldName.validate.length, 2);
   assert.equal(fieldName.validate.call({}, '', {}), true, 'blank disables the predicate');
   assert.equal(fieldName.validate.call({}, 'base_mode', {}), true);
-  assert.match(String(fieldName.validate.call({}, 'base_mode, custom_mode', {})), /single field name/);
-  assert.match(String(fieldName.validate.call({}, ' base_mode', {})), /single field name/, 'padding reds; the runtime does not trim');
+  assert.match(String(fieldName.validate.call({}, 'base_mode, custom_mode', {})), /does not match/);
+  assert.match(String(fieldName.validate.call({}, ' base_mode', {})), /does not match/, 'padding reds; the runtime does not trim');
 });

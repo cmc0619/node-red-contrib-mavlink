@@ -244,23 +244,15 @@
       } },
       acceptInvalid: { value: false },
       // The signature block carries the link id as one byte on the wire.
-      linkId: { value: 0, validate(v, _opt) {
-        const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
-        if (Number.isInteger(n) && n >= 0 && n <= 255) return true;
-        return 'the signing link id is a byte — 0 to 255';
-      } },
+      linkId: { value: 0, required: true, validate: RED.mavlink.validateUint8(0) },
       // The runtime sweeps on these as saved (§0), so the editor owns the
       // 5000/15000 defaults and blank reds; a set value must be a positive
       // interval, or staleness silently never fires.
-      staleMs: { value: 5000, validate(v, opt) {
-        if (RED.mavlink.isBlank(v)) return 'stale threshold is required';
-        return RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
-      } },
+      staleMs: { value: 5000, validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
       // Cross-field (the dependency-between-fields case AGENTS.md names): a
       // peer must go stale before it expires, or the sweep drops it with the
       // stale event never fired. Read live through liveOr.
       expireMs: { value: 15000, validate(v, opt) {
-        if (RED.mavlink.isBlank(v)) return 'expire threshold is required';
         const shape = RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
         if (shape !== true) return shape;
         const staleMs = Number(RED.mavlink.liveOr(this, '#node-config-input-staleMs', this.staleMs, ''));

@@ -91,14 +91,8 @@
             return String(v).split(',').every((token) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) || 'must be comma-separated field names';
           },
         },
-        fieldName:   {
-          value: '',
-          validate(v, _opt) {
-            if (RED.mavlink.isBlank(v)) return true;
-            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(v))
-              || 'must be a single field name';
-          },
-        },
+        // Blank, or one field name: the runtime compares the name as saved.
+        fieldName:   { value: '', validate: RED.validators.regex(/^([A-Za-z_][A-Za-z0-9_]*)?$/) },
         fieldValue:  { value: '' },
         rateLimit:   {
           value: '0',

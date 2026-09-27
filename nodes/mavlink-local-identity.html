@@ -10,28 +10,6 @@
 
 <script type="text/javascript">
   (function () {
-    function positiveNumberValidator(v, _opt) {
-      // Blank reds: the runtime opens the heartbeat timer at this value as
-      // saved (§0), and Number('') is 0 — a zero-interval timer, not 1 Hz.
-      // The 1000 default is this dialog's, not the runtime's.
-      const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
-      if (!Number.isFinite(n) || n <= 0) return 'must be a positive number of milliseconds';
-      return true;
-    }
-
-    /**
-     * A required uint8 identity id. CompID uses this in every role — the field
-     * is the operator's everywhere — so its reason must not claim the
-     * requirement is role-conditional; SysID's caller supplies one that does.
-     */
-    function mavIdentityIdValidator(min, reason) {
-      const rangeCheck = RED.mavlink.validateUint8(min);
-      return function (v, opt) {
-        if (RED.mavlink.isBlank(v)) return reason;
-        return rangeCheck.call(this, v, opt);
-      };
-    }
-
     /**
      * SysID's validator. The companion role derives this one field from the
      * vehicle on the bound Connection, so blank is its correct saved state;
@@ -44,12 +22,11 @@
      * and the Connection reds with it through Node-RED's config cascade.
      */
     function mavSourceSysidValidator(min) {
-      const required = mavIdentityIdValidator(min, 'required for this role');
       const rangeCheck = RED.mavlink.validateUint8(min);
       return function (v, opt) {
         const role = RED.mavlink.liveOr(this, '#node-config-input-role', this.role, 'gcs');
-        if (role !== 'companion') return required.call(this, v, opt);
-        return RED.mavlink.isBlank(v) ? true : rangeCheck.call(this, v, opt);
+        if (role !== 'companion' && RED.mavlink.isBlank(v)) return 'required for this role';
+        return rangeCheck.call(this, v, opt);
       };
     }
 
@@ -98,7 +75,7 @@
         // missing-required path, and any non-blank stray still gets the range
         // reason. It also means a blank can never reach the runtime as
         // Number('') === 0 — component 0 is MAV_COMP_ID_ALL, a real member.
-        sourceComponentId: { value: 190, required: true, validate: mavIdentityIdValidator(1, 'required — a blank CompID names no component') },
+        sourceComponentId: { value: 190, required: true, validate: RED.mavlink.validateUint8(1) },
         // Both concrete, matching the gcs preset (ROLE_PRESETS.gcs below): the
         // initial role is never applied by applyRole (only wired to the role
         // select's `change` event, so a fresh node's saved values are never
@@ -111,7 +88,7 @@
         // with no fallback default).
         heartbeatType:     { value: 'MAV_TYPE_GCS', required: true },
         heartbeatAutopilot:{ value: 'MAV_AUTOPILOT_INVALID', required: true },
-        heartbeatIntervalMs:{ value: 1000, validate: positiveNumberValidator }
+        heartbeatIntervalMs:{ value: 1000, validate: RED.mavlink.validatePositive('milliseconds') }
       },
       label() {
         if (this.role === 'companion') {
