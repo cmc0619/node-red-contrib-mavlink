@@ -268,51 +268,46 @@
       if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'manual') return true;
       if (RED.mavlink.isBlank(v)) {
         return 'is required for Manual — MANUAL_CONTROL carries all four axes in every '
-          + 'frame, and a blank one is refused rather than centred (0 is full reverse '
-          + 'thrust on an ArduSub z axis). Use the value that means "not moving" on '
-          + 'this axis: 0 for pitch, roll and yaw, 0.5 for thrust on a Sub';
+          + 'frame, and a blank one is refused rather than centred (0 is minimum or reverse '
+          + 'thrust on a Copter, Sub or PX4 z axis). Use the value that means "not moving" on '
+          + 'this axis: 0 for pitch, roll and yaw, 0.5 for thrust on Copter, Sub and PX4';
       }
       const n = Number(v);
       if (!Number.isFinite(n) || n < -1 || n > 1) {
         return 'must be -1..1 (stick deflection, not wire units)';
       }
-      // ArduSub reads the thrust axis as 0..1000 with neutral **500**, not
-      // −1000..1000 with neutral 0 like the other three (§14, source-read). The
-      // ±1000 scaling is the dialect's own declaration for all four axes, so
-      // the runtime keeps applying it uniformly — a per-family map is exactly
-      // the unmeasured guess doctrine keeps off the wire; a rig run would
-      // settle it.
-      //
-      // What that leaves is an operator surface that *lies* on a Sub: −1..1
-      // reads as "0 is neutral", while 0 scales to 0 and lands on full reverse
-      // vertical thrust. With the blank sentinel gone there is no
-      // escape hatch at all — every axis is sent — so this check is the only
-      // thing between an operator's "neutral" and a dive. The editor is the
-      // layer that knows the family, so it says so here. Negative values
-      // have no representation at all on that axis; the rest of the range maps
-      // straight through, with 0.5 as the neutral an operator means by 0.
-      // `n <= 0`, not `n < 0`: 0 is the trap, because it is exactly
-      // what an operator types for "neutral" on a −1..1 surface and exactly
-      // what lands on full reverse. 0.5 is the neutral a Sub reads, so the
-      // usable range there is (0, 1] and everything at or below 0 is refused.
+      /**
+       * ArduCopter, ArduSub and PX4 read the thrust axis as 0..1000 with
+       * neutral **500**, not −1000..1000 with neutral 0 like the other three
+       * (source-read: ArduCopter discards the whole frame when z < 0 and takes
+       * 0 as minimum throttle; ArduSub's 0 is full reverse thrust; PX4 maps
+       * 0..1000 to −1..+1). The ±1000 scaling is the dialect's own
+       * declaration for all four axes, so the runtime applies it uniformly and
+       * this is the layer that knows the vehicle.
+       *
+       * The −1..1 surface lies there: 0 is exactly what an operator types for
+       * "neutral" and exactly what lands on minimum or reverse thrust — hence
+       * `n <= 0`. The usable range is (0, 1], with 0.5 as the neutral.
+       */
       if (axis !== 'z' || n > 0) return true;
-      if (!isArduSubProfile(this)) return true;
-      return 'ArduSub reads the thrust axis as 0..1000 with neutral 0.5, not −1..1 with '
-        + 'neutral 0 — a negative value has no wire representation there, and 0 is '
-        + 'full reverse thrust rather than a stop. Use 0.5 for the neutral you mean by 0';
+      if (!isHalfNeutralThrust(this)) return true;
+      return 'this vehicle reads the thrust axis as 0..1 with neutral 0.5, not −1..1 with '
+        + 'neutral 0 — ArduCopter discards the whole frame below 0, and 0 is minimum '
+        + 'throttle (full reverse on a Sub). Use 0.5 for the neutral you mean by 0';
     };
   }
 
   /**
-   * Whether the bound profile is an ArduPilot Sub — the one family whose
-   * `MANUAL_CONTROL` z axis does not match the dialect's declared range.
+   * Whether the bound profile reads `MANUAL_CONTROL` z as 0..1000 neutral 500:
+   * ArduPilot Copter and Sub, and PX4 (one receiver, no vehicle branch).
    *
    * @param {object} owner  the node being validated
    * @returns {boolean}
    */
-  function isArduSubProfile(owner) {
+  function isHalfNeutralThrust(owner) {
+    if (RED.mavlink.resolveCatalogTarget({ source: owner }).firmware === 'px4') return true;
     const gate = moveFamilyGate(owner);
-    return gate.gated && gate.family === 'sub';
+    return gate.gated && (gate.family === 'copter' || gate.family === 'sub');
   }
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
@@ -1387,7 +1382,7 @@
   <p><b>Turn</b> sends <code>MAV_CMD_CONDITION_YAW</code> — and on ArduPilot it is the <i>only</i> working yaw. Both of the yaw fields the position carriers already carry are measured inert on ArduCopter: <code>DO_REPOSITION</code>'s heading param is ignored outright, and a yaw-only setpoint stream holds heading instead of turning. ArduPilot's own test suite yaws in guided through this command. <b>Heading</b> is 0-360 degrees, absolute (0 = north) unless <b>Relative</b> (Advanced) is ticked, which makes it an offset from the current heading (never re-sent on ack silence, see Send &amp; confirm); the range is enforced here because the vehicle answers <code>FAILED</code> outside it. <b>Direction</b> defaults to the shortest way round, which is the dialect's own meaning for 0. Blank <b>Turn rate</b> (Advanced) leaves the vehicle's default. PX4 has no handler for this command, so the action refuses on a PX4 profile and points you at Steer's yaw field, which PX4 does honour.</p>
   <p><b>Speed</b> sends <code>MAV_CMD_DO_CHANGE_SPEED</code>, the guided speed change QGroundControl offers beside goto. <b>Speed type</b> picks which speed is being set — ground speed means something on every vehicle, airspeed is a fixed-wing concept, and climb/descent set the vertical rates. Blank <b>Speed</b> or <b>Throttle</b> (Advanced) sends the spec's -1 &ldquo;no change&rdquo;; -2 is the spec's &ldquo;return to default&rdquo; and you reach it by typing it. Both stacks and every moving vehicle family accept this command, so it asks no firmware question.</p>
   <p><b>Attitude</b> sends <code>SET_ATTITUDE_TARGET</code> — MAVSDK's offboard attitude path. You enter <b>Roll</b>, <b>Pitch</b> and <b>Yaw</b> in degrees and the node builds the quaternion the wire wants; you never type <code>q[4]</code>. Presence drives the mask exactly as it does on Steer: any angle commands the whole attitude (the wire has one ignore bit for all three), each body rate clears only its own bit, and <b>Thrust</b> is normalised 0..1 where an explicit 0 is a commanded zero rather than a blank. On <b>Stream</b> delivery the stream ends by <i>going quiet</i> — there is no braking packet, because zero thrust is a descent rather than a stop, and both stacks watch for setpoint silence themselves.</p>
-  <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and one of the two ways an Antenna Tracker can be pointed. It is <i>not</i> how a Blimp moves — ArduPilot's Blimp never overrides the stick handler, whose base implementation is empty, so it decodes the message, counts it as a ground-station heartbeat, and discards it. Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>all four sticks are required</b>: a blank is refused rather than centred or sent as "axis invalid", because a blank box in a saved flow is a field nobody filled, not a pilot's hand off the stick. Enter the value that means "not moving" on each axis — 0 for pitch, roll and yaw; on an ArduSub thrust axis that is <b>0.5</b>, since Sub reads it as 0..1000 with neutral <i>500</i> and a 0 there is full reverse thrust (the dialog reds exactly that). <b>Buttons</b> are ticked, not typed: the wire field is a bitmask whose lowest bit is Button 1 (bit 0, per the dialect), composed for you — what each button <i>does</i> is the vehicle's own configuration (ArduSub's <code>BTNn_FUNCTION</code> parameters), which is why the boxes carry numbers and not names. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
+  <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and one of the two ways an Antenna Tracker can be pointed. It is <i>not</i> how a Blimp moves — ArduPilot's Blimp never overrides the stick handler, whose base implementation is empty, so it decodes the message, counts it as a ground-station heartbeat, and discards it. Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>all four sticks are required</b>: a blank is refused rather than centred or sent as "axis invalid", because a blank box in a saved flow is a field nobody filled, not a pilot's hand off the stick. Enter the value that means "not moving" on each axis — 0 for pitch, roll and yaw; on the thrust axis of an ArduCopter, ArduSub or PX4 vehicle that is <b>0.5</b>, since they read it as 0..1000 with neutral <i>500</i> — ArduCopter discards the whole frame below 0 and takes 0 as minimum throttle, a Sub's 0 is full reverse thrust, and PX4's 0 is minimum throttle (the dialog reds 0 and below there). <b>Buttons</b> are ticked, not typed: the wire field is a bitmask whose lowest bit is Button 1 (bit 0, per the dialect), composed for you — what each button <i>does</i> is the vehicle's own configuration (ArduSub's <code>BTNn_FUNCTION</code> parameters), which is why the boxes carry numbers and not names. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
   <p>Action and delivery reshape the form: only the parameters for the selection are shown, and the Delivery options themselves follow the action — setpoints cannot confirm, so Send &amp; confirm is offered on the acked actions — Go to, Turn and Speed — only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only). Output 1 carries the status record for every outcome.</p>
   <p>On <b>Stream</b> delivery a running stream ends three ways. When the <b>TTL</b> elapses the node sends the zero-velocity brake and reports on output 1 with <code>result: "expired"</code> and <code>sent</code> (setpoints handed to the connection — the streaming link may coalesce under backpressure, so this counts sends, not wire deliveries) — switch on <code>result === "expired"</code> to run whatever follows a timed move; deliberately not on output 0, since that port is a trigger and the stream's start already fired it. If the expiry brake send itself fails, <code>result</code> stays <code>"expired"</code> and the failure rides a <code>brakeError</code> field. An input of <code>{action: "stop"}</code> halts the stream, sends the brake, and completes like any input — output 0 fires once, and the status record carries <code>result: "stopped"</code> with <code>sent</code>; a stop with nothing streaming completes with <code>detail: "no stream"</code>, and the action is refused on Build and Send delivery. A <b>new input</b> replaces the stream as a direct handover — no brake between consecutive targets, matching GCS practice; retargeting a different vehicle brakes the abandoned target once the new stream is live. A redeploy closes the node and brakes. A stream that keeps running through send failures reports once per failure streak on output 1 and never quits on its own — the firmware's setpoint watchdog is the failsafe on a dead link.</p>
