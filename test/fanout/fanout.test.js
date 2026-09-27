@@ -775,26 +775,28 @@ test('an east offset scales through cos(lat), not the latitude divisor', async (
     `10 m east at 47° is ~1318 degE7 (898 / cos 47°), got ${dLon}`);
 });
 
-test('offsets patch no coordinate on a frame whose metre scale is not measured', async () => {
-  // Local-frame INT x/y are metres ×1e4 (§14-measured), so the degE7 path
-  // would turn a commanded 10 m into ~9 cm; a body frame re-aims "north"
-  // along the vehicle's own heading. Neither frame matches the offset
-  // surface, so no coordinate patch is produced — the message goes out as
-  // built, and the raw patch surface is how a flow reaches those frames.
-  const intConn = connectionStub([peer(1)]);
+test('a member whose offsets have no metre reading in the frame is reported failed, not sent (R20)', async () => {
+  // Local-frame INT x/y are metres ×1e4 (§14-measured), and a body frame
+  // re-aims "north" along the vehicle's own heading. Sending the unoffset
+  // point would converge the fleet under a `succeeded` run, so the member is
+  // recorded failed with the reason; bare rows still go out.
+  const intConn = connectionStub([peer(1), peer(2)]);
   const intResult = await executeFanout({ signal, selection: { mode: 'all' },
     connection: intConn,
     message: {
       name: 'COMMAND_INT',
       fields: { target_system: 0, target_component: 0, command: 192, frame: 1, x: 50000, y: 0, z: 30 },
     },
-    members: [{ sysid: 1, north: 10 }],
+    members: [{ sysid: 1, north: 10 }, { sysid: 2 }],
     mode: 'sequential',
     delivery: 'send',
     intervalMs: 0,
   });
-  assert.equal(intResult.result, 'succeeded');
-  assert.equal(intConn.sends[0].message.fields.x, 50000, 'x is untouched, never degE7-scaled');
+  assert.equal(intResult.result, 'failed');
+  assert.equal(intResult.members[0].result, 'failed');
+  assert.match(intResult.members[0].detail, /no reading in MAV_FRAME 1 on COMMAND_INT/);
+  assert.equal(intResult.members[1].result, 'sent', 'a bare row is unaffected');
+  assert.deepEqual(intConn.sends.map((s) => s.message.fields.target_system), [2], 'the offset member is never sent');
 
   const localConn = connectionStub([peer(1)]);
   const localResult = await executeFanout({ signal, selection: { mode: 'all' },
@@ -809,8 +811,38 @@ test('offsets patch no coordinate on a frame whose metre scale is not measured',
     delivery: 'send',
     intervalMs: 0,
   });
-  assert.equal(localResult.result, 'succeeded');
-  assert.equal(localConn.sends[0].message.fields.x, 0, 'the body-axis x is left alone');
+  assert.equal(localResult.members[0].result, 'failed');
+  assert.match(localResult.members[0].detail, /MAV_FRAME 9 on SET_POSITION_TARGET_LOCAL_NED/);
+  assert.equal(localConn.sends.length, 0);
+
+  // Build reports the same: the product would carry the unoffset point.
+  const buildResult = await executeFanout({ signal, selection: { mode: 'all' },
+    connection: connectionStub([peer(1)]),
+    message: {
+      name: 'COMMAND_INT',
+      fields: { target_system: 0, target_component: 0, command: 192, frame: 1, x: 50000, y: 0, z: 30 },
+    },
+    members: [{ sysid: 1, up: 5 }],
+    mode: 'sequential',
+    delivery: 'build',
+    intervalMs: 0,
+  });
+  assert.equal(buildResult.success, false);
+  assert.equal(buildResult.members[0].result, 'failed');
+});
+
+test('member metre offsets on LOCAL_OFFSET_NED apply as NED metres too', async () => {
+  const connection = connectionStub([peer(1)]);
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtSetpoint({ fields: { coordinate_frame: 7, z: -10 } }),
+    members: [{ sysid: 1, north: 3, up: 5 }],
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(result.success, true);
+  assert.equal(connection.sends[0].message.fields.x, 3);
+  assert.equal(connection.sends[0].message.fields.z, -15);
 });
 
 test('member metre offsets on SET_POSITION_TARGET_LOCAL_NED apply directly with up = -z', async () => {
