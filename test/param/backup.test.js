@@ -139,23 +139,43 @@ test('backup retries the full list with the same collector and reports received 
   assert.match(outcome.reason, /list/);
 });
 
-test('repeated duplicate backup frames do not reset the incomplete-list timeout', async () => {
+test('a frame lost late in a vehicle-paced stream is recovered by the retry\'s re-stream (R14)', async () => {
+  // verify/ap.md R14: ArduPilot paces PARAM_VALUE at about 45/s on a 57600
+  // radio, and a repeated PARAM_REQUEST_LIST restarts its stream at index 0,
+  // discarding what it had not yet sent. One frame (900 of 1369) is lost on
+  // the first pass. The retry's re-stream only reaches index 900 twenty
+  // seconds later, so the step timer has to stay armed while frames the
+  // backup already holds are still arriving.
   const stub = new StubConnection();
   const clock = new FakeTimers();
+  const COUNT = 1369;
+  const PERIOD_MS = 22;
+  let pass = 0;
+  let pending = null;
   stub.onSend((message, deliver) => {
     if (message.name !== 'PARAM_REQUEST_LIST') return;
-    const frame = valueFrame({ index: 0, count: 2, paramId: 'A', paramType: 6, value: paramValueToWire(1, 6) });
-    deliver(frame);
-    for (const at of [5, 10, 15, 20]) clock.setTimeout(() => deliver(frame), at);
+    pass += 1;
+    if (pending !== null) clock.clearTimeout(pending);
+    const thisPass = pass;
+    const emit = (index) => {
+      pending = null;
+      if (index >= COUNT) return;
+      if (!(thisPass === 1 && index === 900)) {
+        deliver(valueFrame({ index, count: COUNT, paramId: `P${index}`, paramType: 6, value: paramValueToWire(index, 6) }));
+      }
+      pending = clock.setTimeout(() => emit(index + 1), PERIOD_MS);
+    };
+    pending = clock.setTimeout(() => emit(0), PERIOD_MS);
   });
 
-  const done = new ParamBackup(machineOptions(stub, clock, { maxRetries: 0 })).start();
-  clock.flush();
+  const done = new ParamBackup(machineOptions(stub, clock, { timeoutMs: 10000, maxRetries: 3 })).start();
+  clock.flush(10000);
   const outcome = await done;
 
-  assert.equal(outcome.result, 'failed');
-  assert.equal(outcome.elapsed, 10, 'duplicates do not extend the configured wait');
-  assert.equal(outcome.received, 1);
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.count, COUNT);
+  assert.equal(stub.sentNames().filter((name) => name === 'PARAM_REQUEST_LIST').length, 2,
+    'one retry: its re-stream carried the lost index');
 });
 
 test('backup ignores wrong source and completes only from the addressed vehicle', async () => {
