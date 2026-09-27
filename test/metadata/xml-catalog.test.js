@@ -75,17 +75,21 @@ function tmpBase() {
 
 /* ---------- helpers ---------- */
 
-test('an update follows real <include>s and ignores commented-out ones', async () => {
+test('an update fetches exactly the listing: downloaded <include> text names nothing to fetch or write', async () => {
   const src = stubSource({
     'root.xml': XML(
-      '<!-- <include>ignored.xml</include> --><include> common.xml </include>' +
+      '<include>../../../escaped.xml</include><include>unlisted.xml</include>' +
         '<messages><message id="9000" name="EXTRA_MSG"><field type="uint8_t" name="a">a</field></message></messages>'
     ),
-    'common.xml': MINIMAL,
+    '../../../escaped.xml': MINIMAL,
+    'unlisted.xml': MINIMAL,
   }, ['root.xml']);
-  await catalogFor(src).update();
-  assert.deepEqual(src.requested.map((r) => r.file), ['root.xml', 'common.xml'],
-    'the real include was fetched, the commented one never asked for');
+  const catalog = catalogFor(src);
+  const manifest = await catalog.update();
+  assert.deepEqual(src.requested.map((r) => r.file), ['root.xml'], 'only the listed file was fetched');
+  assert.deepEqual(manifest.files.map((f) => f.name), ['root.xml']);
+  assert.deepEqual(fs.readdirSync(path.join(catalog.snapshotsDir(), manifest.snapshotId)), ['root.xml']);
+  assert.equal(fs.existsSync(path.join(catalog.baseDir, 'escaped.xml')), false, 'nothing written outside the snapshot');
 });
 
 /* ---------- compileXmlFromFile ---------- */
@@ -142,9 +146,9 @@ test('update pins a commit, writes a snapshot and its manifest, and lists it', a
   assert.equal(list[0].snapshotId, manifest.snapshotId);
 });
 
-test('an include that cannot be downloaded fails the update; nothing is written', async () => {
+test('a listed file that cannot be downloaded fails the update; nothing is written', async () => {
   const withInclude = XML('<include>common.xml</include><messages><message id="1" name="ONLY"><field type="uint8_t" name="a">a</field></message></messages>');
-  const src = stubSource({ 'ardupilotmega.xml': withInclude }); // common.xml absent → 404
+  const src = stubSource({ 'ardupilotmega.xml': withInclude }, ['ardupilotmega.xml', 'common.xml']); // common.xml → 404
   const catalog = catalogFor(src);
 
   await assert.rejects(() => catalog.update(), /404 common\.xml/);
