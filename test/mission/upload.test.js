@@ -11,7 +11,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { MissionUpload } = require('../../lib/mission/upload');
-const { MISSION_TYPE, MAV_MISSION_RESULT } = require('../../lib/mission/types');
+const { missionTypeValue, MAV_MISSION_RESULT } = require('../../lib/mission/types');
 const { StubConnection } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
@@ -33,7 +33,7 @@ function uploadOpts(stub, items, extra) {
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items,
     ...extra,
   };
@@ -245,7 +245,7 @@ test('cancelling a mid-flight upload sends MISSION_ACK OPERATION_CANCELLED befor
   assert.equal(acks[0].message.fields.type, MAV_MISSION_RESULT.OPERATION_CANCELLED);
   assert.equal(acks[0].message.fields.target_system, TARGET.sysid);
   assert.equal(acks[0].message.fields.target_component, TARGET.compid);
-  assert.equal(acks[0].message.fields.mission_type, MISSION_TYPE.MISSION);
+  assert.equal(acks[0].message.fields.mission_type, missionTypeValue('mission'));
   assert.equal(stub.subscriberCount(), 0, 'cancel still tears the subscription down');
 });
 

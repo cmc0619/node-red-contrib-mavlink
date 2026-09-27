@@ -7,7 +7,6 @@ const {
   ParamBackup,
   ParamRestore,
   locks,
-  OPERATION,
 } = require('../../lib/param/backup');
 const { paramValueToWire } = require('../../lib/codec/param-union');
 const { createWire } = require('../../lib/connection/wire');
@@ -87,8 +86,7 @@ function serializeSetAndEcho(wire, message) {
   return { sent, echoed };
 }
 
-test('parameter backup exports operations and a per-target lock registry', () => {
-  assert.deepEqual(OPERATION, { BACKUP: 'backup', RESTORE: 'restore' });
+test('parameter backup exports a per-target lock registry', () => {
   const release = locks.acquire('conn', TARGET);
   assert.notEqual(release, null);
   assert.equal(locks.acquire('conn', TARGET), null);

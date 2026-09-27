@@ -12,7 +12,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { MissionDownload } = require('../../lib/mission/download');
-const { MISSION_TYPE, MAV_MISSION_RESULT } = require('../../lib/mission/types');
+const { missionTypeValue, MAV_MISSION_RESULT } = require('../../lib/mission/types');
 const { buildItemInt } = require('../../lib/mission/items');
 const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
@@ -24,7 +24,7 @@ function machineOpts(stub, extra) {
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     ...extra,
   };
 }
@@ -82,14 +82,14 @@ test('download ignores replies whose mission_type mismatches', async () => {
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_REQUEST_LIST') {
       // A fence-typed count for a mission download is a mismatch, not a mission.
-      deliver({ name: 'MISSION_COUNT', fields: { count: 5, mission_type: MISSION_TYPE.FENCE } });
+      deliver({ name: 'MISSION_COUNT', fields: { count: 5, mission_type: missionTypeValue('fence') } });
       // The correct mission-typed count follows.
-      deliver({ name: 'MISSION_COUNT', fields: { count: 1, mission_type: MISSION_TYPE.MISSION } });
+      deliver({ name: 'MISSION_COUNT', fields: { count: 1, mission_type: missionTypeValue('mission') } });
     } else if (message.name === 'MISSION_REQUEST_INT') {
       requestedItems += 1;
       // A mismatched item is ignored; the matching one completes the download.
-      deliver({ name: 'MISSION_ITEM_INT', fields: { seq: 0, command: 16, mission_type: MISSION_TYPE.FENCE } });
-      deliver({ name: 'MISSION_ITEM_INT', fields: { seq: 0, command: 16, mission_type: MISSION_TYPE.MISSION } });
+      deliver({ name: 'MISSION_ITEM_INT', fields: { seq: 0, command: 16, mission_type: missionTypeValue('fence') } });
+      deliver({ name: 'MISSION_ITEM_INT', fields: { seq: 0, command: 16, mission_type: missionTypeValue('mission') } });
     }
   });
 
@@ -343,7 +343,7 @@ test('cancelling a mid-flight download sends MISSION_ACK OPERATION_CANCELLED bef
   assert.equal(acks[0].message.fields.type, MAV_MISSION_RESULT.OPERATION_CANCELLED);
   assert.equal(acks[0].message.fields.target_system, TARGET.sysid);
   assert.equal(acks[0].message.fields.target_component, TARGET.compid);
-  assert.equal(acks[0].message.fields.mission_type, MISSION_TYPE.MISSION);
+  assert.equal(acks[0].message.fields.mission_type, missionTypeValue('mission'));
   assert.equal(stub.subscriberCount(), 0, 'cancel still tears the subscription down');
 });
 

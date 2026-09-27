@@ -21,7 +21,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { MissionDownload } = require('../../lib/mission/download');
-const { MISSION_TYPE } = require('../../lib/mission/types');
+const { missionTypeValue } = require('../../lib/mission/types');
 const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
@@ -33,7 +33,7 @@ function downloadOver(stub, clock) {
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     maxRetries: 3,
     timeoutMs: 1000,
     ...fakeDeps(clock),

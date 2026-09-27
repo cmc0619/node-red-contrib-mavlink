@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 
 const { MissionDownload } = require('../../lib/mission/download');
 const { MissionUpload } = require('../../lib/mission/upload');
-const { MISSION_TYPE } = require('../../lib/mission/types');
+const { missionTypeValue } = require('../../lib/mission/types');
 const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
@@ -36,7 +36,7 @@ test('download retries a stalled item to the ceiling then aborts naming the sequ
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     maxRetries: 3,
     timeoutMs: 1000,
     ...fakeDeps(clock),
@@ -68,7 +68,7 @@ test('upload retries a stalled count then aborts', async () => {
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
     maxRetries: 2,
     timeoutMs: 500,
@@ -112,7 +112,7 @@ test('a livelocked upload — same-seq re-requests forever — terminates at the
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
     maxRetries: 2,
     timeoutMs: 1000,
@@ -157,7 +157,7 @@ test('a livelocked upload — alternating re-requests of two answered items — 
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items: [
       { frame: 3, command: 16, x: 1, y: 2, z: 3 },
       { frame: 3, command: 16, x: 4, y: 5, z: 6 },
@@ -206,7 +206,7 @@ test('an upload advancing distinct items past the deadline is not aborted (#249)
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items,
     maxRetries: 1,
     timeoutMs: 25000,
@@ -238,7 +238,7 @@ test('the deadline is the configured step budget, so it never cuts a retry short
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
     maxRetries: 5,
     timeoutMs: 20000,

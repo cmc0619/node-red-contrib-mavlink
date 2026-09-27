@@ -5,7 +5,10 @@ const assert = require('node:assert/strict');
 
 const { buildRequestList, buildRequestData, buildRequestEnd } = require('../../lib/log/items');
 const { LogList } = require('../../lib/log/list');
-const { LogDownload, LOG_REQUEST_BYTES } = require('../../lib/log/download');
+const { LogDownload } = require('../../lib/log/download');
+
+/** One window: 128 LOG_DATA packets of 90 bytes. */
+const LOG_REQUEST_BYTES = 90 * 128;
 const { StubConnection, FakeTimers, fakeDeps } = require('../mission/stubs/connection');
 
 const TARGET = { sysid: 42, compid: 1 };
