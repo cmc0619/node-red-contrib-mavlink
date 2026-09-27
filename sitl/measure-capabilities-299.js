@@ -28,6 +28,7 @@ const PASSIVE_MS = Number(process.env.CAP299_PASSIVE_MS || 15000);
 const REQUEST_TIMEOUT_MS = Number(process.env.CAP299_REQUEST_MS || 10000);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const discard = () => { /** The probe records what it measures itself; Connection log lines are dropped. */ };
 
 function prepPx4LabParams(container = 'nrc-px4-11') {
   const script = [
@@ -93,7 +94,7 @@ function makeConn({ bindPort, remotePort, sysid, firmware, autopilot }) {
       },
       heartbeat: { staleMs: 5000, expireMs: 15000 },
     },
-    { logger: { info() {}, warn() {}, error() {} } }
+    { logger: { info: discard, warn: discard, error: discard } }
   );
 }
 
