@@ -45,6 +45,20 @@ const ROW_IDS = [
   'row-move-ttl',
 ];
 
+/**
+ * The tiers the delivery validator accepts for an action — the executable
+ * reading of the module-scope DELIVERY_OPTIONS the dropdown is built from.
+ *
+ * @param {string} action
+ * @returns {string[]}
+ */
+function tiersOf(action) {
+  const { delivery } = loadNodeDefaults('mavlink-move');
+  return ['build', 'send', 'confirm', 'stream'].filter((tier) => delivery.validate.call(
+    { id: 'm1', action, reference: 'world' }, tier, {}
+  ) === true);
+}
+
 test('mavlink-move editor reshapes fields by action and delivery (§6)', () => {
   assert.match(html, /function refreshVisibility/, 'action/delivery drive row visibility');
   assert.match(
@@ -103,8 +117,8 @@ test('mavlink-move editor reshapes fields by action and delivery (§6)', () => {
   // Every acked action can wait for its ack, not just goto.
   assert.match(
     html,
-    /timeoutMs:\s*\(state\.isGoto \|\| state\.isTurn \|\| state\.isSpeed\) && state\.delivery === 'confirm'/,
-    'ACK timeout on the confirm tier of every acked action'
+    /timeoutMs:\s*state\.delivery === 'confirm'/,
+    'ACK timeout on the confirm tier, which the delivery ring allows on the acked actions only'
   );
   assert.match(html, /delivery === 'stream'/, 'stream rate and TTL gated on delivery');
 });
@@ -165,19 +179,9 @@ test('mavlink-move Action surface: goto default, both actions offered, retired f
 
 test('mavlink-move delivery options are rebuilt per action — confirm is goto-only (§9)', () => {
   assert.match(html, /function refreshDeliveryOptions/, 'the delivery select is rebuilt, not just toggled');
-  const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
-  assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
-  const steer = /steer:\s*\[[\s\S]*?\n {8}\]/.exec(map[0]);
-  assert.ok(steer, 'steer option list must be extractable');
-  assert.doesNotMatch(steer[0], /confirm/, 'steer setpoints carry no ack — confirm is never offered');
-  const goto = /goto:\s*\[[\s\S]*?\n {8}\]/.exec(map[0]);
-  assert.ok(goto, 'goto option list must be extractable');
-  for (const tier of ['build', 'send', 'confirm', 'stream']) {
-    assert.match(goto[0], new RegExp(`'${tier}'`), `goto offers ${tier}`);
-  }
-  for (const tier of ['build', 'send', 'stream']) {
-    assert.match(steer[0], new RegExp(`'${tier}'`), `steer offers ${tier}`);
-  }
+  assert.deepEqual(tiersOf('steer'), ['build', 'send', 'stream'], 'steer setpoints carry no ack');
+  assert.deepEqual(tiersOf('goto'), ['build', 'send', 'confirm', 'stream']);
+  assert.match(html, /options: DELIVERY_OPTIONS\[action\]/, 'the dropdown reads the same table');
   // The keep-live-then-saved rule and the Send fallback moved into the shared
   // `refreshOptionSelect` (#304 §4), which is proven executably in
   // mavlink-editor-resource.test.js. What this file still owns is that Move
@@ -395,6 +399,10 @@ test('mavlink-move Advanced section: toggle link, hidden div, the right rows ins
       `${id} must live inside the Advanced div`
     );
   }
+  // The ack pair always has a value (ackDefaults), so it opens the section
+  // only off its defaults — a blank test on it opened every dialog (R69).
+  assert.doesNotMatch(html, /!RED\.mavlink\.isBlank\(node\.timeoutMs\)/);
+  assert.match(html, /String\(node\.timeoutMs\) !== '2000' \|\| String\(node\.maxRetries\) !== '3'/);
 });
 
 test('mavlink-move Change mode is an opt-in checkbox, defaulting off', () => {
@@ -436,7 +444,7 @@ test('mavlink-move goto params: blank-sentinel fields and the positive ACK timeo
   assert.equal(retryVerdict(255), true, 'the confirmation-byte ceiling');
   assert.match(String(retryVerdict(256)), /between 0 and 255/, 'past the byte reds');
   assert.match(String(retryVerdict(1.5)), /whole number/, 'the floor check still speaks first');
-  for (const hidden of [{ id: 'm1', action: 'goto', delivery: 'build' }, { id: 'm1', action: 'steer', delivery: 'confirm' }]) {
+  for (const hidden of [{ id: 'm1', action: 'goto', delivery: 'build' }, { id: 'm1', action: 'turn', delivery: 'send' }]) {
     assert.equal(defaults.timeoutMs.validate.call(hidden, '', {}), true, `a hidden row never reds (${JSON.stringify(hidden)})`);
     assert.equal(defaults.maxRetries.validate.call(hidden, '', {}), true);
   }
@@ -1006,16 +1014,9 @@ test('mavlink-move: Offset cannot be set to the stream tier', () => {
 test('mavlink-move: Turn and Speed are offered, with the command tiers only', () => {
   assert.match(html, /\['turn', '/, 'turn action offered');
   assert.match(html, /\['speed', '/, 'speed action offered');
-  const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
-  assert.ok(map, 'DELIVERY_OPTIONS map must be extractable');
   for (const action of ['turn', 'speed']) {
-    const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
-    assert.ok(list, `${action} option list must be extractable`);
     // A MAV_CMD has no streaming semantics; it does have an ack.
-    assert.doesNotMatch(list[0], /stream/, `${action} never offers Stream`);
-    for (const tier of ['build', 'send', 'confirm']) {
-      assert.match(list[0], new RegExp(`'${tier}'`), `${action} offers ${tier}`);
-    }
+    assert.deepEqual(tiersOf(action), ['build', 'send', 'confirm'], action);
   }
   for (const id of ['row-move-heading', 'row-move-turnRate', 'row-move-direction',
     'row-move-relative', 'row-move-throttle', 'row-move-speedType']) {
@@ -1108,14 +1109,8 @@ test('mavlink-move: a command action cannot be set to the stream tier', () => {
 test('mavlink-move: Attitude and Manual are offered with the setpoint tiers', () => {
   assert.match(html, /\['attitude', '/, 'attitude offered');
   assert.match(html, /\['manual', '/, 'manual offered');
-  const map = /const DELIVERY_OPTIONS = \{[\s\S]*?\n {6}\};/.exec(html);
   for (const action of ['attitude', 'manual']) {
-    const list = new RegExp(`${action}:\\s*\\[[\\s\\S]*?\\n {8}\\]`).exec(map[0]);
-    assert.ok(list, `${action} option list must be extractable`);
-    assert.doesNotMatch(list[0], /confirm/, `${action} carries no ack, so never offers confirm`);
-    for (const tier of ['build', 'send', 'stream']) {
-      assert.match(list[0], new RegExp(`'${tier}'`), `${action} offers ${tier}`);
-    }
+    assert.deepEqual(tiersOf(action), ['build', 'send', 'stream'], `${action} carries no ack`);
   }
 });
 
@@ -1187,7 +1182,6 @@ test('mavlink-move: every `show` key actually reaches a toggle', () => {
   // either toggled from it, or named in the helper-managed allowlist below.
   // Adding a key without a toggle now fails here instead of silently leaving a
   // row on screen.
-  const HELPER_MANAGED = new Set(['targetSystem', 'targetComponent']);
 
   const block = /function moveRowVisibility\(state\) \{\n {8}return \{([\s\S]*?)\n {8}\};/.exec(html);
   assert.ok(block, 'the row-visibility map must be extractable');
@@ -1203,35 +1197,15 @@ test('mavlink-move: every `show` key actually reaches a toggle', () => {
     /Object\.keys\(show\)\.forEach\(\(key\) => \{[\s\S]{0,220}?\$\(`#row-move-\$\{key\}`\)\.toggle\(Boolean\(show\[key\]\)\);/,
     'every key of the map is toggled by construction'
   );
-  assert.match(
-    html,
-    /if \(HELPER_ROWS\.indexOf\(key\) !== -1\) return;/,
-    'and the helper-owned rows are the only ones the loop skips'
-  );
   for (const key of keys) {
-    if (HELPER_MANAGED.has(key)) continue;
     assert.match(
       html,
       new RegExp(`id="row-move-${key}"`),
       `show.${key} must name a row that exists, or the loop toggles nothing`
     );
   }
-  // The allowlist in the source must agree with the one asserted here.
-  assert.match(
-    html,
-    /const HELPER_ROWS = \['targetSystem', 'targetComponent'\];/,
-    'the skip list is exactly the rows the companion helper owns'
-  );
-
-  // And the allowlist is not a place to hide things: both members must be
-  // handed to the helper that does own them.
-  for (const managed of HELPER_MANAGED) {
-    assert.match(
-      html,
-      new RegExp(`${managed}Row: '#row-move-${managed}'`),
-      `${managed} is allowlisted, so it must be passed to applyCompanionTargetVisibility`
-    );
-  }
+  // The target rows stay out of the map: applyCompanionTargetVisibility owns them.
+  assert.ok(!keys.includes('targetSystem') && !keys.includes('targetComponent'));
 });
 
 

@@ -310,52 +310,63 @@
     return gate.gated && (gate.family === 'copter' || gate.family === 'sub');
   }
 
+  /**
+   * Delivery tiers per action (§9: tiers are computed, not fixed). The acked
+   * MAV_CMD actions (Turn, Speed) confirm via COMMAND_ACK and have no
+   * streaming semantics; setpoints and sticks carry no ack and stream. Go to
+   * rides DO_REPOSITION on the command tiers and a global setpoint on Stream,
+   * so it has both. One table: the dropdown and the delivery validator read it.
+   */
+  const COMMAND_TIERS = [['build', 'Build'], ['send', 'Send'], ['confirm', 'Send & confirm']];
+  const SETPOINT_TIERS = [['build', 'Build'], ['send', 'Send'], ['stream', 'Stream']];
+  const DELIVERY_OPTIONS = {
+    goto: COMMAND_TIERS.concat([['stream', 'Stream']]),
+    steer: SETPOINT_TIERS,
+    turn: COMMAND_TIERS,
+    speed: COMMAND_TIERS,
+    attitude: SETPOINT_TIERS,
+    manual: SETPOINT_TIERS,
+  };
+
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Move's mode field is `delivery` and it has no firmware selector.
   const moveDefaults = {
     name: { value: '' },
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator() },
       // The dialog only ever offers the tiers DELIVERY_OPTIONS lists for the
-      // chosen action, so a Steer node cannot be *set* to confirm through the
-      // UI. A hand-edited flow can hold one, and the runtime does not refuse
-      // it (AGENTS.md, input trust) — it falls through to the Send branch and
-      // reports `sent`, which is true of the wire and misleading about the
-      // tier. The editor knows both fields at deploy, so it says so here.
+      // chosen action, but a hand-edited flow can hold any pair. The runtime
+      // does not refuse one (AGENTS.md, input trust): a tier the action has no
+      // case for selects no behaviour and the input finishes with nothing sent
+      // and nothing reported. Both fields are known at deploy, so the editor
+      // says so here.
       delivery: {
         value: 'build',
         validate: RED.mavlink.oneOf(['build', 'send', 'confirm', 'stream'], function (v, _opt) {
           const action = RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer');
-          // Same class of finding as steer × confirm below, and caught the same
-          // way: the dialog never offers this pair (refreshDeliveryOptions
-          // withdraws the tier for Offset), but a hand-edited flow can hold it
-          // and the runtime would stream it happily. Every tick of an offset
-          // setpoint is resolved against the vehicle's position at that moment,
-          // so repeating one does not hold a target — it walks the vehicle
-          // away until the TTL. Both fields are known at deploy, so the editor
-          // says so rather than letting it fly.
+          const tiers = DELIVERY_OPTIONS[action] || [];
+          if (!tiers.some((tier) => tier[0] === v)) {
+            // A MAV_CMD has no streaming semantics; setpoints and sticks carry
+            // no COMMAND_ACK, so a confirm tier has nothing to wait for.
+            return v === 'stream'
+              ? `a command cannot stream — ${action} rides an acknowledged MAV_CMD, which is sent `
+                + 'once and answered. Use Send, or Send & confirm to wait for the acknowledgement'
+              : 'this action cannot confirm — setpoints and sticks carry no COMMAND_ACK, so '
+                + 'there is nothing to wait for. Use Send, or switch to Go to, Turn or Speed';
+          }
+          // Offset: the dialog withdraws Stream (refreshDeliveryOptions). Every
+          // tick of an offset setpoint is resolved against the vehicle's
+          // position at that moment, so repeating one does not hold a target —
+          // it walks the vehicle away until the TTL.
           if (v === 'stream' && action === 'steer'
             && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
             return 'Offset cannot stream — each setpoint is resolved against the vehicle\'s '
               + 'position at that moment, so a repeating offset walks it away instead of holding '
               + 'a target. Use Send, or switch the reference to World';
           }
-          // Third of the same family, and found by the same lens: a MAV_CMD has
-          // no streaming semantics, so the dialog never offers Stream for Turn
-          // or Speed — but a hand-edited flow can hold it, and deliverCommand
-          // would fall through to the Send branch and report `sent`. True of
-          // the wire, a lie about the tier. Known at deploy, so said here.
-          if (v === 'stream' && (action === 'turn' || action === 'speed')) {
-            return `a command cannot stream — ${action} rides an acknowledged MAV_CMD, `
-              + `which is sent once and answered. Use Send, or Send & confirm to wait for `
-              + `the acknowledgement`;
-          }
-          // Same family as Offset above and found by its absence: the dropdown
-          // withholds Stream for Go to on a Blimp (no SET_POSITION_TARGET
-          // handler — streamed setpoints are discarded in silence, §14), but a
-          // node saved with the pair, or rebound to a blimp profile, deployed
-          // clean and reported `streaming` at a vehicle hearing nothing. Every
-          // other withheld option in this dialog reds on saved; this one now
-          // does too.
+          // A Blimp implements DO_REPOSITION but has no SET_POSITION_TARGET
+          // handler, so a streamed Go to is discarded in silence (§14). The
+          // dropdown withholds it; a node saved with the pair, or rebound to a
+          // blimp profile, reds here.
           if (v === 'stream' && action === 'goto') {
             const gate = moveFamilyGate(this);
             if (gate.gated && gate.family === 'blimp') {
@@ -364,16 +375,7 @@
                 + 'discarded. Use Send or Send & confirm';
             }
           }
-          // Fourth instance of the family, so it is stated generally rather than
-          // per action: only the acked actions have anything to wait for. Go
-          // to rides DO_REPOSITION, Turn CONDITION_YAW, Speed DO_CHANGE_SPEED
-          // — every one answers a COMMAND_ACK. Steer, Attitude and Manual are
-          // setpoints and sticks, which no vehicle acknowledges, so a confirm
-          // tier there would wait forever and the runtime reports `sent`.
-          if (v !== 'confirm') return true;
-          if (action === 'goto' || action === 'turn' || action === 'speed') return true;
-          return 'this action cannot confirm — setpoints and sticks carry no COMMAND_ACK, so '
-            + 'there is nothing to wait for. Use Send, or switch to Go to, Turn or Speed';
+          return true;
         }),
       },
       // Action × Delivery derives the wire (§6 redesign, 2026-08-12): the
@@ -659,14 +661,10 @@
       },
 
       // ACK timeout and Max retries exist only where a COMMAND_ACK is waited
-      // on: the command-path actions (Go to, Turn, Speed) on Send & confirm.
-      // The shared definition gates on that, so a value cleared there never
-      // reds a Build, Send or Stream node that cannot show the row.
-      ...RED.mavlink.ackDefaults((node) => {
-        const action = RED.mavlink.liveOr(node, '#node-input-action', node.action);
-        return ['goto', 'turn', 'speed'].indexOf(action) !== -1
-          && RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) === 'confirm';
-      }),
+      // on: Send & confirm, which the delivery ring allows on the acked actions
+      // only. A value cleared there never reds a Build, Send or Stream node
+      // that cannot show the row.
+      ...RED.mavlink.ackDefaults((node) => RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) === 'confirm'),
       // Broadcast (0) is refused only where an ack is actually awaited: the
       // Send & confirm tier, which the delivery rebuild offers on the acked
       // actions (Go to, Turn, Speed). Send/Stream/Build stay broadcast-legal,
@@ -782,10 +780,8 @@
       // view over the one hidden canonical field (see the row markup). The
       // view is set from the saved mask BEFORE the change handler binds: an
       // invalid saved mask (hand-edited flow) selects nothing, and composing
-      // that back would blank the value the validator is red-ringing. Composed
-      // on every operator change — all-off composes blank, so an untouched
-      // dialog round-trips byte-identical.
-      $('#node-input-buttons').val(RED.mavlink.isBlank(node.buttons) ? '' : node.buttons);
+      // that back would overwrite the value the validator is red-ringing.
+      // Composed on every operator change — all-off composes 0, the empty mask.
       const $buttonsPick = $('#move-buttons-pick');
       $buttonsPick.typedInput({ types: [{ value: 'buttons', multiple: true, options: BUTTON_OPTIONS }] });
       $buttonsPick.typedInput('value', buttonsToBits(node.buttons));
@@ -803,9 +799,11 @@
       });
       // A configured Advanced value must be visible on open: an invalid
       // timeout hiding behind a collapsed section leaves the operator staring
-      // at a red node with no visible cause. The acceleration triplet lives
-      // under the Steer group disclosure, which opens by the same rule.
-      if (!RED.mavlink.isBlank(node.timeoutMs) || !RED.mavlink.isBlank(node.radius)
+      // at a red node with no visible cause. The ack pair opens it only off
+      // its editor defaults (2000 / 3). The acceleration triplet lives under
+      // the Steer group disclosure, which opens by the same rule.
+      if (String(node.timeoutMs) !== '2000' || String(node.maxRetries) !== '3'
+        || !RED.mavlink.isBlank(node.targetComponent) || !RED.mavlink.isBlank(node.radius)
         || !RED.mavlink.isBlank(node.turnRate) || !RED.mavlink.isBlank(node.throttle)
         || !RED.mavlink.isBlank(node.rollRate) || !RED.mavlink.isBlank(node.pitchRate)
         || (node.action === 'manual' && String(node.buttons) !== '0')
@@ -814,49 +812,6 @@
         $('#move-advanced-toggle').text('▾ Advanced');
       }
 
-      // Delivery tiers follow the action (§9: tiers are computed, not fixed):
-      // the acked MAV_CMD actions (Go to, Turn, Speed) confirm via
-      // COMMAND_ACK; setpoints carry no ack and cannot. The options are
-      // rebuilt per action so the select never offers a tier the action makes
-      // illegal; the in-progress (then saved) value survives when still
-      // legal, and an illegal one falls back to Send — still a wire tier.
-      const DELIVERY_OPTIONS = {
-        goto: [
-          ['build', 'Build'],
-          ['send', 'Send'],
-          ['confirm', 'Send & confirm'],
-          ['stream', 'Stream']
-        ],
-        steer: [
-          ['build', 'Build'],
-          ['send', 'Send'],
-          ['stream', 'Stream']
-        ],
-        // Turn and Speed are acked MAV_CMDs. A command has no streaming
-        // semantics, so the tier is not offered; it does have an ack, so
-        // confirm is.
-        turn: [
-          ['build', 'Build'],
-          ['send', 'Send'],
-          ['confirm', 'Send & confirm']
-        ],
-        speed: [
-          ['build', 'Build'],
-          ['send', 'Send'],
-          ['confirm', 'Send & confirm']
-        ],
-        // Setpoint-shaped: no ack to confirm, and streaming is the normal use.
-        attitude: [
-          ['build', 'Build'],
-          ['send', 'Send'],
-          ['stream', 'Stream']
-        ],
-        manual: [
-          ['build', 'Build'],
-          ['send', 'Send'],
-          ['stream', 'Stream']
-        ]
-      };
       // The Action list, rebuilt per bound vehicle.
       const ACTION_OPTIONS = [
         ['goto', 'Go to (guided goto, acknowledged)'],
@@ -885,10 +840,6 @@
         ['msl', 'Absolute (MSL)'],
         ['terrain', 'Above terrain (ArduPilot)']
       ];
-
-      // Rows applyCompanionTargetVisibility owns; `show` reports them, the
-      // toggle loop leaves them alone.
-      const HELPER_ROWS = ['targetSystem', 'targetComponent'];
 
       // Steer's optional groups, in disclosure order. Each is revealed by its
       // own checkbox and hidden — and cleared — when that box is cleared.
@@ -981,7 +932,7 @@
       function refreshDeliveryOptions(action, reference, gate) {
         RED.mavlink.refreshOptionSelect({
           select: '#node-input-delivery',
-          options: DELIVERY_OPTIONS[action] || DELIVERY_OPTIONS.goto,
+          options: DELIVERY_OPTIONS[action],
           saved: node.delivery,
           withhold(value) {
             if (value !== 'stream') return false;
@@ -1074,8 +1025,7 @@
        *
        * @param {object} state  the derived booleans refreshVisibility computed
        * @returns {Object<string, boolean>} keyed by row suffix — `north` is
-       *   `#row-move-north`. `targetSystem`/`targetComponent` are reported for
-       *   completeness but owned by applyCompanionTargetVisibility (HELPER_ROWS).
+       *   `#row-move-north`. The target rows are applyCompanionTargetVisibility's.
        */
       function moveRowVisibility(state) {
         return {
@@ -1083,8 +1033,6 @@
           // than one identity: a single-identity Connection has nothing to
           // decide, and a select with one option is noise.
           identity: state.isWire && state.identityIsChoice,
-          targetSystem: state.tgt.targetSystem,
-          targetComponent: state.tgt.targetComponent,
           altRef: state.isGoto,
           lat: state.isGoto,
           lon: state.isGoto,
@@ -1130,8 +1078,8 @@
           relative: state.isTurn,
           throttle: state.isSpeed,
           speedType: state.isSpeed,
-          timeoutMs: (state.isGoto || state.isTurn || state.isSpeed) && state.delivery === 'confirm',
-          maxRetries: (state.isGoto || state.isTurn || state.isSpeed) && state.delivery === 'confirm',
+          timeoutMs: state.delivery === 'confirm',
+          maxRetries: state.delivery === 'confirm',
           rate: state.isStream,
           ttl: state.isStream
         };
@@ -1204,7 +1152,7 @@
         const isBody = !isGoto && reference === 'body';
         const isOffset = !isGoto && reference === 'offset';
         const altRef = refreshAltRefOptions(delivery) || 'home';
-        const tgt = RED.mavlink.applyCompanionTargetVisibility({
+        RED.mavlink.applyCompanionTargetVisibility({
           isBuild,
           identityId: isWire ? $('#node-input-identity').val() : '',
           targetSystemRow: '#row-move-targetSystem',
@@ -1222,7 +1170,7 @@
         const show = moveRowVisibility({
           isWire,
           identityIsChoice: RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || ''),
-          tgt, isGoto, isSteer, isTurn,
+          isGoto, isSteer, isTurn,
           isSpeed, isAttitude, isManual,
           isCommandPath, isStream, delivery,
           planeSteer, groups
@@ -1233,20 +1181,15 @@
         // for this action regardless of what the identity role would allow: an
         // operator must not be shown a control the message has no room for.
         //
-        // Hidden directly, not through `show`: the target rows are the two this
-        // function does NOT toggle from that object — applyCompanionTargetVisibility
-        // owns them, and it ran above. Setting show.targetComponent here was a
-        // no-op that left the row on screen.
+        // Hidden directly, not through `show`: the target rows are not in
+        // that object — applyCompanionTargetVisibility owns them, and it ran
+        // above.
         if (isManual) $('#row-move-targetComponent').hide();
 
         // Every key of `show` is a row suffix, so the toggles are a loop: a
-        // key that reaches no toggle (`show.targetComponent` assigned and never
-        // read) is a bug a loop makes unrepresentable rather than caught by
-        // review. The two
-        // target rows are skipped because applyCompanionTargetVisibility
-        // already toggled them above — listing them here would fight it.
+        // key that reaches no toggle is a bug a loop makes unrepresentable
+        // rather than caught by review.
         Object.keys(show).forEach((key) => {
-          if (HELPER_ROWS.indexOf(key) !== -1) return;
           $(`#row-move-${key}`).toggle(Boolean(show[key]));
         });
 
