@@ -144,6 +144,17 @@ test('changedFields red-rings tokens that can never name a decoded field — onl
   );
 });
 
+test('rateLimit: a Hz number or complete MESSAGE_NAME=Hz pairs; a lower-case name reds', () => {
+  const { rateLimit } = loadNodeDefaults('mavlink-in');
+  assert.equal(rateLimit.validate.length, 2);
+  for (const ok of ['', '0', '2.5', 'ATTITUDE=2', 'ATTITUDE=2, GLOBAL_POSITION_INT=1, 5']) {
+    assert.equal(rateLimit.validate.call({}, ok, {}), true, ok);
+  }
+  for (const bad of ['attitude=2', 'Attitude=2', 'ATTITUDE=', '=2', 'ATTITUDE=2,', '-1', 'ATTITUDE=x']) {
+    assert.match(String(rateLimit.validate.call({}, bad, {})), /MESSAGE_NAME=Hz/, bad);
+  }
+});
+
 test('fieldName red-rings anything but a single field name; blank = any', () => {
   const { fieldName } = loadNodeDefaults('mavlink-in');
   assert.equal(fieldName.validate.length, 2);

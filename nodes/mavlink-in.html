@@ -96,7 +96,7 @@
         fieldValue:  { value: '' },
         rateLimit:   {
           value: '0',
-          validate(v) {
+          validate(v, _opt) {
             // Blank/number = global Hz; otherwise comma NAME=Hz pairs, with an
             // optional bare Hz default among them. Every token must be
             // *complete*: an empty token (a stray comma) or an empty value
@@ -106,17 +106,23 @@
             // checks have to come before the numeric one.
             const raw = String(v === undefined || v === null ? '' : v).trim();
             if (!raw) return true;
-            return raw.split(',').every((token) => {
+            const complete = raw.split(',').every((token) => {
               const part = token.trim();
               if (!part) return false;
               const eq = part.indexOf('=');
               const name = eq === -1 ? '' : part.slice(0, eq).trim();
               const value = eq === -1 ? part : part.slice(eq + 1).trim();
-              if (eq !== -1 && !name) return false;
+              /**
+               * The runtime matches the name against the decoded message
+               * name, which is always capitals (`attitude=2` would match
+               * nothing and leave ATTITUDE unthrottled).
+               */
+              if (eq !== -1 && !/^[A-Z][A-Z0-9_]*$/.test(name)) return false;
               if (!value) return false;
               const hz = Number(value);
               return Number.isFinite(hz) && hz >= 0;
             });
+            return complete || 'must be a Hz number, or comma-separated MESSAGE_NAME=Hz pairs (names in capitals)';
           },
         },
       },
@@ -312,11 +318,13 @@
   message does not have compares as absent on every frame.</p>
   <p><b>Field</b>: pass only messages where the named field exists — and, when
   a value is given, equals it (compared as strings, so enums and 64-bit values
-  work naturally). Example: <code>base_mode</code> = <code>217</code>.</p>
+  work naturally). Example: <code>base_mode</code> = <code>217</code>. The name is matched
+  exactly as the dialect spells it, case included, so a misspelt field passes nothing.</p>
   <p><b>Rate limit</b>: maximum messages per second per (message, sysid, compid)
   tuple; 0 means unlimited. Either one Hz number for everything, or comma
   <code>NAME=Hz</code> pairs — <code>ATTITUDE=2, GLOBAL_POSITION_INT=1</code> —
-  with an optional bare number among them as the default for unlisted names.
+  with an optional bare number among them as the default for unlisted names. Names are
+  message names in capitals, as they arrive in <code>msg.topic</code>.
   Every token must be complete — a stray comma or an empty value
   (<code>ATTITUDE=</code>) is rejected in the editor, so a typo cannot quietly
   remove a limit. The editor validates the shape; the runtime trusts the saved
