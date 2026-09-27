@@ -169,16 +169,23 @@
         && RED.mavlink.liveOr(this, '#node-input-reference', this.reference, 'world') === 'offset') {
         return true;
       }
-      for (let i = 0; i < axes.length; i++) {
-        if (axes[i] === name) continue;
-        const sibling = fieldValue(this, axes[i]);
-        if (!RED.mavlink.isBlank(sibling)) {
-          return `is required once another ${label} axis is filled — a blank axis is `
-            + `commanded 0 under the type_mask, not left alone`;
-        }
-      }
-      return true;
+      return !siblingFilled(this, axes, name)
+        || `is required once another ${label} axis is filled — a blank axis is `
+          + `commanded 0 under the type_mask, not left alone`;
     };
+  }
+
+  /**
+   * Whether any field of an all-or-nothing group other than `self` holds a
+   * value, read live-or-saved through `fieldValue`.
+   *
+   * @param {object} owner
+   * @param {string[]} names  the group's fields
+   * @param {string} self     the field being validated
+   * @returns {boolean}
+   */
+  function siblingFilled(owner, names, self) {
+    return names.some((n) => n !== self && !RED.mavlink.isBlank(fieldValue(owner, n)));
   }
 
   /**
@@ -204,15 +211,40 @@
         return RED.validators.number(true).call(this, v, opt);
       }
       if (!RED.mavlink.isBlank(v)) return RED.validators.number(true).call(this, v, opt);
-      for (let i = 0; i < ANGLES.length; i++) {
-        if (ANGLES[i] === name) continue;
-        const sibling = fieldValue(this, ANGLES[i]);
-        if (!RED.mavlink.isBlank(sibling)) {
-          return 'is required once another angle is filled — the three share one ignore '
-            + 'bit, so a blank angle is commanded 0 rather than left alone';
-        }
-      }
-      return true;
+      return !siblingFilled(this, ANGLES, name)
+        || 'is required once another angle is filled — the three share one ignore '
+          + 'bit, so a blank angle is commanded 0 rather than left alone';
+    };
+  }
+
+  /**
+   * `check` behind an action gate that also requires a value: only `action`
+   * reads the field, and its wire slot has no no-change sentinel.
+   *
+   * @param {string} action
+   * @param {string} blankReason
+   * @param {function(*, object): (boolean|string)} check
+   * @returns {function(*, object): (boolean|string)}
+   */
+  function requiredFor(action, blankReason, check) {
+    return function (v, opt) {
+      if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== action) return true;
+      if (RED.mavlink.isBlank(v)) return blankReason;
+      return check.call(this, v, opt);
+    };
+  }
+
+  /**
+   * `check` only on Stream delivery — the one tier that reads the field, so a
+   * cleared value never reds a Build or Send node.
+   *
+   * @param {function(*, object): (boolean|string)} check
+   * @returns {function(*, object): (boolean|string)}
+   */
+  function streamOnly(check) {
+    return function (v, opt) {
+      if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
+      return check.call(this, v, opt);
     };
   }
 
@@ -566,16 +598,7 @@
       // FAILED* outside that range (source-read 2026-08-13) — the vehicle is
       // the one refusing, so the editor is where an operator finds out before
       // flying. Two args so the reason renders (§14).
-      heading: {
-        value: '',
-        validate(v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'turn') return true;
-          if (RED.mavlink.isBlank(v)) return 'is required for Turn';
-          const n = Number(v);
-          return (Number.isFinite(n) && n >= 0 && n <= 360)
-            || 'must be within [0, 360] degrees — ArduPilot answers FAILED outside it';
-        },
-      },
+      heading: { value: '', validate: requiredFor('turn', 'is required for Turn', RED.mavlink.validateRange(0, 360)) },
       turnRate: { value: '', validate: RED.validators.number(true) },
       // -1 ccw, 0 shortest, 1 cw — common.xml defines 0 as "shortest
       // direction", so the default is the dialect's, not one we invented.
@@ -617,9 +640,7 @@
               || 'is required for Attitude — only ArduPlane acts on an attitude without '
                 + 'thrust; every other stack holds or drops it, with no ack to tell you';
           }
-          const n = Number(v);
-          return (Number.isFinite(n) && n >= 0 && n <= 1)
-            || 'must be 0..1 (normalised thrust, not a percentage)';
+          return RED.mavlink.validateRange(0, 1).call(this, v, _opt);
         },
       },
 
@@ -701,29 +722,18 @@
       // with no action yet validates as a steer form.
       lat: {
         value: '',
-        validate(v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'goto') return true;
-          if (RED.mavlink.isBlank(v)) return 'is required for Go to (a blank coordinate must not become 0)';
-          const n = Number(v);
-          return (Number.isFinite(n) && n >= -90 && n <= 90) || 'must be within [-90, 90] degrees';
-        },
+        validate: requiredFor('goto', 'is required for Go to (a blank coordinate must not become 0)',
+          RED.mavlink.validateRange(-90, 90)),
       },
       lon: {
         value: '',
-        validate(v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'goto') return true;
-          if (RED.mavlink.isBlank(v)) return 'is required for Go to (a blank coordinate must not become 0)';
-          const n = Number(v);
-          return (Number.isFinite(n) && n >= -180 && n <= 180) || 'must be within [-180, 180] degrees';
-        },
+        validate: requiredFor('goto', 'is required for Go to (a blank coordinate must not become 0)',
+          RED.mavlink.validateRange(-180, 180)),
       },
       alt: {
         value: '',
-        validate(v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'goto') return true;
-          if (RED.mavlink.isBlank(v)) return 'is required for Go to (a blank altitude must not become ground level)';
-          return Number.isFinite(Number(v)) || 'must be a number of metres';
-        },
+        validate: requiredFor('goto', 'is required for Go to (a blank altitude must not become ground level)',
+          RED.validators.number(true)),
       },
       // Shared by Steer, Go to and Attitude — one spelling per operator concept
       // (§14). Only Attitude holds it to the all-or-nothing angle rule; on the
@@ -742,22 +752,8 @@
       // Both fields exist only on Stream delivery — a cleared value must not
       // red a Build or Send node that never reads it (same liveOr gating as
       // mission's items). Two args so the reasons render (§14).
-      rateHz: {
-        value: 5,
-        validate(v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
-          return (Number.isFinite(Number(v)) && Number(v) >= 0.1) || 'must be at least 0.1 Hz';
-        },
-      },
-      /** Blank reds: Number('') is 0, which is "no TTL" — a stream that never expires. */
-      ttlMs: {
-        value: 1000,
-        validate(v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'stream') return true;
-          return (!RED.mavlink.isBlank(v) && Number.isFinite(Number(v)) && Number(v) >= 0)
-            || 'must be a number of milliseconds (0 = no TTL)';
-        },
-      },
+      rateHz: { value: 5, validate: streamOnly(RED.mavlink.validateAtLeast(0.1)) },
+      ttlMs: { value: 1000, validate: streamOnly(RED.mavlink.validateAtLeast(0)) },
     ...RED.mavlink.buildTierDialectDefaults()
   };
 

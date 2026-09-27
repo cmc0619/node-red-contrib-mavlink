@@ -217,9 +217,9 @@ test('mavlink-move goto requires the global position at deploy, steer requires n
   assert.equal(defaults.alt.validate.call(gotoNode, 30, {}), true);
   // The degE7 int32 ceiling makes range a guard, not pedantry — same rule as
   // §10 — the editor is the only place this is enforced.
-  assert.match(String(defaults.lat.validate.call(gotoNode, 91, {})), /\[-90, 90\]/);
-  assert.match(String(defaults.lon.validate.call(gotoNode, 181, {})), /\[-180, 180\]/);
-  assert.match(String(defaults.alt.validate.call(gotoNode, 'abc', {})), /number of metres/);
+  assert.match(String(defaults.lat.validate.call(gotoNode, 91, {})), /between -90 and 90/);
+  assert.match(String(defaults.lon.validate.call(gotoNode, 181, {})), /between -180 and 180/);
+  assert.match(String(defaults.alt.validate.call(gotoNode, 'abc', {})), /must be a number/);
 });
 
 test('mavlink-move Body on Build requires the Vehicle Profile dialect (Codex #277)', () => {
@@ -1036,9 +1036,9 @@ test('mavlink-move: Turn heading is required and bounded 0-360, because the vehi
 
   assert.equal(defaults.heading.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
   assert.match(String(verdict({ heading: '' })), /required for Turn/);
-  assert.match(String(verdict({ heading: 400 })), /\[0, 360\]/);
-  assert.match(String(verdict({ heading: -1 })), /\[0, 360\]/);
-  assert.match(String(verdict({ heading: 'north' })), /\[0, 360\]/);
+  assert.match(String(verdict({ heading: 400 })), /between 0 and 360/);
+  assert.match(String(verdict({ heading: -1 })), /between 0 and 360/);
+  assert.match(String(verdict({ heading: 'north' })), /between 0 and 360/);
   assert.equal(verdict({ heading: 0 }), true, '0 is north, a real heading');
   assert.equal(verdict({ heading: 360 }), true, 'the upper bound is inclusive');
   assert.equal(verdict({ heading: 90 }), true);
@@ -1168,7 +1168,7 @@ test('mavlink-move: sticks are required and bounded -1..1, thrust 0..1, in the e
   }
   assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 0, {}), true, '0 is a commanded zero');
   assert.equal(defaults.thrust.validate.call({ id: 'm1' }, 1, {}), true);
-  assert.match(String(defaults.thrust.validate.call({ id: 'm1' }, 60, {})), /not a percentage/);
+  assert.match(String(defaults.thrust.validate.call({ id: 'm1' }, 60, {})), /between 0 and 1/);
   assert.match(String(defaults.buttons.validate.call({ id: 'm1', action: 'manual' }, 70000, {})), /16-bit/);
 });
 
@@ -1650,9 +1650,9 @@ test('mavlink-move: a blank TTL reds on Stream — Number(\'\') is 0, a stream t
   const verdict = (v, delivery = 'stream') => ttlMs.validate.call({ id: 'm1', delivery }, v, {});
 
   assert.equal(ttlMs.validate.length, 2, 'a reason-returning validator declares (v, opt)');
-  assert.match(String(verdict('')), /0 = no TTL/, 'blank');
-  assert.match(String(verdict('  ')), /0 = no TTL/, 'whitespace');
-  assert.match(String(verdict(-1)), /0 = no TTL/, 'negative');
+  assert.match(String(verdict('')), />= 0/, 'blank');
+  assert.match(String(verdict('  ')), />= 0/, 'whitespace');
+  assert.match(String(verdict(-1)), />= 0/, 'negative');
   assert.equal(verdict(0), true, 'explicit 0 is the "no TTL" choice');
   assert.equal(verdict('0'), true);
   assert.equal(verdict(1000), true);
