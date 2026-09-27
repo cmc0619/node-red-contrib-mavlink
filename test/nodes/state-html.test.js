@@ -104,9 +104,12 @@ test('events red-rings blank and a token the peer table never emits', () => {
 test('target filters carry the uint8 range ring, compid included', () => {
   const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-state');
   assert.equal(targetComponent.validate.call({}, '', {}), true, 'blank = any');
-  assert.equal(targetComponent.validate.call({}, 0, {}), true, 'compid 0 is a real source component filter');
+  // MAV_COMP_ID_ALL reads as "all", but no peer registers component 0
+  // (§14.144), so the filter silently returned 0 peers (E9).
+  assert.match(String(targetComponent.validate.call({}, 0, {})), /between 1 and 255/);
+  assert.equal(targetComponent.validate.call({}, 1, {}), true);
   assert.equal(targetComponent.validate.call({}, 255, {}), true);
-  assert.match(String(targetComponent.validate.call({}, 256, {})), /between 0 and 255/);
+  assert.match(String(targetComponent.validate.call({}, 256, {})), /between 1 and 255/);
 
   // Sysid 0 never reaches State — the Connection drops sysid-0 sources
   // (DESIGN.md §14.138) — so a 0 filter would match nothing.

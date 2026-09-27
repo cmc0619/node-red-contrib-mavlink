@@ -81,12 +81,13 @@
           }
         },
         /**
-         * Source filter: blank is all sysids; 0 is refused because the
+         * Source filters: blank is any. Sysid 0 is refused because the
          * Connection drops sysid-0 sources before State sees them
-         * (DESIGN.md §14.138), so a 0 filter never matches.
+         * (DESIGN.md §14.138); compid 0 because no peer registers component 0
+         * (§14.144). Either filter would match nothing.
          */
         targetSystem: { value: '', validate: RED.mavlink.validateUint8(1) },
-        targetComponent: { value: '', validate: RED.mavlink.validateUint8(0) }
+        targetComponent: { value: '', validate: RED.mavlink.validateUint8(1) }
       },
       inputs: 1,
       outputs: 2,
