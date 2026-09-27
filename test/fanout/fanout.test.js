@@ -1181,6 +1181,7 @@ test('a fan-out member record carries the terminal ack\'s result_param2 (§9, Co
 
   const result = await promise;
   const member = result.members.find((m) => m.sysid === 1);
+  assert.equal(member.result, 'denied', 'the MAV_RESULT name, the same word sequential reports');
   assert.equal(member.resultCode, 2);
   assert.equal(member.resultParam2, 11, 'the denial reason survives the member record');
 });
@@ -1353,6 +1354,28 @@ test('confirm-mode retry resends the member\'s patched message with the confirma
     assert.equal(message.fields.param6, 8.7);
     assert.equal(message.fields.param7, 30);
   }
+});
+
+test('a silent sequential ack wait reports unconfirmed, the word broadcast and echo use', async () => {
+  const connection = {
+    peerTable: peerTableStub([peer(1)]),
+    sends: [],
+    send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
+    subscribe() { return () => {}; },
+  };
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    intervalMs: 0,
+    concurrency: 1,
+    timeoutMs: 5,
+    maxRetries: 0,
+  });
+  assert.equal(result.members[0].result, 'unconfirmed');
+  assert.equal(result.members[0].success, false);
 });
 
 // ── Cancellation (#54/#57, CodeRabbit #140) ───────────────────────────────────
