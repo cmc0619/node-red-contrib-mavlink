@@ -104,28 +104,20 @@ function loadFromSourceDir(sourceDir) {
     throw new Error(`No ${DEFINITIONS_DIR} under ${sourceDir}`);
   }
   let commit = 'unknown';
+  let commitDate = null;
   try {
-    const head = fs.readFileSync(path.join(sourceDir, '.git', 'HEAD'), 'utf8').trim();
-    if (head.startsWith('ref:')) {
-      const ref = head.slice(5).trim();
-      commit = fs.readFileSync(path.join(sourceDir, '.git', ref), 'utf8').trim();
-    } else {
-      commit = head;
-    }
+    /** git resolves packed refs and detached heads alike. */
+    const git = (...args) => require('child_process')
+      .execFileSync('git', ['-C', sourceDir, ...args], { encoding: 'utf8' })
+      .trim();
+    commit = git('rev-parse', 'HEAD');
+    commitDate = git('log', '-1', '--format=%cI', commit);
   } catch {
     // plain checkout without .git
   }
   const files = {};
   for (const name of fs.readdirSync(defDir).filter((f) => f.endsWith('.xml'))) {
     files[name] = fs.readFileSync(path.join(defDir, name), 'utf8');
-  }
-  let commitDate = null;
-  try {
-    commitDate = require('child_process')
-      .execFileSync('git', ['-C', sourceDir, 'log', '-1', '--format=%cI', commit], { encoding: 'utf8' })
-      .trim();
-  } catch {
-    // plain checkout without .git, or a commit this clone does not have
   }
   return { commit, commitDate, files };
 }
@@ -314,6 +306,7 @@ if (require.main === module) {
 
 module.exports = {
   writeSeed,
+  loadFromSourceDir,
   dialectKey,
   makeStamp,
   seedFileName,
