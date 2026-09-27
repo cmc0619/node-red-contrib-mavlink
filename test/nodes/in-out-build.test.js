@@ -981,6 +981,23 @@ test('mavlink-out: forwards the mavlink-in shape (name in msg.topic, fields in m
   assert.deepEqual(sent[0].message.fields, { type: 6, autopilot: 8 });
 });
 
+test('mavlink-out: a stock Inject\'s blank topic does not shadow the {name, fields} payload (R42)', () => {
+  /** Node-RED's Inject sends `topic: ""` by default alongside its payload. */
+  const RED = makeRED();
+  const { stub, sent } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-out')(RED);
+  const Constructor = RED._nodeTypes['mavlink-out'];
+  const node = makeNodeInstance({ connection: 'conn-1' });
+  Constructor.call(node, { connection: 'conn-1' });
+
+  node._input({ topic: '', payload: { name: 'HEARTBEAT', fields: { type: 6 } } });
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].message.name, 'HEARTBEAT');
+  assert.deepEqual(sent[0].message.fields, { type: 6 });
+});
+
 test('mavlink-out: uses msg.band when provided', () => {
   const RED = makeRED();
   const { stub, sent } = makeConnectionStub();
