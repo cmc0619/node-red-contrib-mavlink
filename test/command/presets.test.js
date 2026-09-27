@@ -24,7 +24,10 @@ const assert = require('node:assert/strict');
 
 const { getPreset, buildParamArray, presetGroups } = require('../../lib/command/presets');
 const { mergeParams } = require('../../lib/command/merge-params');
-const { PRESETS, COMPLETION } = require('../../lib/command/presets');
+const { COMPLETION } = require('../../lib/command/presets');
+
+/** Every offered preset row, read through the module's own surface. */
+const PRESETS = presetGroups().flatMap((g) => g.presets).map((row) => getPreset(row.id));
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

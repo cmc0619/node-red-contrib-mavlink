@@ -17,7 +17,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  longToIntFields,
   buildCommandInt,
   buildCommandLong,
   isGlobalFrame,
@@ -26,6 +25,9 @@ const {
   DEFAULT_FRAME,
   resolveFrame,
 } = require('../../lib/command/carrier');
+
+/** The COMMAND_INT fields a canonical param array converts to (longToIntFields). */
+const longToIntFields = (params, opts) => buildCommandInt(0, 0, 0, params, opts).fields;
 
 test('longToIntFields maps params, scales global lat/lon to degE7, keeps z float', () => {
   const int = longToIntFields([1, 2, 3, 4, 47.1234567, -122.5, 100.5], {
@@ -254,7 +256,18 @@ test('NaN in param5/6 stays non-finite — no silent null island (§9)', () => {
 // of the new frame silently passing through unscaled (or a name-heuristic
 // silently guessing a divisor deployed firmware doesn't implement yet).
 
-const { GLOBAL_FRAMES, LOCAL_FRAMES } = require('../../lib/command/carrier');
+/**
+ * How the INT carrier classifies a frame, read from what it does to a 1-unit
+ * param5: ×1e7 is global lat/lon, ×1e4 is local metres, anything else passes
+ * through unclassified.
+ */
+function frameClass(frame) {
+  switch (longToIntFields([0, 0, 0, 0, 1, 0, 0], { frame }).x) {
+    case 1e7: return 'global';
+    case 1e4: return 'local';
+    default: return 'none';
+  }
+}
 
 // MAV_FRAME values whose x/y are not a position at all: MAV_FRAME_MISSION
 // ("NOT a coordinate frame" per the dialect) and the tombstoned RESERVED slots
@@ -268,17 +281,12 @@ test('every dialect MAV_FRAME entry is classified exactly once (drift pin, §9)'
 
   for (const entry of mf.entries) {
     const v = Number(entry.value);
-    const memberships = [
-      GLOBAL_FRAMES.has(v),
-      LOCAL_FRAMES.has(v),
-      NON_POSITION_FRAMES.has(v),
-    ].filter(Boolean).length;
     assert.equal(
-      memberships,
-      1,
-      `${entry.name} (${v}) is classified ${memberships} times — a dialect refresh added or ` +
-        'moved a frame. Classify it in lib/command/carrier.js (GLOBAL_FRAMES / LOCAL_FRAMES / ' +
-        'NON_POSITION_FRAMES) and MEASURE against SITL before choosing local (§14).'
+      frameClass(v) === 'none',
+      NON_POSITION_FRAMES.has(v),
+      `${entry.name} (${v}) is classified ${frameClass(v)} — a dialect refresh added or ` +
+        'moved a frame. Classify it in lib/command/carrier.js (GLOBAL_FRAMES / LOCAL_FRAMES) ' +
+        'or NON_POSITION_FRAMES here, and MEASURE against SITL before choosing local (§14).'
     );
   }
 
@@ -286,13 +294,9 @@ test('every dialect MAV_FRAME entry is classified exactly once (drift pin, §9)'
   // catches typos and upstream renumbering (which MAVLink promises never to do;
   // this is the alarm if that promise ever breaks).
   const declared = new Set(mf.entries.map((e) => Number(e.value)));
-  for (const [setName, set] of [
-    ['GLOBAL_FRAMES', GLOBAL_FRAMES],
-    ['LOCAL_FRAMES', LOCAL_FRAMES],
-    ['NON_POSITION_FRAMES', NON_POSITION_FRAMES],
-  ]) {
-    for (const v of set) {
-      assert.ok(declared.has(v), `${setName} classifies frame ${v}, which the dialect does not declare`);
+  for (let v = 0; v < 256; v += 1) {
+    if (frameClass(v) !== 'none' || NON_POSITION_FRAMES.has(v)) {
+      assert.ok(declared.has(v), `frame ${v} is classified, but the dialect does not declare it`);
     }
   }
 });
