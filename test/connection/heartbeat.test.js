@@ -25,7 +25,6 @@ function build(opts = {}) {
   const scheduler = new HeartbeatScheduler({
     emit: (entry) => emitted.push(entry),
     health: () => true,
-    now: Date.now,
     setInterval,
     clearInterval,
     logger: {
@@ -72,17 +71,14 @@ test('a faulted identity does not heartbeat, and the fault is logged once', () =
 
 test('the heartbeat resumes when the fault clears, logged once', () => {
   const faulted = new Set(['gcs']);
-  let now = 0;
   const { scheduler, emitted, logs } = build({
     health: (id) => !faulted.has(id),
-    now: () => now,
   });
   scheduler.add(GCS);
 
   scheduler.tick(); // faulted
   faulted.delete('gcs');
   scheduler.tick(); // healthy again
-  now = 1000;
   scheduler.tick();
 
   assert.equal(emitted.length, 2);
@@ -108,20 +104,22 @@ test('start/stop drive the injected interval and release it', () => {
   assert.equal(intervalCleared, true);
 });
 
-test('scheduler ticks at the minimum identity interval and emits each identity when due', () => {
-  let now = 0;
-  let tick;
-  let intervalMs;
+test('each identity beats on its own interval, not a multiple of the smallest (R45)', () => {
+  /**
+   * A shared timer at min(interval) quantizes a 1500 ms identity beside a
+   * 1000 ms one to every 2000 ms, and its clock-skew gate skips periods.
+   */
+  const timers = [];
+  const cleared = [];
   const { scheduler, emitted } = build({
-    now: () => now,
     setInterval: (fn, ms) => {
-      tick = fn;
-      intervalMs = ms;
-      return { unref() {} };
+      const handle = { fn, ms, unref() {} };
+      timers.push(handle);
+      return handle;
     },
-    clearInterval() {},
+    clearInterval: (handle) => cleared.push(handle),
   });
-  scheduler.add({ ...GCS, heartbeatIntervalMs: 500 });
+  scheduler.add({ ...GCS, heartbeatIntervalMs: 1000 });
   scheduler.add({
     id: 'slow',
     sysid: 1,
@@ -131,32 +129,12 @@ test('scheduler ticks at the minimum identity interval and emits each identity w
   });
 
   scheduler.start();
-  assert.equal(intervalMs, 500);
-
-  tick();
-  now = 500;
-  tick();
-  now = 1000;
-  tick();
-  now = 1500;
-  tick();
-
-  assert.deepEqual(
-    emitted.map((e) => e.identity.id),
-    ['gcs', 'slow', 'gcs', 'gcs', 'gcs', 'slow']
-  );
-});
-
-test('base timer follows a sole slow identity (does not clamp to 1000 ms)', () => {
-  let intervalMs;
-  const { scheduler } = build({
-    setInterval: (_fn, ms) => {
-      intervalMs = ms;
-      return { unref() {} };
-    },
-    clearInterval() {},
-  });
-  scheduler.add({ ...GCS, heartbeatIntervalMs: 1500 });
   scheduler.start();
-  assert.equal(intervalMs, 1500);
+  assert.deepEqual(timers.map((t) => t.ms), [1000, 1500], 'one interval per identity, started once');
+
+  timers[1].fn();
+  assert.deepEqual(emitted.map((e) => e.identity.id), ['slow'], 'a timer beats only its own identity');
+
+  scheduler.stop();
+  assert.deepEqual(cleared, timers, 'stop releases every identity timer');
 });
