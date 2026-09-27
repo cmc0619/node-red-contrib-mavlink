@@ -1279,6 +1279,18 @@ test('a superseded Confirm wait reports cancelled/superseded on output 1 (R9, Q2
   node.emit('close', () => {});
 });
 
+test('the Complete-tier wait badge names no climb for a command that does not climb (COMMAND-8)', async () => {
+  const { conn, node } = armNode('complete');
+  const texts = [];
+  node.status = (s) => texts.push(s.text);
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  await tick();
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  await tick();
+  assert.equal(texts[texts.length - 1], 'Arm completing…');
+  node.emit('close', () => {});
+});
+
 test('a superseded Complete-tier completion wait reports cancelled/superseded too (R9, Q2)', async () => {
   const { conn, node } = armNode('complete');
   const first = [];

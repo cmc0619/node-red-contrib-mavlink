@@ -409,7 +409,7 @@ module.exports = function registerMavlinkCommand(RED) {
        * @param {number} myGen  the run's generation, for the stale-run check
        */
       async function pollCompletion(ackRecord, ackOutcome, myGen) {
-        applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
+        applyActionStatus(node, 'sending', `${displayName} completing\u2026`);
         // Component 0 addresses every component of the system; the one that
         // acked is the one whose state settles completion. No peer advertises
         // compid 0, so looking it up would never find a row.
