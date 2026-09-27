@@ -2160,10 +2160,11 @@
   /**
    * A `<select>` whose legal options depend on other selects. `allowed` gets
    * the parents' values and returns the legal option values, or null for all
-   * of them; the rest are greyed out. A parent change re-picks the first
-   * enabled option, so options are listed narrowest first. Opening the
-   * dialog keeps the saved value unless it is greyed out. The re-pick fires
-   * `change`, so a select can be both a child and a parent.
+   * of them; the rest are greyed out. Opening the dialog and every parent
+   * change keep the current value unless it is greyed out; only then does
+   * the select re-pick the first enabled option, so options are listed
+   * narrowest first. The re-pick fires `change`, so a select can be both a
+   * child and a parent.
    *
    * @param {string} child  jQuery selector for the dependent `<select>`
    * @param {string[]} parents  jQuery selectors for the selects it depends on
@@ -2171,15 +2172,15 @@
    */
   RED.mavlink.dependentSelect = function (child, parents, allowed) {
     const $child = $(child);
-    function apply(reset) {
+    function apply() {
       const ok = allowed(...parents.map((parent) => $(parent).val()));
       const options = Array.from($child[0].options);
       options.forEach((option) => { option.disabled = Boolean(ok) && ok.indexOf(option.value) === -1; });
       const current = options.find((option) => option.value === $child.val());
-      if (!reset && current && !current.disabled) return;
+      if (current && !current.disabled) return;
       $child.val(options.find((option) => !option.disabled).value).trigger('change');
     }
-    parents.forEach((parent) => $(parent).on('change', () => apply(true)));
-    apply(false);
+    parents.forEach((parent) => $(parent).on('change', apply));
+    apply();
   };
 })();
