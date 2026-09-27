@@ -22,11 +22,16 @@
       'sensor-health-changed',
     ];
 
+    /**
+     * The saved string split exactly as the runtime splits it: no trimming and
+     * no dropped empty tokens, so the ring judges the names the feed will
+     * subscribe to.
+     *
+     * @param {*} raw
+     * @returns {string[]}
+     */
     function parseSavedEvents(raw) {
-      if (typeof raw === 'string' && raw.trim()) {
-        return raw.split(',').map((s) => s.trim()).filter(Boolean);
-      }
-      return [];
+      return typeof raw === 'string' && raw !== '' ? raw.split(',') : [];
     }
 
     function buildEventsMultiSelect(node) {
@@ -77,8 +82,9 @@
         mode: { value: 'snapshot', validate: RED.mavlink.oneOf(['snapshot', 'feed']) },
         // Comma-joined picks from the members-only multi-select. Blank picks
         // nothing — a feed with no event to emit — so it reds; a token
-        // STATE_EVENTS does not name would subscribe to an event the peer
-        // table never emits, so it reds too. The dialog always writes a string
+        // STATE_EVENTS does not name, a padded one or an empty one included,
+        // would subscribe to an event the peer table never emits, so it reds
+        // too. The dialog always writes a string
         // (the hidden input joins the multi-select), so a non-string is
         // hand-edit drift the runtime's split(',') cannot read — it reds
         // rather than vouching for it. Only the feed reads the selection —

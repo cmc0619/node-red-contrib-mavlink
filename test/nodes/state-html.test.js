@@ -87,7 +87,12 @@ test('events red-rings blank and a token the peer table never emits', () => {
   const feed = { id: 's1', mode: 'feed' };
   // Blank picks nothing: the feed would subscribe to no event, so it reds.
   assert.match(String(events.validate.call(feed, '', {})), /no event/);
-  assert.match(String(events.validate.call(feed, ' , ', {})), /no event/, 'separators alone pick nothing');
+  // The runtime splits on ',' and nothing else, so a padded or empty token
+  // subscribes to a name no event carries: 'stale, statustext' emitted no
+  // STATUSTEXT at all (SPS-10).
+  assert.match(String(events.validate.call(feed, ' , ', {})), /does not emit/, 'separators alone name nothing');
+  assert.match(String(events.validate.call(feed, 'stale, statustext', {})), /does not emit/);
+  assert.match(String(events.validate.call(feed, 'stale,,expired', {})), /does not emit/);
   assert.equal(events.validate.call(feed, 'stale,expired,statustext', {}), true);
   assert.equal(events.validate.call(feed, STATE_EVENTS.join(','), {}), true, 'the full set passes');
   assert.match(String(events.validate.call(feed, 'stale,exipred', {})), /does not emit/);
