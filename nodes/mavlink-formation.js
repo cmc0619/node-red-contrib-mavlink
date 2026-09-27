@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeFanout, parseSysidList, isActive, reportAggregate } = require('../lib/fanout');
+const { executeFanout, parseSysidList, isActive, autopilotComponent, reportAggregate } = require('../lib/fanout');
 const { isBlank, valueFrom } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
 const { buildRepositionMessage } = require('../lib/move/reposition');
@@ -97,15 +97,13 @@ module.exports = function registerMavlinkFormation(RED) {
           message,
           targets: memberTargets,
           mode: 'sequential',
-          // One vehicle at a time, as the help promises. The retry budget is
-          // the editor's (RED.mavlink.ackDefaults), read as saved.
+          // One vehicle at a time, as the help promises. The retry budget,
+          // interval and timeout are the editor's, read as saved.
           concurrency: 1,
-          maxRetries: Number(config.maxRetries),
+          maxRetries: config.maxRetries,
           delivery: config.delivery,
-          // The editor owns both defaults and rejects blank at deploy, so the
-          // saved value is numeric — trust it (Number only, no second default).
-          intervalMs: Number(config.intervalMs),
-          timeoutMs: Number(config.timeoutMs),
+          intervalMs: config.intervalMs,
+          timeoutMs: config.timeoutMs,
         }));
 
         // A redeploy cancelled us: finish quietly rather than emitting or
@@ -202,7 +200,7 @@ function resolveAnchor(config, payload, peerTable) {
  * @returns {{sysid: number, component: object|undefined}}
  */
 function candidate(peer) {
-  return { sysid: peer.sysid, component: peer.components.find((c) => c.compid === 1) };
+  return { sysid: peer.sysid, component: autopilotComponent(peer) };
 }
 
 /**

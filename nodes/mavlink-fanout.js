@@ -65,10 +65,10 @@ module.exports = function registerMavlinkFanout(RED) {
           // starts and the aggregate comes back undefined (handled below).
           mode: valueFrom(opts, config, 'executionMode'),
           delivery: effectiveDelivery,
-          intervalMs: numberOption(opts, config, 'intervalMs'),
-          timeoutMs: numberOption(opts, config, 'timeoutMs'),
-          maxRetries: numberOption(opts, config, 'maxRetries'),
-          concurrency: numberOption(opts, config, 'concurrency'),
+          intervalMs: valueFrom(opts, config, 'intervalMs'),
+          timeoutMs: valueFrom(opts, config, 'timeoutMs'),
+          maxRetries: valueFrom(opts, config, 'maxRetries'),
+          concurrency: valueFrom(opts, config, 'concurrency'),
           stopOnError: valueFrom(opts, config, 'stopOnError'),
           identityId: opts.identityId === undefined ? config.identity : opts.identityId,
         }));
@@ -134,9 +134,9 @@ function selectionFrom(config) {
 /**
  * The config member rows for this run, or undefined when they do not apply:
  * a payload `targets` array replaces them entirely (§6 — the override of last
- * resort), a payload `selection` override picks its own group, and rows
- * without any offset or patch are plain list selection, already covered by
- * {@link selectionFrom}.
+ * resort), a payload `selection` override picks its own group, and only list
+ * selection has rows. Bare rows become bare-sysid targets, which select
+ * exactly the listed vehicles.
  *
  * @param {object} config
  * @param {object} opts unwrapped payload options
@@ -144,19 +144,12 @@ function selectionFrom(config) {
  */
 function configMembersFor(config, opts) {
   if (opts.targets !== undefined || opts.selection !== undefined) return undefined;
-  if (config.selectionMode !== 'list') return undefined;
-  const patched = config.members.some((member) =>
-    member.north !== undefined || member.east !== undefined
-    || member.up !== undefined || member.patch !== undefined);
-  return patched ? config.members : undefined;
-}
-
-/**
- * A numeric run option: `msg.payload` overrides by presence, otherwise the
- * editor's saved value, which the editor defaults and red-rings.
- */
-function numberOption(opts, config, key) {
-  return opts[key] === undefined ? Number(config[key]) : opts[key];
+  switch (config.selectionMode) {
+    case 'list':
+      return config.members;
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
 }
 
 /**
