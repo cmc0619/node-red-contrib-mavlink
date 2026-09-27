@@ -285,6 +285,20 @@ test('two companions collide only when they share an onboard slot', () => {
   );
 });
 
+test('a companion bound to a profile whose Target SysID is 0 reds: it would send as broadcast', () => {
+  const defaults = loadNodeDefaults('mavlink-connection', { ...BOUND, veh0: { defaultTargetSystem: 0 } });
+  const reason = String(defaults.additionalIdentities.validate.call(
+    { id: 'c1', vehicle: 'veh0', localIdentity: 'id-comp' }, [], {}
+  ));
+  assert.match(reason, /Onboard/);
+  assert.match(reason, /SysID 0/);
+  assert.equal(
+    defaults.additionalIdentities.validate.call({ id: 'c1', vehicle: 'veh0', localIdentity: 'id-gcs' }, [], {}),
+    true,
+    'a GCS keeps its own SysID, whatever the profile targets'
+  );
+});
+
 test('no Vehicle resolved yet: the collision check stands down', () => {
   // A companion's sysid is derived from the Vehicle Profile, so without one
   // there is no pair to compare. The Vehicle picker's own required ring owns

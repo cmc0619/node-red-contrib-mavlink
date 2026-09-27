@@ -232,6 +232,17 @@
         if (!vehicleNode) return true;
         const primary = RED.mavlink.liveOr(this, '#node-config-input-localIdentity', this.localIdentity, '');
         const bound = [primary].concat(Array.isArray(v) ? v : []);
+        /**
+         * A companion sends as the profile's Target SysID. Source sysid 0 is
+         * the broadcast address, which every peer drops (§14.138), so every
+         * frame it sent would vanish without a word.
+         */
+        const zero = bound.map((id) => RED.mavlink.identityWireIds(id, vehicleNode.defaultTargetSystem))
+          .find((wire) => wire?.sysid === 0);
+        if (zero) {
+          return `‘${zero.label}’ would send as SysID 0, the broadcast address every peer drops — `
+            + 'give the Vehicle Profile a Target SysID';
+        }
         const clash = RED.mavlink.duplicateBoundIdentity(bound, vehicleNode.defaultTargetSystem);
         if (!clash) return true;
         return `‘${clash.a}’ and ‘${clash.b}’ both send as ${clash.sysid}/${clash.compid} — each bound identity needs its own SysID/CompID`;
