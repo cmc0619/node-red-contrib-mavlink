@@ -210,7 +210,9 @@
   override the configured values per message. Shape and spacing are design-time
   choices.</p>
   <h3>Outputs</h3>
-  <p>Output 0 fires only when every member succeeded, carrying the fan-out
+  <p>On <b>Build</b> nothing is sent: output 0 carries one built Reposition per
+  member for a downstream <b>mavlink-out</b>, and the badge is a preview. On the
+  wire tiers output 0 fires only when every member succeeded, carrying the fan-out
   aggregate under <code>msg.payload</code>. Output 1 always carries the
   aggregate with per-vehicle detail. An anchor leader that has not reported
   position fails the input. On a leader anchor both records carry

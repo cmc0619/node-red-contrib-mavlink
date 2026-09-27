@@ -1,7 +1,7 @@
 'use strict';
 
 const delivery = require('../lib/delivery');
-const { executeFanout, parseSysidList, isActive } = require('../lib/fanout');
+const { executeFanout, parseSysidList, isActive, reportAggregate } = require('../lib/fanout');
 const { isBlank, valueFrom } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
 const { REPOSITION_FLAG_CHANGE_MODE } = require('../lib/move/reposition');
@@ -110,11 +110,6 @@ module.exports = function registerMavlinkFormation(RED) {
           return;
         }
 
-        if (aggregate.success) {
-          delivery.applyActionStatus(node, 'ok', `${aggregate.count} positioned`);
-        } else {
-          delivery.applyActionStatus(node, 'error', aggregate.result);
-        }
         // Which vehicle actually anchored the pattern. Present on every
         // leader-anchored run, not only a promoted one, so a flow reads one
         // field rather than inferring a substitution from its absence. Copied
@@ -123,10 +118,7 @@ module.exports = function registerMavlinkFormation(RED) {
         const record = leaderSysid === undefined
           ? aggregate
           : { ...aggregate, leader: leaderSysid };
-        send(record.continue
-          ? [{ payload: record }, record]
-          : [null, record]);
-        done();
+        reportAggregate(node, send, done, record, config.delivery);
       } catch (err) {
         delivery.failInput(node, send, err, done);
       }

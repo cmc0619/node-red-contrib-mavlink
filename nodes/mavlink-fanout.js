@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { valueFrom, isBlank } = require('../lib/addressing/resolve');
-const { executeFanout, parseSysidList } = require('../lib/fanout');
+const { executeFanout, parseSysidList, reportAggregate } = require('../lib/fanout');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -85,33 +85,7 @@ module.exports = function registerMavlinkFanout(RED) {
           return;
         }
 
-        applyAggregateStatus(node, aggregate, effectiveDelivery);
-        // Output 1 always carries the aggregate status record at the message
-        // root. Output 0 is tier-selected (§5): on Build delivery it carries
-        // the product — one message per member, ready for mavlink-out —
-        // matching every other Build tier (§9 "Build's output goes to
-        // mavlink-out"); on the wire tiers it is the continue trigger
-        // wrapping the aggregate (§9). Either arm holds output 0 back (null)
-        // when the run did not fully succeed.
-        let output0 = null;
-        switch (effectiveDelivery) {
-          case 'build':
-            if (aggregate.result === 'succeeded') {
-              // Sequential build: one message per member. Broadcast build: the
-              // single target_system=0 packet (aggregate.message).
-              output0 = aggregate.message
-                ? [{ payload: aggregate.message }]
-                : aggregate.members.map((member) => ({ payload: member.message }));
-            }
-            break;
-          case 'send':
-          case 'confirm':
-            if (aggregate.continue) output0 = { payload: aggregate };
-            break;
-          default: break; // This space intentionally left blank (§5)
-        }
-        send([output0, aggregate]);
-        done();
+        reportAggregate(node, send, done, aggregate, effectiveDelivery);
       } catch (err) {
         delivery.failInput(node, send, err, done);
       }
@@ -175,49 +149,6 @@ function configMembersFor(config, opts) {
     member.north !== undefined || member.east !== undefined
     || member.up !== undefined || member.patch !== undefined);
   return patched ? config.members : undefined;
-}
-
-/**
- * A filter matching zero vehicles is the correct answer, not a fault:
- * the run reports quietly — grey badge, no done(err) — while output 1 still
- * carries the empty aggregate with success:false, so nothing downstream sees
- * a phantom success (§2). An empty explicit list or an empty 'all' stays
- * loud: the operator named vehicles (or expected a fleet) and reached none.
- *
- * @param {object} aggregate
- * @returns {boolean}
- */
-function quietEmpty(aggregate) {
-  return aggregate.result === 'empty' && aggregate.selection === 'filter';
-}
-
-function applyAggregateStatus(node, aggregate, tier) {
-  if (aggregate.success) {
-    // A fully successful run badges by tier (§5): Build previews the fan-out
-    // — every member message constructed, none sent — so it wears the yellow
-    // preview badge (§6), the same as every other action node's Build
-    // (mavlink-command, mavlink-mission). The aggregate result is 'succeeded'
-    // either way (all members built), so the tier is the signal, not the
-    // result. The wire tiers wear the green success badge.
-    switch (tier) {
-      case 'build':
-        delivery.applyActionStatus(node, 'preview', `${aggregate.count} preview`);
-        break;
-      case 'send':
-      case 'confirm':
-        delivery.applyActionStatus(node, 'ok', `${aggregate.count} succeeded`);
-        break;
-      default: break; // This space intentionally left blank (§5)
-    }
-    return;
-  }
-  if (quietEmpty(aggregate)) {
-    // Not a §6 action situation: neither an error nor a success — grey ring,
-    // matching the palette's other idle/none badges.
-    node.status({ fill: 'grey', shape: 'ring', text: '0 matched' });
-    return;
-  }
-  delivery.applyActionStatus(node, 'error', aggregate.result);
 }
 
 /**

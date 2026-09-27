@@ -466,6 +466,36 @@ test('formation builds COMMAND_INT with per-member degE7 coords (§9)', async ()
   }
 });
 
+test('Build previews: a yellow badge, nothing sent, one built message per member on output 0 (R36)', async () => {
+  const connection = connectionStub([peer(1), peer(2)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-formation')(RED);
+  const node = new (RED.nodes.types['mavlink-formation'])({
+    connection: 'conn',
+    shape: 'line',
+    spacing: 10,
+    sysids: '1,2',
+    anchorMode: 'fixed',
+    lat: ANCHOR.lat,
+    lon: ANCHOR.lon,
+    alt: ANCHOR.alt,
+    headingDeg: 0,
+    pitchDeg: 0,
+    delivery: 'build',
+    intervalMs: 0,
+  });
+  let sent;
+
+  await emitInput(node, { payload: {} }, (m) => { sent = m; });
+
+  assert.equal(connection.sends.length, 0, 'Build sends nothing');
+  assert.equal(node._status.fill, 'yellow', 'a preview, not a green "positioned"');
+  assert.ok(Array.isArray(sent[0]), 'output 0 is the product batch for mavlink-out');
+  assert.deepEqual(sent[0].map((m) => m.payload.fields.target_system), [1, 2]);
+  assert.equal(sent[0][0].payload.name, 'COMMAND_INT');
+  assert.equal(sent[1].result, 'succeeded');
+});
+
 test('close aborts an in-flight formation run and waits for it to unwind', async () => {
   // Same close discipline as mavlink-fanout: a 60 s inter-member interval
   // parks the member loop in the pause, so close is guaranteed to land
@@ -638,7 +668,8 @@ function redStub(nodesById) {
         Object.setPrototypeOf(node, EventEmitter.prototype);
         EventEmitter.call(node);
         node.id = config.id || 'node';
-        node.status = () => {};
+        node._status = null;
+        node.status = (status) => { node._status = status; };
         node.error = () => {};
       },
       registerType(name, ctor) {
