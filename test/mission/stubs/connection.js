@@ -15,6 +15,9 @@
  * real SubscriptionRegistry filter semantics (message/sysid/compid, undefined
  * matches all).
  */
+/** The station the stub's replies are addressed to by default. */
+const SOURCE_IDS = { sysid: 255, compid: 190 };
+
 class StubConnection {
   constructor() {
     this._subs = [];
@@ -44,16 +47,14 @@ class StubConnection {
   }
 
   /**
-   * Mirrors the real Connection's ack-attribution accessor. `null` (the
-   * default, matching a disabled/unresolvable connection) means "no gate" —
-   * the transfer accepts any reply, same as before sourceIds existed. Tests
-   * exercising address-attribution set `stub._sourceIds` directly.
+   * Mirrors the real Connection's ack-attribution accessor: GCS 255/190
+   * unless a test sets `stub._sourceIds` to exercise address attribution.
    *
    * @param {string} [_identityId]
-   * @returns {{sysid: number, compid: number}|null}
+   * @returns {{sysid: number, compid: number}}
    */
   resolveSourceIds(_identityId) {
-    return this._sourceIds || null;
+    return this._sourceIds || SOURCE_IDS;
   }
 
   /**
@@ -85,7 +86,14 @@ class StubConnection {
    *   SubscriptionRegistry.dispatch)
    */
   inject(decoded) {
-    const d = { sysid: 1, compid: 1, ...decoded };
+    // A reply the script leaves unaddressed decodes as the wire's zero-filled
+    // target (0/0, "unaddressed"), which the attribution gate passes.
+    const d = {
+      sysid: 1,
+      compid: 1,
+      ...decoded,
+      fields: { target_system: 0, target_component: 0, ...decoded.fields },
+    };
     let delivered = 0;
     for (const { filter, handler } of this._subs.slice()) {
       if (filter.message !== undefined && filter.message !== d.name) continue;
@@ -167,4 +175,4 @@ function fakeDeps(clock) {
   };
 }
 
-module.exports = { StubConnection, FakeTimers, fakeDeps };
+module.exports = { StubConnection, FakeTimers, fakeDeps, SOURCE_IDS };

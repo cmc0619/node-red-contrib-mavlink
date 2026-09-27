@@ -83,7 +83,7 @@ test('Param set confirms only by matching PARAM_VALUE echo, decoded through the 
     sysid: 1,
     compid: 1,
     fields: {
-      param_id: 'MIS_TAKEOFF_ALT\u0000\u0000',
+      param_id: 'MIS_TAKEOFF_ALT',
       param_type: 6,
       param_value: paramValueToWire(42, 6),
     },
