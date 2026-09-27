@@ -5,7 +5,6 @@ const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata/bundled');
 const { catalogEnumsFromBundle } = require('../../lib/metadata/enums-list');
-const { DEFAULT_ENUM_NAMES } = require('../../lib/metadata/enums-list');
 
 const FIXTURE_BUNDLE = {
   dialect: 'fixture',
@@ -38,26 +37,11 @@ const FIXTURE_BUNDLE = {
   },
 };
 
-test('DEFAULT_ENUM_NAMES includes the editor pulldown common set', () => {
-  assert.deepEqual(DEFAULT_ENUM_NAMES, [
-    'MAV_TYPE',
-    'MAV_AUTOPILOT',
-    'MAV_COMPONENT',
-    'MAV_STATE',
-    'MAV_MODE',
-    'SPEED_TYPE',
-    'CAMERA_MODE',
-    'MAV_MOUNT_MODE',
-    'ORBIT_YAW_BEHAVIOUR',
-    'MAV_DO_REPOSITION_FLAGS',
-  ]);
-});
-
-test('catalogEnumsFromBundle returns default enums with name/value labels', () => {
-  const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture', '');
+test('catalogEnumsFromBundle returns exactly the requested enums, with name/value labels', () => {
+  const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture', 'MAV_TYPE,MAV_COMPONENT');
 
   assert.equal(catalog.dialect, 'fixture');
-  assert.deepEqual(Object.keys(catalog.enums), ['MAV_TYPE', 'MAV_COMPONENT']);
+  assert.deepEqual(Object.keys(catalog.enums), ['MAV_TYPE', 'MAV_COMPONENT'], 'CUSTOM_ENUM was not asked for');
   assert.deepEqual(catalog.enums.MAV_TYPE[1], {
     name: 'MAV_TYPE_GCS',
     value: 6,
@@ -69,18 +53,6 @@ test('catalogEnumsFromBundle returns default enums with name/value labels', () =
     value: 1,
     label: 'MAV_COMP_ID_AUTOPILOT1 (1)',
     description: 'Autopilot.',
-  });
-});
-
-test('catalogEnumsFromBundle adds requested names to the default set', () => {
-  const catalog = catalogEnumsFromBundle(FIXTURE_BUNDLE, 'fixture', 'CUSTOM_ENUM');
-
-  assert.ok(catalog.enums.MAV_TYPE, 'default enum remains present');
-  assert.deepEqual(catalog.enums.CUSTOM_ENUM[0], {
-    name: 'CUSTOM_ENUM_ONE',
-    value: 1,
-    label: 'CUSTOM_ENUM_ONE (1)',
-    description: 'First bit.',
   });
 });
 
@@ -111,16 +83,6 @@ test('catalogEnumsFromBundle preserves values outside MAX_SAFE_INTEGER as string
     {
       dialect: 'fixture',
       enums: {
-        MAV_TYPE: { entries: [] },
-        MAV_AUTOPILOT: { entries: [] },
-        MAV_COMPONENT: { entries: [] },
-        MAV_STATE: { entries: [] },
-        MAV_MODE: { entries: [] },
-        SPEED_TYPE: { entries: [] },
-        CAMERA_MODE: { entries: [] },
-        MAV_MOUNT_MODE: { entries: [] },
-        ORBIT_YAW_BEHAVIOUR: { entries: [] },
-        MAV_DO_REPOSITION_FLAGS: { entries: [] },
         HUGE_ENUM: { entries: [{ name: 'HUGE_ENUM_X', value: huge, description: '' }] },
       },
     },
