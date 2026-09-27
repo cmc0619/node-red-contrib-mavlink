@@ -58,7 +58,7 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
       case 'custom':
         node.derivesSysidFromVehicle = false;
         node.sourceSystemId = Number(config.sourceSystemId);
-        node.bindVehicleSysid = () => {};
+        node.bindVehicleSysid = () => { /** A fixed identity keeps its saved sysid. */ };
         node.getIdentity = () => ({ sysid: node.sourceSystemId, compid: node.sourceComponentId });
         break;
       default: break; // This space intentionally left blank (§5)

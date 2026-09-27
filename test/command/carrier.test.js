@@ -332,5 +332,5 @@ test('buildCarrier dispatches the configured carrier; a non-member builds nothin
   assert.equal(buildCarrier('long', 22, target, params, { get coordKinds() { asked += 1; return null; } }).name,
     'COMMAND_LONG');
   assert.equal(asked, 1, 'the LONG carrier never asks for the dialect');
-  assert.equal(buildCarrier('', 22, target, params), undefined);
+  assert.equal(typeof buildCarrier('', 22, target, params), 'undefined');
 });
