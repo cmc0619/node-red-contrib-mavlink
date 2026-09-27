@@ -339,7 +339,7 @@ const PROFILE = {
     restart: 'none',
     waitMs: 45000,
     expect: 'paramEncoding override matching + crossed timeout',
-    // Matching sets finish in ~1 s; crossed AP bytewise waits the 5 s echo timeout.
+    // Matching sets finish in ~1 s; crossed AP bytewise waits out its echo retries.
     injectGapMs: 8000,
     notes:
       'matching overrides (PX4 bytewise / AP c-cast) succeed; crossed AP bytewise must echo-timeout (proves override rung)',
@@ -1088,8 +1088,8 @@ function verdictFrom(profile, summary, log) {
     const crossedTimedOut = summary.debug.some(
       (d) =>
         /ap wrong status/i.test(d.tag) &&
-        d.result === 'timed-out' &&
-        /echo timeout/i.test(d.detail || d.excerpt || '')
+        d.result === 'failed' &&
+        /stalled at param/i.test(d.excerpt || '')
     );
     if (apSet && px4Set && crossedTimedOut) {
       return {
@@ -1271,16 +1271,17 @@ function verdictFrom(profile, summary, log) {
     };
   }
   if (/WPNAV_SPEED echo timeout|unknown .*echo timeout/i.test(expect)) {
-    // Negative path: timed-out is the success — but only after a known-param
-    // confirm proves AP-1 is reachable (dead peer would also echo-timeout).
+    // Negative path: an echo that never comes is the success — but only after
+    // a known-param confirm proves AP-1 is reachable (a dead peer would also
+    // run out of echo retries).
     const knownOk = summary.debug.some(
       (d) => /known set status/i.test(d.tag) && d.result === 'succeeded'
     );
     const echoTimedOut = summary.debug.some(
       (d) =>
         /unknown set status/i.test(d.tag) &&
-        d.result === 'timed-out' &&
-        /echo timeout/i.test(d.detail || d.excerpt || '')
+        d.result === 'failed' &&
+        /stalled at param/i.test(d.excerpt || '')
     );
     if (knownOk && echoTimedOut) {
       return {
