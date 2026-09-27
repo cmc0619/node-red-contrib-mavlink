@@ -537,6 +537,31 @@ test('mavlink-move reposition confirm sends to a broadcast target — the editor
   assert.equal(conn.sends[0].message.fields.target_system, 0);
 });
 
+test('mavlink-move relative Turn confirm settles unconfirmed on ack silence without re-sending (R29)', async () => {
+  // A relative heading is a delta: a re-send after a lost ack turns the
+  // vehicle again. The absolute control keeps its silence re-sends.
+  const run = async (relative) => {
+    const conn = repositionConn();
+    const RED = redStub({ conn });
+    require('../../nodes/mavlink-move')(RED);
+    const Node = RED.nodes.types['mavlink-move'];
+    const node = new Node({
+      action: 'turn', delivery: 'confirm', connection: 'conn', heading: 30, relative,
+      targetSystem: 1, targetComponent: 1, timeoutMs: 10, maxRetries: 2,
+    });
+    const out = await new Promise((resolve) => {
+      node.emit('input', { payload: {} }, resolve, () => {});
+    });
+    node.emit('close', () => {});
+    return { out, sends: conn.sends.length };
+  };
+  const relative = await run(true);
+  assert.equal(relative.sends, 1, 'the delta went out once');
+  assert.equal(relative.out[1].result, 'unconfirmed');
+  const absolute = await run(false);
+  assert.equal(absolute.sends, 3, 'an absolute heading re-sends on silence');
+});
+
 
 
 

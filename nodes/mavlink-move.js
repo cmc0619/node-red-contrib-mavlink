@@ -68,13 +68,13 @@ module.exports = function registerMavlinkMove(RED) {
     // IN_PROGRESS. settleAck reports it in Command's words: `accepted`,
     // `unconfirmed` on silence, and every other terminal — COMMAND_INT_ONLY
     // (8) and UNSUPPORTED_MAV_FRAME (9) included — by its MAV_RESULT name.
-    async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
+    async function confirmCommand(label, message, target, identityId, connectionNode, send, done, maxRetries) {
       const outcome = await awaitAckWithBadge(node, waiterSlot, connectionNode, message, label, {
         target,
         identityId,
         // The editor owns the defaults and the number rings (RED.mavlink.ackDefaults).
         timeoutMs: Number(config.timeoutMs),
-        maxRetries: Number(config.maxRetries),
+        maxRetries,
       });
       settleAck(node, send, done, outcome, { label, fields: { message } });
     }
@@ -86,16 +86,18 @@ module.exports = function registerMavlinkMove(RED) {
      * vocabulary across all of them, not one per action.
      *
      * @param {string} label  the action word, used in status and error text
+     * @param {number} maxRetries  the ack re-send budget; 0 where a re-send
+     *   is not the same command
      * @returns {boolean} true when the async confirm flow has taken ownership
      *   of `done`; the caller must return without calling it
      */
-    function deliverCommand(label, message, target, identityId, connectionNode, send, done) {
+    function deliverCommand(label, message, target, identityId, connectionNode, send, done, maxRetries) {
       switch (delivery) {
         case 'build':
           completeBuild(node, send, message, 'move', { message });
           return false;
         case 'confirm':
-          confirmCommand(label, message, target, identityId, connectionNode, send, done)
+          confirmCommand(label, message, target, identityId, connectionNode, send, done, maxRetries)
             .catch((err) => failInput(node, send, err, done));
           return true;
         case 'send':
@@ -287,12 +289,17 @@ module.exports = function registerMavlinkMove(RED) {
               heading: valueFrom(payload, config, 'heading'),
               rate: valueFrom(payload, config, 'turnRate'),
               direction: valueFrom(payload, config, 'direction'),
-              // Relative changes what the heading number means, so it is a
-              // strict boolean opt-in like changeMode — never a truthy token.
               relative,
               target,
             });
-            if (deliverCommand(action, message, target, identityId, connectionNode, send, done)) return;
+            /**
+             * A relative heading is a delta: a re-send after a lost ack turns
+             * the vehicle again (measured 60.2° for +30°, #303). It gets no
+             * re-send budget and settles `unconfirmed` on silence, read with
+             * the same truthiness buildTurnMessage packs into param4.
+             */
+            const maxRetries = relative ? 0 : Number(config.maxRetries);
+            if (deliverCommand(action, message, target, identityId, connectionNode, send, done, maxRetries)) return;
             done();
             return;
           }
@@ -304,7 +311,7 @@ module.exports = function registerMavlinkMove(RED) {
               speedType: valueFrom(payload, config, 'speedType'),
               target,
             });
-            if (deliverCommand(action, message, target, identityId, connectionNode, send, done)) return;
+            if (deliverCommand(action, message, target, identityId, connectionNode, send, done, Number(config.maxRetries))) return;
             done();
             return;
           }
@@ -340,7 +347,7 @@ module.exports = function registerMavlinkMove(RED) {
                 });
                 // Async on the confirm tier: the ack arrives later and the confirm
                 // flow owns done() from here.
-                if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done)) return;
+                if (deliverCommand('reposition', message, target, identityId, connectionNode, send, done, Number(config.maxRetries))) return;
                 done();
                 return;
               }
