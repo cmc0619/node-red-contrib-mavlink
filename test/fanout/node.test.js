@@ -491,8 +491,8 @@ test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', as
   // Trusted-msg garbage, but the failure shape matters: with nothing in
   // flight there is nothing to race, and Promise.race([]) never settles — a
   // run that hangs forever is not GIGO, it is a broken promise. The launch
-  // loop's liveness guard degenerates 0 (and negatives) to strict
-  // one-at-a-time; the value is still never repaired.
+  // loop only waits while something is in flight, so 0 caps nothing and
+  // every member launches; the value is never repaired.
   const connection = connectionStub([peer(1), peer(2)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
@@ -502,7 +502,7 @@ test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', as
 
   await emitInput(
     node,
-    { payload: { message: builtCommand(), options: { concurrency: 0 } } },
+    { payload: { message: builtCommand(), concurrency: 0 } },
     (messages) => { sent = messages; }
   );
 
