@@ -1576,6 +1576,33 @@ test('mavlink-move: an all-blank Attitude reds — every ignore bit set commands
   );
 });
 
+test('mavlink-move: Attitude needs thrust except on a Plane, and a whole rate trio on Copter (R26)', () => {
+  const lookup = { ...FAMILY_LOOKUP, 'conn-px4': { vehicle: 'veh-px4' }, 'veh-px4': { firmware: 'px4', dialect: 'common' } };
+  const { thrust, action } = loadNodeDefaults('mavlink-move', lookup);
+  const thrustOn = (connection, v) => thrust.validate.call(
+    { id: 'm1', action: 'attitude', delivery: 'send', connection }, v, {}
+  );
+  for (const connection of ['conn-copter', 'conn-rover', 'conn-sub', 'conn-px4', 'conn-unknown']) {
+    assert.match(String(thrustOn(connection, '')), /required for Attitude/, `blank thrust reds on ${connection}`);
+  }
+  assert.equal(thrustOn('conn-plane', ''), true, 'ArduPlane accepts attitude without thrust');
+  assert.equal(thrustOn('conn-copter', '0.5'), true);
+  assert.equal(
+    thrust.validate.call({ id: 'm1', action: 'steer', connection: 'conn-copter' }, '', {}),
+    true,
+    'thrust is an Attitude field'
+  );
+
+  const attitude = (connection, over) => action.validate.call(
+    { id: 'm1', action: 'attitude', delivery: 'send', connection, thrust: '0.5', ...over }, 'attitude', {}
+  );
+  assert.match(String(attitude('conn-copter', { yawRate: '30' })), /partial body-rate/, 'one rate reds on Copter');
+  assert.match(String(attitude('conn-copter', { rollRate: '1', pitchRate: '2' })), /partial body-rate/);
+  assert.equal(attitude('conn-copter', { rollRate: '1', pitchRate: '2', yawRate: '3' }), true, 'all three');
+  assert.equal(attitude('conn-copter', { roll: '1', pitch: '2', yaw: '3' }), true, 'no rates at all');
+  assert.equal(attitude('conn-sub', { yawRate: '30' }), true, 'the trio rule is Copter-only');
+});
+
 test('mavlink-move: the thrust stick reds 0 and below on Copter, Sub and PX4, where neutral is 0.5 (R12)', () => {
   // ArduCopter, ArduSub and PX4 read z as 0..1000 with neutral 500, not
   // -1000..1000 neutral 0 (source-read). The runtime keeps the dialect's

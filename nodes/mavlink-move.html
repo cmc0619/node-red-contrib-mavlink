@@ -425,13 +425,24 @@
           // Manual needs no equivalent: every one of its four sticks is
           // required outright (stickValidator), so there is no all-blank form
           // left to catch: an all-blank Manual is refused outright.
+          //
+          // A partial body-rate set is the Copter half of the same silence:
+          // ArduCopter's handler holds position unless all three rates or
+          // none are commanded (GCS_MAVLink_Copter.cpp, source-read).
           if (v === 'attitude') {
-            if (filled(['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust'])) {
-              return true;
+            if (!filled(['roll', 'pitch', 'yaw', 'rollRate', 'pitchRate', 'yawRate', 'thrust'])) {
+              return 'Attitude needs at least one field filled — an angle, a body rate, or '
+                + 'thrust. All-blank sets every ignore bit, so the vehicle is commanded nothing '
+                + 'and no ack comes back to tell you';
             }
-            return 'Attitude needs at least one field filled — an angle, a body rate, or '
-              + 'thrust. All-blank sets every ignore bit, so the vehicle is commanded nothing '
-              + 'and no ack comes back to tell you';
+            const rates = ['rollRate', 'pitchRate', 'yawRate'];
+            const gate = moveFamilyGate(this);
+            if (gate.gated && gate.family === 'copter' && filled(rates)
+              && !rates.every((n) => filled([n]))) {
+              return 'ArduCopter holds position on a partial body-rate set — fill all three '
+                + 'rates, or none, and no ack comes back to tell you';
+            }
+            return true;
           }
           if (v !== 'steer') return true;
           const hasPos = filled(['north', 'east', 'up']);
@@ -580,10 +591,22 @@
       // Normalised 0..1. Out of range is the vehicle's to judge, but a value
       // outside it is almost certainly a percent typed by mistake, and the
       // editor is where that gets caught rather than flown.
+      //
+      // Required on Attitude except on a Plane: ArduCopter holds position on
+      // THROTTLE_IGNORE, Rover and Sub drop the setpoint, and PX4 publishes
+      // nothing without thrust (it refuses Offboard, and losing thrust
+      // mid-stream failsafes to RTL, measured) — all while the node reports
+      // `sent` or `streaming`. ArduPlane alone accepts attitude without it.
       thrust: {
         value: '',
         validate(v, _opt) {
-          if (RED.mavlink.isBlank(v)) return true;
+          if (RED.mavlink.isBlank(v)) {
+            if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'steer') !== 'attitude') return true;
+            const gate = moveFamilyGate(this);
+            return (gate.gated && gate.family === 'plane')
+              || 'is required for Attitude — only ArduPlane acts on an attitude without '
+                + 'thrust; every other stack holds or drops it, with no ack to tell you';
+          }
           const n = Number(v);
           return (Number.isFinite(n) && n >= 0 && n <= 1)
             || 'must be 0..1 (normalised thrust, not a percentage)';
@@ -1381,7 +1404,7 @@
   <p>On a <b>Plane</b> profile Steer collapses to a single field. ArduPlane's local-setpoint handler returns immediately on any frame that is not <code>LOCAL_OFFSET_NED</code> and then reads only the vertical component, so <i>World</i> and <i>Body</i> are withheld from the Reference list — and with <i>Offset from here</i> selected, <b>Metres up</b> is the whole form: a guided altitude change, which is exactly what QGroundControl offers a fixed wing beside goto. A node that already had World or Body saved keeps it and reds with the reason rather than being rewritten, so the form stays whatever the Reference actually says.</p>
   <p><b>Turn</b> sends <code>MAV_CMD_CONDITION_YAW</code> — and on ArduPilot it is the <i>only</i> working yaw. Both of the yaw fields the position carriers already carry are measured inert on ArduCopter: <code>DO_REPOSITION</code>'s heading param is ignored outright, and a yaw-only setpoint stream holds heading instead of turning. ArduPilot's own test suite yaws in guided through this command. <b>Heading</b> is 0-360 degrees, absolute (0 = north) unless <b>Relative</b> (Advanced) is ticked, which makes it an offset from the current heading (never re-sent on ack silence, see Send &amp; confirm); the range is enforced here because the vehicle answers <code>FAILED</code> outside it. <b>Direction</b> defaults to the shortest way round, which is the dialect's own meaning for 0. Blank <b>Turn rate</b> (Advanced) leaves the vehicle's default. PX4 has no handler for this command, so the action refuses on a PX4 profile and points you at Steer's yaw field, which PX4 does honour.</p>
   <p><b>Speed</b> sends <code>MAV_CMD_DO_CHANGE_SPEED</code>, the guided speed change QGroundControl offers beside goto. <b>Speed type</b> picks which speed is being set — ground speed means something on every vehicle, airspeed is a fixed-wing concept, and climb/descent set the vertical rates. Blank <b>Speed</b> or <b>Throttle</b> (Advanced) sends the spec's -1 &ldquo;no change&rdquo;; -2 is the spec's &ldquo;return to default&rdquo; and you reach it by typing it. Both stacks and every moving vehicle family accept this command, so it asks no firmware question.</p>
-  <p><b>Attitude</b> sends <code>SET_ATTITUDE_TARGET</code> — MAVSDK's offboard attitude path. You enter <b>Roll</b>, <b>Pitch</b> and <b>Yaw</b> in degrees and the node builds the quaternion the wire wants; you never type <code>q[4]</code>. Presence drives the mask exactly as it does on Steer: any angle commands the whole attitude (the wire has one ignore bit for all three), each body rate clears only its own bit, and <b>Thrust</b> is normalised 0..1 where an explicit 0 is a commanded zero rather than a blank. On <b>Stream</b> delivery the stream ends by <i>going quiet</i> — there is no braking packet, because zero thrust is a descent rather than a stop, and both stacks watch for setpoint silence themselves.</p>
+  <p><b>Attitude</b> sends <code>SET_ATTITUDE_TARGET</code> — MAVSDK's offboard attitude path. You enter <b>Roll</b>, <b>Pitch</b> and <b>Yaw</b> in degrees and the node builds the quaternion the wire wants; you never type <code>q[4]</code>. Presence drives the mask exactly as it does on Steer: any angle commands the whole attitude (the wire has one ignore bit for all three), each body rate clears only its own bit, and <b>Thrust</b> is normalised 0..1 where an explicit 0 is a commanded zero rather than a blank. Thrust is required except on an ArduPlane profile: ArduCopter holds position, Rover and Sub drop the setpoint, and PX4 will not enter or stay in Offboard without it. On ArduCopter the three body rates go together — all or none — because a partial set also makes it hold position. On <b>Stream</b> delivery the stream ends by <i>going quiet</i> — there is no braking packet, because zero thrust is a descent rather than a stop, and both stacks watch for setpoint silence themselves.</p>
   <p><b>Manual</b> sends <code>MANUAL_CONTROL</code>, the joystick message: QGroundControl's stick path, how ArduSub is flown, and one of the two ways an Antenna Tracker can be pointed. It is <i>not</i> how a Blimp moves — ArduPilot's Blimp never overrides the stick handler, whose base implementation is empty, so it decodes the message, counts it as a ground-station heartbeat, and discards it. Sticks are entered <b>-1..1</b> and scale to the wire's ±1000 once, at encode. Two things differ from every other action. It addresses a <b>system only</b> — the message has no target component, so that row is hidden. And <b>all four sticks are required</b>: a blank is refused rather than centred or sent as "axis invalid", because a blank box in a saved flow is a field nobody filled, not a pilot's hand off the stick. Enter the value that means "not moving" on each axis — 0 for pitch, roll and yaw; on the thrust axis of an ArduCopter, ArduSub or PX4 vehicle that is <b>0.5</b>, since they read it as 0..1000 with neutral <i>500</i> — ArduCopter discards the whole frame below 0 and takes 0 as minimum throttle, a Sub's 0 is full reverse thrust, and PX4's 0 is minimum throttle (the dialog reds 0 and below there). <b>Buttons</b> are ticked, not typed: the wire field is a bitmask whose lowest bit is Button 1 (bit 0, per the dialect), composed for you — what each button <i>does</i> is the vehicle's own configuration (ArduSub's <code>BTNn_FUNCTION</code> parameters), which is why the boxes carry numbers and not names. Ceasing to transmit is a real stop here: ArduSub's GCS failsafe disarms when stick messages stop arriving.</p>
   <p>Action and delivery reshape the form: only the parameters for the selection are shown, and the Delivery options themselves follow the action — setpoints cannot confirm, so Send &amp; confirm is offered on the acked actions — Go to, Turn and Speed — only. Stream rate (setpoints per second, Hz) and TTL (ms) appear only for Stream delivery.</p>
   <p>Output 0 continues only on success, once per input, and the result word IS the outcome, one meaning per word: <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only). Output 1 carries the status record for every outcome.</p>
