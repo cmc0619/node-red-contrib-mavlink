@@ -31,6 +31,7 @@ const {
   defaultListFiles,
   defaultFetchFile,
   sha256,
+  SKIP_ROOTS,
 } = require('../lib/metadata/xml-catalog');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -45,13 +46,6 @@ const ACTIVE_FILE = path.join(SEED_DIR, 'active.json');
 function seedFileName(stamp) {
   return `mavlink-${stamp}.seed.gz`;
 }
-
-/** Dialects we do not ship as selectable roots (generator tests / meta). */
-const SKIP_ROOTS = new Set([
-  'all.xml',
-  'python_array_test.xml',
-  'test.xml',
-]);
 
 const MIT_NOTICE = `MAVLink message definition XML files
 Source: https://github.com/mavlink/mavlink
@@ -310,7 +304,6 @@ module.exports = {
   dialectKey,
   makeStamp,
   seedFileName,
-  SKIP_ROOTS,
   SEED_DIR,
   ACTIVE_FILE,
 };
