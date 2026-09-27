@@ -15,7 +15,7 @@ function machineOptions(stub, clock, extra = {}) {
     send: (message) => stub.send(message),
     subscribe: (filter, handler) => stub.subscribe(filter, handler),
     target: TARGET,
-    source: SOURCE,
+    sourceIds: SOURCE,
     onProgress: () => {
       // Fixture ignores progress unless a test overrides it.
     },

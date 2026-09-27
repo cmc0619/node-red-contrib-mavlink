@@ -432,26 +432,26 @@ function machineOptions(context) {
     case 'files|download':
       return {
         ...shared,
-        source: connNode.resolveSourceIds(identityId),
+        sourceIds: connNode.resolveSourceIds(identityId),
         path: payload.path === undefined ? config.path : payload.path,
       };
     case 'files|upload':
       return {
         ...shared,
-        source: connNode.resolveSourceIds(identityId),
+        sourceIds: connNode.resolveSourceIds(identityId),
         path: msg.path === undefined ? config.path : msg.path,
         data: payload,
       };
     case 'files|backup':
       return {
         ...shared,
-        source: connNode.resolveSourceIds(identityId),
+        sourceIds: connNode.resolveSourceIds(identityId),
         path: msg.path === undefined ? config.path : msg.path,
       };
     case 'files|restore':
       return {
         ...shared,
-        source: connNode.resolveSourceIds(identityId),
+        sourceIds: connNode.resolveSourceIds(identityId),
         path: msg.path === undefined ? config.path : msg.path,
         entries: payload,
       };
