@@ -103,6 +103,29 @@ test('build+list with no connection emits one retargeted message per member on o
   assert.match(node._status.text, /preview/);
 });
 
+test('build+list with a hidden saved Connection still builds every listed member (R19)', async () => {
+  // The Connection row hides on Build but keeps its saved value; the list is
+  // the directory, so a member the live link has not heard is still built.
+  const connection = connectionStub([peer(1)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    delivery: 'build',
+    selectionMode: 'list',
+    members: [{ sysid: 1 }, { sysid: 2 }, { sysid: 3 }],
+    executionMode: 'sequential',
+    intervalMs: 0,
+  });
+  let sent;
+  await emitInput(node, { payload: builtCommand() }, (messages) => { sent = messages; });
+
+  assert.equal(sent[1].count, 3);
+  assert.deepEqual(sent[0].map((m) => m.payload.fields.target_system), [1, 2, 3]);
+  assert.equal(connection.sends.length, 0, 'Build sends nothing');
+});
+
 test('a payload that is not a built message reports a failed aggregate', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });

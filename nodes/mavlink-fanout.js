@@ -33,22 +33,21 @@ module.exports = function registerMavlinkFanout(RED) {
         const listSelected = selectionMode === 'list' || opts.targets !== undefined;
 
         let effectiveConnection = connectionNode;
-        if (!connectionNode) {
-          switch (effectiveDelivery) {
-            case 'build':
-              // Build is the one tier that can run without a Connection (§5):
-              // with an explicit sysid list it replicates against a synthetic
-              // peer table instead of a live one (§6 Fan-out exception).
-              if (listSelected) {
-                effectiveConnection = buildListStub(
-                  opts.targets !== undefined
-                    ? opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
-                    : selection.sysids
-                );
-              }
-              break;
-            default: break; // This space intentionally left blank (§5)
-          }
+        switch (effectiveDelivery) {
+          case 'build':
+            // On Build an explicit sysid list is the directory (§6 Fan-out
+            // exception): it replicates against a synthetic peer table, never
+            // a live one — a Connection kept hidden from an earlier tier would
+            // drop every listed member it has not heard.
+            if (listSelected) {
+              effectiveConnection = buildListStub(
+                opts.targets !== undefined
+                  ? opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
+                  : selection.sysids
+              );
+            }
+            break;
+          default: break; // This space intentionally left blank (§5)
         }
 
         const aggregate = await inFlight.track((signal) => executeFanout({
@@ -231,8 +230,8 @@ function numberOption(opts, config, key) {
 
 /**
  * Synthetic connection used when delivery=build with an explicit sysid list
- * (config list selection or a runtime targets array) and no real Connection
- * configured. Peer table returns one active autopilot entry per listed sysid
+ * (config list selection or a runtime targets array), whether or not a
+ * Connection is saved. Peer table returns one active autopilot entry per listed sysid
  * so executeFanout can retarget messages without a live peer table (§6 Fan-out
  * exception).
  *
