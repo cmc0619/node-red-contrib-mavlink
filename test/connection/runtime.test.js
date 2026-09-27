@@ -196,6 +196,8 @@ test('a queued outbound envelope keeps its message and route after caller mutati
     transport.mode = 'udp';
     transport.open = async () => {};
     transport.close = (done) => done?.();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, endpoint, done) => {
       writes.push({ buffer, endpoint });
       releases.push(done);
@@ -353,6 +355,8 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
         const transport = new EventEmitter();
         transport.open = async () => {};
         transport.close = (cb) => cb?.();
+        transport.setDscp = () => false;
+        transport.broadcastDestination = () => null;
         transport.send = (_b, _e, cb) => cb?.();
         return transport;
       },
@@ -1318,6 +1322,8 @@ function hangingWriteBuild() {
     transport.mode = 'udp';
     transport.open = async () => {};
     transport.close = (cb) => cb?.();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       writeCallbacks.push(cb);
@@ -1514,6 +1520,8 @@ function reconnectBuild({
       }
       return Promise.resolve();
     };
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, endpoint, callback) => {
       transport.sent.push(buffer);
       callback();
@@ -1945,6 +1953,8 @@ function healthBuild() {
     transport.mode = 'udp';
     transport.open = async () => {};
     transport.close = (cb) => cb?.();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       cb();

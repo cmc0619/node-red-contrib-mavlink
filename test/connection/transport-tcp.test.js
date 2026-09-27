@@ -687,8 +687,8 @@ test('a TCP server reaches every connected vehicle without a broadcast mechanism
 
   return transport.open().then(() => {
     assert.equal(
-      typeof transport.broadcastDestination,
-      'undefined',
+      transport.broadcastDestination(),
+      null,
       'TCP offers no single reaches-everyone address, so the fan-out stays in charge'
     );
 

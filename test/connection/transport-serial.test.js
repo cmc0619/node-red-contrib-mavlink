@@ -91,6 +91,12 @@ test('the port stream stops at the shared 1 KiB highWaterMark, not serialport\'s
   assert.equal(port().options.highWaterMark, 1024);
 });
 
+test('serial marks nothing and offers no broadcast address — the bus is one endpoint', () => {
+  const transport = new SerialTransport({ path: '/dev/ttyUSB0', baudRate: 115200 }, { SerialPort: FakeSerialPort });
+  assert.equal(transport.setDscp(46, null), false);
+  assert.equal(transport.broadcastDestination(), null);
+});
+
 test('data events become peer-table-compatible message events', async () => {
   const { transport, opened, port } = openTransport();
   const messages = [];

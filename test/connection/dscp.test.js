@@ -44,6 +44,11 @@ class FakeTransport extends EventEmitter {
     return true;
   }
 
+  /** @returns {null} */
+  broadcastDestination() {
+    return null;
+  }
+
   /**
    * @param {Buffer} buffer
    * @param {{address: string, port: number}|null} endpoint
