@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { loadNodeDefaults } = require('./html-assert');
+const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-vehicle.html'),
@@ -22,6 +22,12 @@ test('dialect and dialectRevision are the persisted library picks', () => {
   assert.match(html, /dialectRevision:\s*\{\s*value:\s*'seed'/);
   assert.match(html, /id="node-config-input-dialect"/);
   assert.match(html, /id="node-config-input-dialectRevision"/);
+});
+
+test('a Firmware change that swaps the dialect runs the dialect change handler (revisions, components, CompIDs)', () => {
+  assertChangeHandlerContains(html, '$firmware', "$dialect.val(want).trigger('change')");
+  assertChangeHandlerContains(html, '$dialect', 'populateComponents()');
+  assertChangeHandlerContains(html, '$dialect', 'reloadCompIds()');
 });
 
 test('dialect and revision are the only dialect inputs the editor offers', () => {

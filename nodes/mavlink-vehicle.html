@@ -205,8 +205,7 @@
         $firmware.on('change', () => {
           const want = FIRMWARE_DIALECT[$firmware.val()];
           if (want && $dialect.find(`option[value="${want}"]`).length) {
-            $dialect.val(want);
-            populateRevisions('seed');
+            $dialect.val(want).trigger('change');
           }
           suggestParamDefsUrl();
         });
