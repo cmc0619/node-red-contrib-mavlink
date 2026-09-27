@@ -340,34 +340,41 @@ test('after demoteEndpoints only an arriving frame revives a component, never a 
   assert.equal(table.getComponent(1, 100).state, 'active', 'a component that never heartbeats revives on any frame');
 });
 
-test('a new endpoint on a known component surfaces the multi-endpoint condition', () => {
+test('a new endpoint on a known component surfaces the multi-endpoint condition and becomes the route', () => {
   const table = new PeerTable({ now: () => 0 });
   const added = [];
   const multi = [];
+  const changes = [];
   table.on('endpoint-added', (e) => added.push(e.endpoint.port));
   table.on('multi-endpoint', (e) => multi.push(e.endpoints.length));
+  table.on('primary-changed', (e) => changes.push([e.from, e.to]));
 
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1);
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP2);
 
   assert.deepEqual(added, [14550, 14551]);
   assert.deepEqual(multi, [2]);
-  // Primary stays the first-seen endpoint.
-  assert.deepEqual(table.endpointFor(1, 1), EP1);
+  assert.deepEqual(changes, [['10.0.0.5:14550', '10.0.0.5:14551']]);
+  assert.deepEqual(table.endpointFor(1, 1), EP2);
+
+  /** A frame on an already-known endpoint does not move the route back. */
+  table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1);
+  assert.deepEqual(table.endpointFor(1, 1), EP2);
+  assert.equal(changes.length, 1);
 });
 
 test('markPrimaryFailed rotates the primary and emits primary-changed', () => {
   const table = new PeerTable({ now: () => 0 });
   const changes = [];
-  table.on('primary-changed', (e) => changes.push(e.endpoint.port));
 
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1, 0);
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP2, 1);
+  table.on('primary-changed', (e) => changes.push(e.endpoint.port));
 
   const next = table.markPrimaryFailed(1, 1);
-  assert.deepEqual(next, EP2);
-  assert.deepEqual(changes, [14551]);
-  assert.deepEqual(table.endpointFor(1, 1), EP2);
+  assert.deepEqual(next, EP1);
+  assert.deepEqual(changes, [14550]);
+  assert.deepEqual(table.endpointFor(1, 1), EP1);
 });
 
 test('markPrimaryFailed clears a sole failed endpoint', () => {
@@ -386,8 +393,8 @@ test('markPrimaryFailed never reselects a previously failed endpoint', () => {
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP1, 0);
   table.update(heartbeat({ type: 2, autopilot: 3, base_mode: 0 }), EP2, 1);
 
-  assert.deepEqual(table.markPrimaryFailed(1, 1), EP2);
-  assert.equal(table.getComponent(1, 1).endpoints.has('10.0.0.5:14550'), false);
+  assert.deepEqual(table.markPrimaryFailed(1, 1), EP1);
+  assert.equal(table.getComponent(1, 1).endpoints.has('10.0.0.5:14551'), false);
   assert.equal(table.markPrimaryFailed(1, 1), null);
   assert.equal(table.endpointFor(1, 1), null);
   assert.equal(table.getComponent(1, 1).endpoints.size, 0);

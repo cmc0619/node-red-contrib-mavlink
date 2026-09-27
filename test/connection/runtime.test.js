@@ -581,6 +581,28 @@ test('keyless signed traffic stays unverified but settles ACKs and learns its en
   connection.close();
 });
 
+test('a vehicle that restarts on a new UDP source port is commanded there, not at the dead port (N1)', async () => {
+  /**
+   * Live finding (ArduCopter 4.7.0 SITL, `docker restart nrc-ap-5`): before
+   * the restart the vehicle sent from :53416; after it, from :37532. The table
+   * kept :53416 as primary, UDP gave no send failure to demote it, and every
+   * directed command went to the dead port until a redeploy.
+   */
+  const { connection, dg } = build();
+  await connection.start();
+  const hb = { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 4 };
+
+  dg.sockets[0].receive(frameBuffer({ name: 'HEARTBEAT', sysid: 5, compid: 1, fields: hb }), { address: '172.18.0.9', port: 53416 });
+  dg.sockets[0].receive(frameBuffer({ name: 'HEARTBEAT', sysid: 5, compid: 1, fields: hb }), { address: '172.18.0.9', port: 37532 });
+
+  connection.send({ name: 'COMMAND_LONG', fields: { target_system: 5, target_component: 1 } }, { band: BAND.CONTROL, target: { sysid: 5, compid: 1 } });
+  await delay(30);
+  const directed = dg.sockets[0].sent.filter((s) => JSON.parse(s.buffer.toString()).name === 'COMMAND_LONG');
+  assert.equal(directed.length, 1);
+  assert.equal(directed[0].port, 37532, 'the directed command follows the restarted vehicle');
+  connection.close();
+});
+
 test('a GCS-range sysid (>= 250) never becomes a broadcast destination', async () => {
   // 250–255 is the GCS range: a ground station heartbeat must not recruit
   // its address into endpointsForBroadcast, or every target_system = 0 frame
