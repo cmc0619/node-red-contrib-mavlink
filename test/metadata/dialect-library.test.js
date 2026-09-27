@@ -34,7 +34,7 @@ test('dialectLibrary appends dated snapshot versions without duplicating dialect
     baseDir: dir,
     now: () => new Date('2026-07-28T12:00:00.000Z'),
     resolveCommit: async () => 'abcdef0123456789abcdef0123456789abcdef01',
-    listFiles: async () => ['minimal.xml', 'icarous.xml', 'all.xml', 'test.xml'],
+    listFiles: () => Promise.resolve(['minimal.xml', 'icarous.xml', 'all.xml', 'test.xml']),
     fetchFile: async (_repo, _commit, file) => {
       if (file === 'minimal.xml') {
         return `<?xml version="1.0"?><mavlink><version>3</version><messages>

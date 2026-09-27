@@ -253,12 +253,12 @@ test('cancel after duplicate TEMPORARILY_REJECTED acks leaves no timer that can 
 test('a vehicle MAV_RESULT_CANCELLED settles as a terminal ack, not a local cancel (R9)', async () => {
   const conn = stubConn();
   const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
-  const p = waiter.start();
+  const pending = waiter.start();
   conn.injectAck({ command: 400, result: MAV_RESULT.CANCELLED }, 1, 1);
-  const outcome = await p;
+  const outcome = await pending;
   assert.equal(outcome.result, 'cancelled');
   assert.equal(outcome.resultCode, 6);
-  assert.equal(outcome.cancelled, undefined);
+  assert.equal(typeof outcome.cancelled, 'undefined');
   assert.equal(outcome.confirmedBy, 'ack');
 });
 
