@@ -945,9 +945,31 @@ test('mavlink-move: terrain altRef reds on a PX4 profile rather than being silen
   assert.match(html, /const ALTREF_OPTIONS = \[/, 'the altRef list is rebuilt per firmware');
   assert.match(
     html,
-    /return value === 'terrain' && Boolean\(firmware\) && firmware !== 'ardupilot';/,
-    'terrain alone is withheld, and only on a named non-ArduPilot firmware'
+    /case 'terrain': return Boolean\(firmware\) && firmware !== 'ardupilot';/,
+    'terrain is withheld only on a named non-ArduPilot firmware'
   );
+});
+
+test('mavlink-move: Above home reds on PX4 command tiers, where PX4 flies the altitude as MSL (R11)', () => {
+  const lookup = {
+    connPx4: { vehicle: 'vehPx4' },
+    vehPx4: { firmware: 'px4', dialect: 'common' },
+    connAp: { vehicle: 'vehAp' },
+    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
+  };
+  const { altRef } = loadNodeDefaults('mavlink-move', lookup);
+  const verdict = (over) => altRef.validate.call(
+    { id: 'm1', action: 'goto', altRef: 'home', ...over }, over.altRef || 'home', {}
+  );
+  for (const delivery of ['send', 'confirm']) {
+    assert.match(String(verdict({ delivery, connection: 'connPx4' })), /MSL/, `${delivery} on PX4 reds`);
+  }
+  assert.match(String(verdict({ delivery: 'build', vehicle: 'vehPx4', dialect: '__vehicle' })), /MSL/, 'Build on a PX4 profile reds');
+  assert.equal(verdict({ delivery: 'stream', connection: 'connPx4' }), true, 'Stream converts frame 6 on PX4');
+  assert.equal(verdict({ delivery: 'confirm', connection: 'connAp' }), true, 'ArduPilot honours the frame');
+  assert.equal(verdict({ altRef: 'msl', delivery: 'confirm', connection: 'connPx4' }), true, 'MSL is the escape');
+  assert.equal(verdict({ action: 'steer', delivery: 'send', connection: 'connPx4' }), true, 'a Go to field only');
+  assert.match(html, /case 'home': return firmware === 'px4' && delivery !== 'stream';/, 'the dropdown withholds it too');
 });
 
 test('mavlink-move: Offset cannot be set to the stream tier', () => {
