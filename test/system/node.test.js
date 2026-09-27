@@ -437,6 +437,23 @@ test('a restore of one section runs that section alone, on its own band', async 
   assert.equal(conn.sentNames().filter((name) => name === 'MISSION_COUNT').length, 0, 'no plan section runs');
 });
 
+test('a restore reads msg.payload.paramEncoding, as a backup does (SPS-17)', async () => {
+  // On the restore step the section payload is the parameters array, which
+  // carries no paramEncoding, so the override was silently ignored.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
+  conn.onSend(() => {});
+  const Node = loadNode(conn);
+  const node = new Node({
+    ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'auto', sections: ['parameters'], maxRetries: 0,
+  });
+  await runInput(node, {
+    payload: { paramEncoding: 'bytewise', parameters: [{ paramId: 'I', paramType: 6, value: 3 }] },
+  });
+  const set = conn.sent.find((s) => s.message.name === 'PARAM_SET');
+  assert.equal(set.message.fields.param_value, paramValueToWire(3, 6), 'bytewise, not the firmware\'s c-cast');
+});
+
 test('a segmented restore uses the plan type its section names', async () => {
   const conn = new StubConnection();
   const planTypes = [];

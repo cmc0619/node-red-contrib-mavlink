@@ -464,12 +464,12 @@ function machineOptions(context) {
     case 'parameters|backup':
       return {
         ...shared,
-        encoding: resolvedEncoding(config, payload, connNode, target, profile),
+        encoding: resolvedEncoding(config, msg.payload, connNode, target, profile),
       };
     case 'parameters|restore':
       return {
         ...shared,
-        encoding: resolvedEncoding(config, payload, connNode, target, profile),
+        encoding: resolvedEncoding(config, msg.payload, connNode, target, profile),
         params: payload,
       };
     case 'fence|backup':
