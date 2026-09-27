@@ -138,44 +138,39 @@ test('every payload node in an example resolves to a real recipe', () => {
   // A topic/verb pair with no recipe throws at build time, so the example is
   // dead on arrival — `examples/18` shipped three of them under a `release`
   // topic that never existed. `path` matters: gimbal/aim has separate legacy
-  // and manager recipes, so resolve exactly as buildPayloadMessage does.
-  const { recipeFor } = require('../../lib/payload');
+  // and manager recipes, so build exactly as the node does.
+  const { buildPayloadMessage } = require('../../lib/payload');
   for (const file of exampleFiles(EXAMPLES)) {
     const rel = path.relative(EXAMPLES, file);
     for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
       if (node.type !== 'mavlink-payload') continue;
-      assert.ok(
-        recipeFor(node.topic, node.verb, node.path),
+      assert.doesNotThrow(
+        () => buildPayloadMessage({ topic: node.topic, verb: node.verb, path: node.path, carrier: 'long', target: { sysid: 1, compid: 1 }, values: {} }),
         `${rel}: ${node.id} has no recipe for ${node.topic}/${node.verb}/${node.path || ''}`
       );
     }
   }
 });
 
-test('no example overrides a pinned recipe slot', () => {
-  // A pinned slot carries the only value that makes the command work — the
-  // legacy gimbal aim pins MAV_MOUNT_MODE_MAVLINK_TARGETING (2), because any
-  // other mode makes the requested pitch/roll/yaw a no-op. `slotValue` does not
-  // consult `pinned`, so a value in `values` silently wins: this shipped as
-  // modeValue 0 and emitted param7 = 0, aiming nowhere (Codex, #224).
-  const { recipeFor } = require('../../lib/payload');
+test('no example saves a value key its dialog does not render', () => {
+  // A pinned or driver-owned slot carries the recipe's own value (the legacy
+  // gimbal aim pins MAV_MOUNT_MODE_MAVLINK_TARGETING), and a key stem the
+  // runtime does not read (`actionValue` for `action`) is sent unset. The
+  // dialog renders exactly fieldMetaFromBundle's keys, so a saved key outside
+  // them is one the operator never set and the wire never reads (Codex, #224).
+  const { fieldMetaFromBundle } = require('../../lib/payload');
+  const bundle = require('../../lib/metadata/bundled').loadBundled('ardupilotmega');
   const offenders = [];
   for (const file of exampleFiles(EXAMPLES)) {
     const rel = path.relative(EXAMPLES, file);
     for (const node of nodesOf(JSON.parse(fs.readFileSync(file, 'utf8')))) {
       if (node.type !== 'mavlink-payload' || !node.values) continue;
-      const recipe = recipeFor(node.topic, node.verb, node.path);
-      for (const slot of (recipe && recipe.params) || []) {
-        if (!slot || !slot.pinned) continue;
-        for (const key of [slot.valueKey, slot.field].filter(Boolean)) {
-          if (key in node.values) {
-            offenders.push(
-              `${rel}: ${node.id} sets pinned "${key}" to ${node.values[key]} (recipe pins ${slot.default})`
-            );
-          }
-        }
+      const pathKey = node.topic === 'gimbal' && node.verb === 'aim' ? node.path : '';
+      const rendered = fieldMetaFromBundle(bundle, node.topic, node.verb, pathKey);
+      for (const key of Object.keys(node.values)) {
+        if (!(key in rendered)) offenders.push(`${rel}: ${node.id} saves "${key}"`);
       }
     }
   }
-  assert.deepEqual(offenders, [], `pinned slots must come from the recipe:\n${offenders.join('\n')}`);
+  assert.deepEqual(offenders, [], `saved keys must be rendered keys:\n${offenders.join('\n')}`);
 });

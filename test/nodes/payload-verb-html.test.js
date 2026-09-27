@@ -11,7 +11,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const { PAYLOAD_RECIPES } = require('../../lib/payload');
 const { assertChangeHandlerContains } = require('./html-assert');
 
 const payloadHtml = fs.readFileSync(
@@ -62,23 +61,18 @@ test('mavlink-fanout has no payload verb editor — it replicates built messages
   assert.doesNotMatch(fanoutHtml, /PAYLOAD_VERBS/, 'no payload verb table reference');
 });
 
-test('editor catalog names every lib/payload recipe verb under its own topic', () => {
+test('every verb the editor catalog offers builds a message (no dead catalog entry)', () => {
   // Catalog lives once in resources/mavlink-editor.js — pin it there, not in
   // each node's HTML (the HTML only calls refreshVerbOptions). Evaluate the
-  // table rather than grep for it: `set` and `operate` repeat across topics,
-  // so a text match on the verb alone cannot tell servo's from relay's.
-  const context = { RED: { mavlink: {} }, $: () => ({}) };
-  vm.runInNewContext(
-    fs.readFileSync(path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'), 'utf8'),
-    context
-  );
-  const catalog = context.RED.mavlink.PAYLOAD_VERBS;
-  for (const key of Object.keys(PAYLOAD_RECIPES)) {
-    const [topic, value] = key.split('|');
-    assert.ok(
-      (catalog[topic] || []).some((verb) => verb.value === value),
-      `editor catalog missing ${topic}/${value}`
-    );
+  // table rather than grep for it: `set` and `operate` repeat across topics.
+  // A topic/verb with no recipe craters in buildPayloadMessage.
+  const { buildPayloadMessage } = require('../../lib/payload');
+  for (const key of reachableRecipeKeys()) {
+    const [topic, verb, p] = key.split('|');
+    const built = buildPayloadMessage({
+      topic, verb, path: p, carrier: 'long', target: { sysid: 1, compid: 1 }, values: {},
+    });
+    assert.ok(built.message, `${key} builds`);
   }
 });
 

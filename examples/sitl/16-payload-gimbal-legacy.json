@@ -165,7 +165,6 @@
     "targetComponent": 1,
     "values": {
       "mode": 2,
-      "modeValue": 2,
       "stabilizeRoll": 0,
       "stabilizePitch": 0,
       "stabilizeYaw": 0
