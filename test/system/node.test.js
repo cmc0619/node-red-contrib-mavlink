@@ -140,18 +140,35 @@ test('download confirm emits a Buffer carrying the selected log id and closes th
     }
   });
   const Node = loadNode(conn);
-  const node = new Node({ ...BASE, operation: 'download', logId: 7 });
+  // The editor saves the number input as a string (SPS-11).
+  const node = new Node({ ...BASE, operation: 'download', logId: '7' });
   const { outputs, err } = await runInput(node, { payload: {}, filename: 'log.bin', topic: 'download' });
 
   assert.equal(err, undefined);
   const result = outputs.at(-1);
   assert.ok(Buffer.isBuffer(result[0].payload));
   assert.deepEqual(result[0].payload, Buffer.from('log'));
-  assert.equal(result[0].logId, 7);
+  assert.strictEqual(result[0].logId, 7, 'a number, as msg.payload.id gives one');
   assert.equal(result[0].filename, 'log.bin');
   assert.equal(result[0].topic, 'download');
   assert.equal(result[1].result, 'succeeded');
   assert.deepEqual(conn.sentNames(), ['LOG_REQUEST_DATA', 'LOG_REQUEST_END']);
+});
+
+test('a blank Log id with no msg.payload.id is not read as log 0', async () => {
+  const conn = new StubConnection();
+  conn.send = function send(message) {
+    this.sent.push({ message });
+    if (message.name === 'LOG_REQUEST_DATA' && !Number.isInteger(message.fields.id)) {
+      throw new Error('invalid packet');
+    }
+  };
+  const Node = loadNode(conn);
+  const node = new Node({ ...BASE, operation: 'download', logId: '' });
+  const { outputs } = await runInput(node, { payload: {} });
+
+  assert.equal(outputs.at(-1)[1].result, 'failed', 'the wire refuses the absent id (§14.56)');
+  assert.ok(Number.isNaN(conn.sent[0].message.fields.id), 'no id was invented');
 });
 
 test('payload id overrides the configured log id without changing target addressing', async () => {

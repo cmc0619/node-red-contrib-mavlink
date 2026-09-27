@@ -425,7 +425,13 @@ function machineOptions(context) {
     case 'logs|download':
       return {
         ...shared,
-        id: payload.id === undefined ? config.logId : payload.id,
+        /**
+         * The editor saves a number input as a string; parsing it is that
+         * serialization's plumbing (§4), so msg.logId is a number either way.
+         * A blank field parses to NaN, which the wire refuses at pack
+         * (§14.56) rather than reading as log 0.
+         */
+        id: payload.id === undefined ? Number.parseInt(config.logId, 10) : payload.id,
         size: payload.size,
       };
     case 'files|list':
