@@ -47,11 +47,14 @@ test('mavlink-system conditionally validates log id, FTP path, and parameter enc
   assert.equal(defaults.logId.validate.call({ service: 'logs', operation: 'download' }, 7, {}), true);
   assert.match(String(defaults.logId.validate.call({ service: 'logs', operation: 'download' }, 1.5, {})), /integer/);
   assert.equal(defaults.path.validate.call({ service: 'files' }, '', {}), true);
-  assert.equal(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(239), {}), true);
-  assert.match(String(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(240), {})), /239/);
+  assert.equal(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(238), {}), true);
+  assert.match(String(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(239), {})), /238/,
+    'both firmwares overwrite byte 239 with NUL');
+  assert.match(String(defaults.path.validate.call({ service: 'files' }, '\u00e9'.repeat(120), {})), /238/,
+    'the bound is UTF-8 bytes, not characters');
   assert.match(String(defaults.path.validate.call({ service: 'files' }, 'a\u0000b', {})), /NUL/);
-  assert.equal(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(239), {}), true);
-  assert.match(String(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(240), {})), /239/);
+  assert.equal(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(238), {}), true);
+  assert.match(String(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(239), {})), /238/);
   assert.equal(defaults.path.validate.call({ service: 'logs' }, 'a'.repeat(300), {}), true);
   assert.equal(defaults.paramEncoding.validate.call({ service: 'logs' }, 'invalid', {}), true);
   assert.equal(defaults.paramEncoding.validate.call({ service: 'backup', connection: 'connection' }, 'auto', {}), true);
@@ -68,7 +71,7 @@ test('mavlink-system help and editor expose each service contract', () => {
   assert.match(html, /\{id, size\}/);
   assert.match(html, /ArduPilot/);
   assert.match(html, /CREATE_FILE/);
-  assert.match(html, /239 UTF-8 bytes/);
+  assert.match(html, /238 UTF-8 bytes/);
   assert.match(html, /parameters, fence, rally, and FTP/);
   assert.match(html, /root, directories, files:\[\{path, data\}\]/);
   assert.match(html, /base64 encoded/);
