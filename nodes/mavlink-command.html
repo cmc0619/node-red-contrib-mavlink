@@ -378,6 +378,12 @@
             }
           }
           const preset = RED.mavlink.liveOr(this, '#node-input-preset', this.preset, 'arm');
+          // A blank takeoff altitude is zero-filled: PX4 reads 0 as AMSL and
+          // answers ACCEPTED with a ~1 m hop (§14.79). A NaN "stack default"
+          // rides msg.payload, which overrides a configured value.
+          if (preset === 'takeoff' && !presentParam(values[7])) {
+            return 'Takeoff needs an altitude — a blank is sent as 0';
+          }
           // A blank centre on these presets is the NaN sentinel, and int32 has
           // no NaN: the build refuses the pair, so the operator would meet it
           // on the first message instead of at deploy.

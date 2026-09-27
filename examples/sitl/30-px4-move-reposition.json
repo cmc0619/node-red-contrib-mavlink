@@ -152,7 +152,7 @@
     "maxRetries": "3",
     "unconfirmedContinue": false,
     "completionTimeout": "30000",
-    "params": "{}",
+    "params": "{\"7\":10}",
     "sendAs": "long",
     "frame": "3",
     "identity": "",

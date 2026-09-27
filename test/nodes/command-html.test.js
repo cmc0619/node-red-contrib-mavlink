@@ -551,11 +551,16 @@ test('mavlink-command: preset coordinates are checked here, and nowhere else', (
   // Range is keyed on the coordinate being *present*, not on the preset
   // requiring one: takeoff and land expose lat/lon where blank means "here",
   // and 200° there is still garbage that scales into a real place (#263).
-  for (const preset of ['takeoff', 'land']) {
-    assert.equal(verdict({ preset }, {}), true, `${preset} blank means "here"`);
-    assert.match(String(verdict({ preset }, { 5: 200, 6: 8 })), /within ±90°/, `${preset} lat`);
-    assert.match(String(verdict({ preset }, { 5: 47, 6: 181 })), /within ±180°/, `${preset} lon`);
+  for (const [preset, alt] of [['takeoff', { 7: 10 }], ['land', {}]]) {
+    assert.equal(verdict({ preset }, alt), true, `${preset} blank means "here"`);
+    assert.match(String(verdict({ preset }, { ...alt, 5: 200, 6: 8 })), /within ±90°/, `${preset} lat`);
+    assert.match(String(verdict({ preset }, { ...alt, 5: 47, 6: 181 })), /within ±180°/, `${preset} lon`);
   }
+
+  // Takeoff's altitude is the command: a blank is zero-filled, which PX4
+  // flies as 0 m AMSL and ACCEPTs (review E1).
+  assert.match(String(verdict({ preset: 'takeoff' }, {})), /Takeoff needs an altitude/);
+  assert.equal(verdict({ preset: 'takeoff' }, { 7: 0 }), true, 'an entered 0 is the operator\'s');
 
   // Local frames carry metres, so the degree bounds must not fire — but only
   // COMMAND_INT has a frame at all, and an unknown one stays on the degree
@@ -746,7 +751,7 @@ test('mavlink-command: a NaN centre is accepted by default LONG and rejected for
   // The rule is keyed on the preset, not on blankness in general: takeoff
   // leaves param5/6 out of blankParams, so its blank coordinates are 0-fills,
   // not sentinels, and int carries them.
-  assert.equal(verdict({ preset: 'takeoff', sendAs: 'int' }, {}), true);
+  assert.equal(verdict({ preset: 'takeoff', sendAs: 'int' }, { 7: 10 }), true);
 });
 
 test('mavlink-command: PRESET_PARAMS covers exactly the presets the dropdown offers', () => {
