@@ -123,6 +123,8 @@ test('fixed anchor on a sphere or pitched shape: alt must be at least the spacin
   assert.match(String(on({ pitchDeg: 30 }, 9)), /at least the spacing/);
   assert.equal(on({ pitchDeg: 30 }, 30), true);
   assert.match(String(on({}, '')), /needs an altitude/, 'blank still reds first');
+  assert.equal(on({ shape: 'sphere', altRef: 'msl' }, 5), true,
+    'on Absolute (MSL) there is no home to measure the lowest slot against');
   assert.equal(alt.validate.call({ anchorMode: 'leader', shape: 'sphere', spacing: 10 }, 1, {}), true,
     'a leader anchor hides the field');
 });
@@ -176,4 +178,30 @@ test('Promote defaults off and rides the leader anchor rows', () => {
     /\$\('#row-formation-promoteLeader'\)\.toggle\(mode === 'leader'\)/,
     'the row follows the leader anchor mode'
   );
+});
+
+test('altRef: Above home reds on a PX4 profile, which flies a DO_REPOSITION z as MSL (FORMATION-PX4)', () => {
+  const lookup = {
+    connPx4: { vehicle: 'vehPx4' },
+    vehPx4: { firmware: 'px4', dialect: 'common' },
+    connAp: { vehicle: 'vehAp' },
+    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
+  };
+  const { altRef } = loadNodeDefaults('mavlink-formation', lookup);
+  const verdict = (over) => altRef.validate.call({ altRef: 'home', ...over }, over.altRef || 'home', {});
+
+  assert.equal(altRef.value, 'home', 'the default keeps an ArduPilot flow on frame 3');
+  assert.equal(altRef.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  for (const delivery of ['build', 'send', 'confirm']) {
+    for (const anchorMode of ['fixed', 'leader']) {
+      assert.match(String(verdict({ delivery, anchorMode, connection: 'connPx4' })), /MSL/,
+        `${delivery}/${anchorMode} on PX4 reds — a payload anchor reads it in either mode`);
+    }
+  }
+  assert.equal(verdict({ delivery: 'send', connection: 'connAp' }), true, 'ArduPilot honours frame 3');
+  assert.equal(verdict({ delivery: 'send', connection: 'conn-none' }), true, 'no profile withholds nothing');
+  assert.equal(verdict({ altRef: 'msl', delivery: 'confirm', connection: 'connPx4' }), true, 'MSL is the escape');
+  assert.match(String(verdict({ altRef: 'terrain', delivery: 'send', connection: 'connAp' })), /must be one of/,
+    'terrain is Move\'s, not a Formation frame');
+  assert.match(html, /RED\.mavlink\.repositionAboveHomeRefusal\(firmware\)/, 'the dropdown withholds on the shared predicate');
 });

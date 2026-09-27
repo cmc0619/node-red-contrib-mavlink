@@ -977,7 +977,11 @@ test('mavlink-move: Above home reds on PX4 command tiers, where PX4 flies the al
   assert.equal(verdict({ delivery: 'confirm', connection: 'connAp' }), true, 'ArduPilot honours the frame');
   assert.equal(verdict({ altRef: 'msl', delivery: 'confirm', connection: 'connPx4' }), true, 'MSL is the escape');
   assert.equal(verdict({ action: 'steer', delivery: 'send', connection: 'connPx4' }), true, 'a Go to field only');
-  assert.match(html, /case 'home': return firmware === 'px4' && delivery !== 'stream';/, 'the dropdown withholds it too');
+  assert.match(
+    html,
+    /case 'home': return Boolean\(RED\.mavlink\.repositionAboveHomeRefusal\(firmware\)\) && delivery !== 'stream';/,
+    'the dropdown withholds it too, on the shared predicate'
+  );
 });
 
 test('mavlink-move: Offset cannot be set to the stream tier', () => {

@@ -4,8 +4,8 @@ const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive, autopilotComponent, reportAggregate } = require('../lib/fanout');
 const { isBlank, valueFrom } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
-const { buildRepositionMessage } = require('../lib/move/reposition');
-const { DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
+const { buildRepositionMessage, frameForAltRef } = require('../lib/move');
+const { scaleLatLon } = require('../lib/command/carrier');
 
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.
@@ -17,10 +17,11 @@ const { DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
  * (wire units — Fan-out is a raw surface, §10). All geometry lives in
  * lib/formation; all replication lives in lib/fanout.
  *
- * Altitude semantics: targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT (metres above
- * home), the frame a guided reposition assumes. A leader anchor therefore uses
- * the leader's `relativeAlt`, and an explicit anchor altitude is metres above
- * home.
+ * Altitude semantics: a leader anchor rides MAV_FRAME_GLOBAL at the leader's
+ * AMSL `alt`, which both stacks fly as written; PX4's COMMAND_INT handler
+ * reads every DO_REPOSITION z as AMSL whatever the frame (FORMATION-PX4). An
+ * explicit anchor altitude rides the frame of the configured Altitude ref
+ * (Move's frameForAltRef vocabulary).
  */
 
 module.exports = function registerMavlinkFormation(RED) {
@@ -34,32 +35,30 @@ module.exports = function registerMavlinkFormation(RED) {
     // delivery.inFlightTracker.
     const inFlight = delivery.inFlightTracker();
 
-    /**
-     * Input-invariant Reposition scaffold, built once by Move's owner of
-     * MAV_CMD_DO_REPOSITION (COMMAND_INT). Blank speed and yaw ride the
-     * spec's sentinels, speed -1 (vehicle default) and yaw NaN (hold
-     * heading — the formation heading rotates the pattern, not the noses).
-     * The coordinates are zero here and patched in per member as degE7 x/y,
-     * since Fan-out patches are the raw wire surface (§10) and executeFanout
-     * never mutates its base message. Guided reposition is relative-alt, so
-     * the frame is passed explicitly. Change mode sets
-     * MAV_DO_REPOSITION_FLAGS_CHANGE_MODE — the gate on both stacks
-     * (§14.108): without it the reposition is DENIED unless the vehicle is
-     * already in GUIDED / Hold.
-     */
-    const message = buildRepositionMessage({
-      position: { lat: 0, lon: 0, alt: 0 },
-      target: { sysid: 0, compid: 0 },
-      changeMode: config.changeMode,
-      frame: DEFAULT_FRAME,
-    });
-
     delivery.onActionInput(node, async (msg, send, done) => {
       const payload = msg.payload;
       const sysids = parseSysidList(valueFrom(payload, config, 'sysids'));
-      const { anchor, headingDeg, leaderSysid } = resolveAnchor(
+      const { anchor, frame, headingDeg, leaderSysid } = resolveAnchor(
         config, payload, connectionNode.peerTable
       );
+      /**
+       * The run's Reposition scaffold, built by Move's owner of
+       * MAV_CMD_DO_REPOSITION (COMMAND_INT) in the anchor's frame. Blank
+       * speed and yaw ride the spec's sentinels, speed -1 (vehicle default)
+       * and yaw NaN (hold heading — the formation heading rotates the
+       * pattern, not the noses). The coordinates are zero here and patched
+       * in per member as degE7 x/y, since Fan-out patches are the raw wire
+       * surface (§10) and executeFanout never mutates its base message.
+       * Change mode sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE — the gate on
+       * both stacks (§14.108): without it the reposition is DENIED unless
+       * the vehicle is already in GUIDED / Hold.
+       */
+      const message = buildRepositionMessage({
+        position: { lat: 0, lon: 0, alt: 0 },
+        target: { sysid: 0, compid: 0 },
+        changeMode: config.changeMode,
+        frame,
+      });
       const pitchDeg = resolvePitch(config, payload);
       /**
        * Slot 0 sits on the anchor. On a leader anchor that slot is the
@@ -139,13 +138,16 @@ module.exports = function registerMavlinkFormation(RED) {
  * unknown — 0 would face the pattern north without anyone asking. A present
  * payload heading is trusted input like every other: Number() coercion.
  *
+ * Frame: a leader anchor is the leader's AMSL altitude, so MSL; a payload or
+ * fixed anchor rides the configured Altitude ref.
+ *
  * Pitch follows the same payload-then-config rule via {@link resolvePitch}.
  * Pitch tumbles the pattern around body +Y; it is not taken from telemetry.
  *
  * @param {object} config node config
  * @param {object} payload msg.payload
  * @param {{snapshot: Function}} peerTable connection peer table
- * @returns {{anchor: {lat: *, lon: *, alt: *}, headingDeg: *, leaderSysid: (number|undefined)}}
+ * @returns {{anchor: {lat: *, lon: *, alt: *}, frame: number, headingDeg: *, leaderSysid: (number|undefined)}}
  *   `leaderSysid` only on a leader anchor — the vehicle the pattern hung off.
  */
 function resolveAnchor(config, payload, peerTable) {
@@ -159,13 +161,14 @@ function resolveAnchor(config, payload, peerTable) {
 
   // A payload anchor overrides the configured mode outright.
   if (payload.anchor !== undefined) {
-    return { anchor: payload.anchor, headingDeg: heading };
+    return { anchor: payload.anchor, frame: frameForAltRef(config.altRef), headingDeg: heading };
   }
 
   switch (config.anchorMode) {
     case 'fixed':
       return {
         anchor: { lat: config.lat, lon: config.lon, alt: config.alt },
+        frame: frameForAltRef(config.altRef),
         headingDeg: heading,
       };
     case 'leader': {
@@ -175,7 +178,8 @@ function resolveAnchor(config, payload, peerTable) {
       const position = leader.component.position;
       if (!headingGiven && position.heading != null) heading = position.heading;
       return {
-        anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
+        anchor: { lat: position.lat, lon: position.lon, alt: position.alt },
+        frame: frameForAltRef('msl'),
         headingDeg: heading,
         leaderSysid: leader.sysid,
       };

@@ -530,10 +530,10 @@
           if (ref === 'terrain' && firmware && firmware !== 'ardupilot') {
             return `Above terrain is an ArduPilot frame (GLOBAL_TERRAIN_ALT) and this profile is ${firmware} — use Above home or Absolute (MSL)`;
           }
-          if (ref === 'home' && firmware === 'px4'
+          const homeRefusal = RED.mavlink.repositionAboveHomeRefusal(firmware);
+          if (ref === 'home' && homeRefusal
             && RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'build') !== 'stream') {
-            return 'PX4 reads a DO_REPOSITION altitude as MSL whatever the frame, so Above home '
-              + 'would fly to that height above sea level — use Absolute (MSL), or Stream';
+            return `${homeRefusal}, or Stream`;
           }
           return true;
         }),
@@ -907,7 +907,7 @@
           withhold(value) {
             switch (value) {
               case 'terrain': return Boolean(firmware) && firmware !== 'ardupilot';
-              case 'home': return firmware === 'px4' && delivery !== 'stream';
+              case 'home': return Boolean(RED.mavlink.repositionAboveHomeRefusal(firmware)) && delivery !== 'stream';
               default: return false;
             }
           }
