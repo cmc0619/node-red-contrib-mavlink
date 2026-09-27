@@ -39,6 +39,7 @@ const {
   makeStatusRecord,
   applyActionStatus,
   onActionInput,
+  completeBuild,
 } = require('../lib/delivery');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 
@@ -199,16 +200,18 @@ module.exports = function registerMavlinkParam(RED) {
       switch (`${delivery}|${action}`) {
         case 'build|read':
         case 'build|set':
-        case 'build|request-list':
-          completeBuild(node, send, buildParamMessage(requestWith(undefined)));
+        case 'build|request-list': {
+          const message = buildParamMessage(requestWith(undefined));
+          completeBuild(node, send, message, 'param', { message });
           break;
+        }
         case 'send|read':
         case 'send|set':
         case 'send|request-list': {
           const message = buildParamMessage(wireRequest());
           connNode.send(message, { band: bandFor(action), target, identityId });
           applyActionStatus(node, 'ok', 'sent');
-          send([{ payload: message }, makeStatusRecord(node.type, { result: 'succeeded', detail: 'sent', payload: message })]);
+          send([{ payload: message }, makeStatusRecord(node.type, { result: 'sent', payload: message })]);
           break;
         }
         case 'confirm|set': {
@@ -341,9 +344,4 @@ function bandFor(action) {
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
-}
-
-function completeBuild(node, send, message) {
-  applyActionStatus(node, 'ok', 'built param');
-  send([{ payload: message }, makeStatusRecord(node.type, { result: 'succeeded', detail: 'built', message })]);
 }

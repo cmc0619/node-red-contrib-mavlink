@@ -72,7 +72,7 @@ test('Build tier emits the protocol plan on output 0 and sends nothing', async (
   assert.equal(plan.operation, 'download');
   assert.deepEqual(plan.messages.map((m) => m.name), ['MISSION_REQUEST_LIST']);
   assert.equal(conn.sent.length, 0, 'Build sends nothing');
-  assert.equal(outputs[0][1].result, 'succeeded');
+  assert.equal(outputs[0][1].result, 'built');
 });
 
 test('set-current Build emits its address and sequence without mission_type', async () => {

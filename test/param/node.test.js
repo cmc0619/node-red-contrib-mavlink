@@ -39,7 +39,7 @@ test('mavlink-param node builds PARAM_SET from msg payload values', () => {
   assert.equal(sent[0].payload.fields.param_id, 'FOO');
   assert.equal(sent[0].payload.fields.param_value, 12);
   // The status record leaves output 1 as the top-level message, not msg.payload.
-  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].result, 'built');
 });
 
 test('mavlink-param reuses its deploy-resolved Connection during input delivery', () => {
@@ -61,10 +61,12 @@ test('mavlink-param reuses its deploy-resolved Connection during input delivery'
     targetComponent: 1,
   });
 
-  node.emit('input', { payload: { paramId: 'ARMING_CHECK' } }, () => {}, () => {});
+  let out;
+  node.emit('input', { payload: { paramId: 'ARMING_CHECK' } }, (m) => { out = m; }, () => {});
 
   assert.equal(connectionLookups, 1, 'Connection is resolved once at deploy');
   assert.equal(conn.sent.length, 1);
+  assert.equal(out[1].result, 'sent', 'the Send tier reports sent (R51)');
 });
 
 test('a set with no paramType resolves no MAV_PARAM_TYPE rather than guessing REAL32', () => {

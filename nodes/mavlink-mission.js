@@ -28,6 +28,7 @@ const {
   makeStatusRecord,
   applyActionStatus,
   onActionInput,
+  completeBuild,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 const { missionTypeValue, OPERATION } = require('../lib/mission/types');
@@ -150,15 +151,9 @@ module.exports = function registerMavlinkMission(RED) {
       /** Emit the protocol plan on output 0 and send nothing. */
       function buildTier() {
       const plan = buildPlan(operation, missionType, target, uploadItems, seq);
-      applyActionStatus(node, 'preview', `plan ${operation} ${missionTypeKey}`);
-      send([
-        { payload: plan },
-        record(node, operation, missionTypeKey, target, {
-          result: 'succeeded',
-          phase: 'built',
-          messageCount: plan.messages.length,
-        }),
-      ]);
+      completeBuild(node, send, plan, `${operation} ${missionTypeKey} plan`, record(node, operation, missionTypeKey, target, {
+        messageCount: plan.messages.length,
+      }));
       done();
       }
 
