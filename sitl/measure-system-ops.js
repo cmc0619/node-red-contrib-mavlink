@@ -65,7 +65,6 @@ function docker(...args) {
 
 function makeConn() {
   const bundle = loadBundled('ardupilotmega');
-  const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
   return new Connection(
     {
       transport: {
@@ -99,7 +98,7 @@ function makeConn() {
       },
       heartbeat: { staleMs: 5000, expireMs: 15000 },
     },
-    { resolveIdentity, logger: { info() {}, warn() {}, error() {} } }
+    { logger: { info() {}, warn() {}, error() {} } }
   );
 }
 

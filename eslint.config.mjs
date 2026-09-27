@@ -249,7 +249,6 @@ export default [
       'lib/fanout/**/*.js',
       'lib/formation/**/*.js',
       'lib/ftp/**/*.js',
-      'lib/identity/**/*.js',
       'lib/log/**/*.js',
       'lib/mission/**/*.js',
       'lib/move/**/*.js',

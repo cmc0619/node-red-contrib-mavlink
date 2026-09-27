@@ -1358,7 +1358,6 @@ function runApControlScript(body, timeoutMs = 20000, opts = {}) {
     const { BAND } = require(${JSON.stringify(path.join(ROOT, 'lib/connection/bands'))});
     const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata/bundled'))});
     const { buildCommandLong } = require(${JSON.stringify(path.join(ROOT, 'lib/command/carrier'))});
-    const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     (async () => {
       const bundle = loadBundled('ardupilotmega');
@@ -1369,7 +1368,7 @@ function runApControlScript(body, timeoutMs = 20000, opts = {}) {
         defaultIdentityId: 'gcs', boundIdentityIds: ['gcs'],
         signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
         heartbeat: { staleMs: 5000, expireMs: 15000 },
-      }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
+      }, { logger: { info() {}, warn() {}, error() {} } });
       await conn.start();
       await sleep(2000);
       ${body}

@@ -51,7 +51,6 @@ function note(results, name, ok, detail, extra) {
 
 function makeConn({ bindPort, remotePort, sysid, firmware, autopilot }) {
   const bundle = loadBundled('ardupilotmega');
-  const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
   return new Connection(
     {
       transport: {
@@ -94,7 +93,7 @@ function makeConn({ bindPort, remotePort, sysid, firmware, autopilot }) {
       },
       heartbeat: { staleMs: 5000, expireMs: 15000 },
     },
-    { resolveIdentity, logger: { info() {}, warn() {}, error() {} } }
+    { logger: { info() {}, warn() {}, error() {} } }
   );
 }
 

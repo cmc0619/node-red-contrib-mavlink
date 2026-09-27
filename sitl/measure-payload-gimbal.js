@@ -78,7 +78,6 @@ async function probe() {
     const { loadBundled } = require(${JSON.stringify(path.join(ROOT, 'lib/metadata/bundled'))});
     const { buildPayloadMessage } = require(${JSON.stringify(path.join(ROOT, 'lib/payload'))});
     const { buildCommandLong } = require(${JSON.stringify(path.join(ROOT, 'lib/command/carrier'))});
-    const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const results = [];
     const note = (name, ok, detail, extra) => {
@@ -96,7 +95,7 @@ async function probe() {
         defaultIdentityId: 'gcs', boundIdentityIds: ['gcs'],
         signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
         heartbeat: { staleMs: 5000, expireMs: 15000 },
-      }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
+      }, { logger: { info() {}, warn() {}, error() {} } });
       await conn.start();
       await sleep(4000);
 

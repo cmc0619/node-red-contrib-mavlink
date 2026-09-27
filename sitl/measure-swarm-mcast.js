@@ -65,7 +65,6 @@ function prepPx4Broadcast(container = 'nrc-px4-bcast-42') {
 
 function makeConn(transport, vehicleSysid) {
   const bundle = loadBundled('ardupilotmega');
-  const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
   return new Connection(
     {
       transport: { mode: 'udp', ...transport },
@@ -100,7 +99,7 @@ function makeConn(transport, vehicleSysid) {
       },
       heartbeat: { staleMs: 5000, expireMs: 15000 },
     },
-    { resolveIdentity, logger: { info() {}, warn() {}, error() {} } }
+    { logger: { info() {}, warn() {}, error() {} } }
   );
 }
 
@@ -169,7 +168,6 @@ async function measureBroadcastArm(conn, results) {
 
 async function measureLoopback(results) {
   const bundle = loadBundled('ardupilotmega');
-  const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
   const base = {
     bindAddress: '0.0.0.0',
     bindPort: MCAST_PORT + 1,
@@ -191,7 +189,7 @@ async function measureLoopback(results) {
     boundIdentityIds: ['listener'],
     signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
     heartbeat: { staleMs: 5000, expireMs: 15000 },
-  }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
+  }, { logger: { info() {}, warn() {}, error() {} } });
 
   const talker = new Connection({
     transport: { mode: 'udp', ...base },
@@ -209,7 +207,7 @@ async function measureLoopback(results) {
     boundIdentityIds: ['talker'],
     signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
     heartbeat: { staleMs: 5000, expireMs: 15000 },
-  }, { resolveIdentity, logger: { info() {}, warn() {}, error() {} } });
+  }, { logger: { info() {}, warn() {}, error() {} } });
 
   await listener.start();
   await talker.start();
