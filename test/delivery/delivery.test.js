@@ -114,3 +114,56 @@ test('capBadge: the last character of a capped string is the ellipsis glyph', ()
   assert.equal(capped[capped.length - 1], '\u2026');
 });
 
+// ---------------------------------------------------------------------------
+// completeBuild / onActionInput (review R51/R53)
+// ---------------------------------------------------------------------------
+
+const { EventEmitter } = require('node:events');
+const { completeBuild, onActionInput } = require('../../lib/delivery');
+
+function actionNode() {
+  const node = new EventEmitter();
+  node.type = 'mavlink-test';
+  node.statuses = [];
+  node.status = (s) => node.statuses.push(s);
+  return node;
+}
+
+test('completeBuild: yellow preview badge, the message on output 0, a built record on output 1', () => {
+  const node = actionNode();
+  let sent;
+  completeBuild(node, (m) => { sent = m; }, { name: 'COMMAND_LONG' }, 'Arm', { command: 'X' });
+  assert.deepEqual(sent[0], { payload: { name: 'COMMAND_LONG' } });
+  assert.deepEqual(sent[1], { command: 'X', result: 'built', node: 'mavlink-test' });
+  assert.equal(node.statuses[0].fill, 'yellow');
+  assert.equal(node.statuses[0].text, 'built Arm');
+});
+
+test('onActionInput: payload false is suppressed; the handler runs otherwise', () => {
+  const node = actionNode();
+  const seen = [];
+  onActionInput(node, (msg, send, done) => { seen.push(msg); done(); });
+  let doneCalls = 0;
+  node.emit('input', { payload: false }, () => {}, () => { doneCalls += 1; });
+  node.emit('input', { payload: 1 }, () => {}, () => { doneCalls += 1; });
+  assert.deepEqual(seen, [{ payload: 1 }]);
+  assert.equal(doneCalls, 2);
+});
+
+test('onActionInput: a throw and a rejection both settle through failInput', async () => {
+  for (const handler of [
+    () => { throw new Error('sync'); },
+    async () => { throw new Error('async'); },
+  ]) {
+    const node = actionNode();
+    onActionInput(node, handler);
+    let sent;
+    let doneErr;
+    node.emit('input', { payload: {} }, (m) => { sent = m; }, (err) => { doneErr = err; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(sent[0], null);
+    assert.equal(sent[1].result, 'failed');
+    assert.ok(doneErr instanceof Error);
+  }
+});
+

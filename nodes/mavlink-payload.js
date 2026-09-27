@@ -7,7 +7,7 @@ const {
 } = require('../lib/payload');
 const { BAND } = require('../lib/connection/bands');
 const { valueFrom } = require('../lib/addressing/resolve');
-const { awaitAckWithBadge, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { awaitAckWithBadge, cancelSlot, settleAck } = require('../lib/command/ack');
 const { resolveFrame } = require('../lib/command/carrier');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
@@ -15,6 +15,7 @@ const {
   makeStatusRecord,
   applyActionStatus,
   failInput,
+  completeBuild,
 } = require('../lib/delivery');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
 
@@ -96,18 +97,10 @@ module.exports = function registerMavlinkPayload(RED) {
             timeoutMs,
             maxRetries,
           });
-          if (outcome.result === 'cancelled') {
-            // A redeploy cancelled the wait (see the close handler). Finish
-            // quietly on a node that is going away — raising here would
-            // trip a Catch node wired for "payload failed → failsafe" on a
-            // mere deploy, the rule mavlink-mission already follows.
-            done();
-          } else if (outcome.result === 'accepted') {
-            completeAck(node, send, built, outcome);
-            done();
-          } else {
-            failAck(node, send, built, outcome, done);
-          }
+          settleAck(node, send, done, outcome, {
+            label: built.message.name,
+            fields: { message: built.message, confirmation: built.confirmation },
+          });
         }
 
         // Affirmative dispatch on the tier (§5): a non-member matches no case,
@@ -117,7 +110,7 @@ module.exports = function registerMavlinkPayload(RED) {
         // `.send` / `.subscribe` like any other absent config node.
         switch (delivery) {
           case 'build':
-            completeBuild(node, send, builtCmd);
+            completeBuild(node, send, builtCmd.message, 'payload', { confirmation: builtCmd.confirmation });
             break;
           case 'confirm':
             // Wait for the COMMAND_ACK so a DENIED / TEMPORARILY_REJECTED /
@@ -133,7 +126,7 @@ module.exports = function registerMavlinkPayload(RED) {
           case 'send': {
             connectionNode.send(builtCmd.message, { band: BAND.CONTROL, target, identityId });
             const detail = builtCmd.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
-            completeResult(node, send, 'succeeded', detail, builtCmd);
+            completeResult(node, send, 'sent', detail, builtCmd);
             break;
           }
           default: break; // This space intentionally left blank (§5)
@@ -197,39 +190,6 @@ module.exports = function registerMavlinkPayload(RED) {
 
   RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);
 };
-
-function completeAck(node, send, built, outcome) {
-  applyActionStatus(node, 'ok', `ack ${built.message.name}`);
-  send([
-    { payload: { result: 'succeeded', message: built.message } },
-    makeStatusRecord(node.type, {
-      ...ackRecordFields(outcome),
-      confirmation: built.confirmation,
-      result: 'succeeded',
-      detail: 'command-ack accepted',
-    }),
-  ]);
-}
-
-function failAck(node, send, built, outcome, done) {
-  applyActionStatus(node, 'error', `${built.message.name} ${outcome.result}`);
-  send([
-    null,
-    makeStatusRecord(node.type, {
-      ...ackRecordFields(outcome),
-      confirmation: built.confirmation,
-    }),
-  ]);
-  done();
-}
-
-function completeBuild(node, send, built) {
-  applyActionStatus(node, 'ok', 'built payload');
-  send([
-    { payload: built.message },
-    makeStatusRecord(node.type, { result: 'succeeded', detail: 'built', confirmation: built.confirmation }),
-  ]);
-}
 
 function completeResult(node, send, result, detail, built) {
   applyActionStatus(node, 'ok', detail);

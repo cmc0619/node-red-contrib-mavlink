@@ -17,7 +17,7 @@ const {
 } = require('../lib/move');
 const { streamLocks } = require('../lib/delivery/lock');
 const { valueFrom } = require('../lib/addressing/resolve');
-const { awaitAckWithBadge, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { awaitAckWithBadge, cancelSlot, settleAck } = require('../lib/command/ack');
 const { BAND } = require('../lib/connection/bands');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
@@ -25,6 +25,7 @@ const {
   makeStatusRecord,
   applyActionStatus,
   failInput,
+  completeBuild,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkMove(RED) {
@@ -61,12 +62,12 @@ module.exports = function registerMavlinkMove(RED) {
       }
     }
 
-    // Wait for the DO_REPOSITION COMMAND_ACK on the shared Command machinery
-    // (§9): AckWaiter matches by (command, source), re-sends on
+    // Wait for the COMMAND_ACK on the shared Command machinery (§9):
+    // AckWaiter matches by (command, source), re-sends on
     // TEMPORARILY_REJECTED up to the editor's retry budget, and re-arms on
-    // IN_PROGRESS. A goto re-sent is the same goto. Every non-accepted
-    // terminal — COMMAND_INT_ONLY (8) and UNSUPPORTED_MAV_FRAME (9) included
-    // — is a failure with its MAV_RESULT name, never silence.
+    // IN_PROGRESS. settleAck reports it in Command's words: `accepted`,
+    // `unconfirmed` on silence, and every other terminal — COMMAND_INT_ONLY
+    // (8) and UNSUPPORTED_MAV_FRAME (9) included — by its MAV_RESULT name.
     async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
       const outcome = await awaitAckWithBadge(node, waiterSlot, connectionNode, message, label, {
         target,
@@ -75,35 +76,7 @@ module.exports = function registerMavlinkMove(RED) {
         timeoutMs: Number(config.timeoutMs),
         maxRetries: Number(config.maxRetries),
       });
-      if (outcome.result === 'cancelled') {
-        // A redeploy cancelled the wait (close() below): the node is being
-        // torn down, so finish quietly — same rule as mavlink-command.
-        done();
-        return;
-      }
-      const fields = { ...ackRecordFields(outcome), message };
-      if (outcome.result === 'accepted') {
-        completeResult(node, send, 'accepted', null, fields);
-        done();
-        return;
-      }
-      if (outcome.result === 'timeout') {
-        // §9: a missing ack is not a failure — and not a verdict either. No
-        // completion condition exists for a goto in this node, so a lost ack
-        // reports exactly what the Command node reports: unconfirmed, with
-        // nothing having confirmed it. Same word, same meaning, same machinery.
-        applyActionStatus(node, 'error', `${label} unconfirmed`);
-        send([null, makeStatusRecord(node.type, { ...fields, result: 'unconfirmed' })]);
-        done();
-        return;
-      }
-      // Every other terminal — a MAV_RESULT name ('denied',
-      // 'command_int_only', 'command_unsupported_mav_frame', …) or a failed
-      // re-send — is the AckWaiter outcome verbatim, `confirmedBy` included.
-      // One vocabulary, no translation layer to drift.
-      applyActionStatus(node, 'error', `${label} ${outcome.result}`);
-      send([null, makeStatusRecord(node.type, fields)]);
-      done();
+      settleAck(node, send, done, outcome, { label, fields: { message } });
     }
 
     /**
@@ -119,7 +92,7 @@ module.exports = function registerMavlinkMove(RED) {
     function deliverCommand(label, message, target, identityId, connectionNode, send, done) {
       switch (delivery) {
         case 'build':
-          completeBuild(node, send, message);
+          completeBuild(node, send, message, 'move', { message });
           return false;
         case 'confirm':
           confirmCommand(label, message, target, identityId, connectionNode, send, done)
@@ -189,7 +162,7 @@ module.exports = function registerMavlinkMove(RED) {
         function deliverSetpoint(message, braking) {
           switch (delivery) {
             case 'build':
-              completeBuild(node, send, message);
+              completeBuild(node, send, message, 'move', { message });
               break;
             case 'stream': {
               // msg overrides by presence; the editor owns the defaults and rings.
@@ -517,11 +490,6 @@ function setpointFor(action, payload, config, target, profile) {
   return undefined; // nothing matched: no behavior selected (§5)
 }
 
-function completeBuild(node, send, message) {
-  applyActionStatus(node, 'ok', 'built move');
-  send([{ payload: message }, makeStatusRecord(node.type, { result: 'built', detail: null, message })]);
-}
-
 /**
  * A completed input: badge, output 0 trigger, status record — one shape for
  * every good outcome. One input, one trigger (§9): a stop that completed
@@ -531,17 +499,16 @@ function completeBuild(node, send, message) {
  * The result IS the outcome, one meaning per word, shared with
  * mavlink-command wherever the meaning is shared: 'sent' (on the wire,
  * nobody answers), 'streaming' (setpoints flowing at rate), 'stopped'
- * (stream ended by the flow), 'accepted' (the vehicle agreed — reposition
- * confirm only). 'succeeded' is banned from this node: it once meant both
- * "on the wire" and "the vehicle agreed", and a word with two meanings is
- * how 27/30 measured silence as success.
+ * (stream ended by the flow); 'built' and the acked words come from the
+ * shared completeBuild and settleAck. 'succeeded' is banned from this node:
+ * it once meant both "on the wire" and "the vehicle agreed", and a word with
+ * two meanings is how 27/30 measured silence as success.
  *
  * @param {object} node
  * @param {Function} send
- * @param {string} result  'sent' | 'streaming' | 'stopped' | 'accepted'
+ * @param {string} result  'sent' | 'streaming' | 'stopped'
  * @param {?string} detail  qualifier within the result ('no stream'), or null
- * @param {object} fields  payload/record fields (message, `sent` on stops,
- *   resultCode/retries/elapsed/confirmedBy on reposition confirms)
+ * @param {object} fields  payload/record fields (message, `sent` on stops)
  */
 function completeResult(node, send, result, detail, fields) {
   applyActionStatus(node, 'ok', detail || result);

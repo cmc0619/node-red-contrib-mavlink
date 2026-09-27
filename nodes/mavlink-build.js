@@ -36,9 +36,9 @@
 
 const {
   makeStatusRecord,
-  shouldSuppress,
   applyActionStatus,
   failInput,
+  onActionInput,
 } = require('../lib/delivery');
 const { dialectForTier } = require('../lib/addressing/dialect');
 const { catalogMessagesFromBundle } = require('../lib/metadata/messages-list');
@@ -134,7 +134,7 @@ module.exports = function registerMavlinkBuild(RED) {
             message: messageName,
             tier: 'build',
           });
-          applyActionStatus(node, 'ok', messageName);
+          applyActionStatus(node, 'preview', `built ${messageName}`);
           emit([outMsg, sr]);
           return true;
         }
@@ -169,15 +169,10 @@ module.exports = function registerMavlinkBuild(RED) {
       return false;
     }
 
-    // Input handler.
-    node.on('input', (msg, send, done) => {
-      if (shouldSuppress(msg)) {
-        done();
-        return;
-      }
-
-      // execute() returns false exactly on the paths where it already called
-      // done(err), so a true return is the only one still owing a done().
+    // execute() returns false exactly on the paths where it already called
+    // done — done(err) on a failure, done() when no tier matched — so a true
+    // return is the only one still owing a done().
+    onActionInput(node, (msg, send, done) => {
       if (execute(msg, send, done)) done();
     });
 

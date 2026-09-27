@@ -35,7 +35,7 @@
 const { makeStatusRecord } = require('../lib/command/status-record');
 const { getPreset, presetGroups, buildParamArray } = require('../lib/command/presets');
 const { mergeParams } = require('../lib/command/merge-params');
-const { awaitAckWithBadge, ackRecordFields, cancelSlot } = require('../lib/command/ack');
+const { awaitAckWithBadge, cancelSlot, settleAck } = require('../lib/command/ack');
 const { checkCompletion, waitForCompletion } = require('../lib/command/completion');
 const {
   buildCommandLong,
@@ -56,9 +56,9 @@ const { isBlank } = require('../lib/addressing/resolve');
 const { dialectForTier } = require('../lib/addressing/dialect');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
-  shouldSuppress,
   applyActionStatus,
-  failInput,
+  completeBuild,
+  onActionInput,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 
@@ -228,32 +228,7 @@ module.exports = function registerMavlinkCommand(RED) {
       return { wire: requested.map((v) => (v !== undefined ? v : 0)), requested };
     }
 
-    /**
-     * Emit a status record on output 1 and optionally on output 0.
-     *
-     * Output 1 receives the status record at the message root. Output 0
-     * (continue) still wraps its trigger under `msg.payload`.
-     *
-     * @param {object} record  status record for output 1
-     * @param {Function} sendFn  Node-RED send function
-     * @param {boolean} continueOut  whether to also fire output 0
-     * @param {*} [send0Payload]  payload for output 0 when continuing
-     */
-    function emitStatus(record, sendFn, continueOut, send0Payload) {
-      if (continueOut) {
-        sendFn([{ payload: send0Payload }, record]);
-      } else {
-        sendFn([null, record]);
-      }
-    }
-
     async function handleInput(msg, send, done) {
-      // § Suppress: msg.payload === false → do nothing.
-      if (shouldSuppress(msg)) {
-        done();
-        return;
-      }
-
       // The editor's `sendAs` select is the vocabulary (mavlink-command.html);
       // buildCarrierMessage dispatches it affirmatively.
       const configuredCarrier = config.sendAs;
@@ -276,16 +251,16 @@ module.exports = function registerMavlinkCommand(RED) {
 
       const startMs = Date.now();
 
+      /** The command and target every record of this input names. */
+      const recordFields = { command: commandName, commandId, target };
+
       /**
        * This input's status record: command, target and the elapsed time
-       * since the input arrived, which an ack outcome's own measure or a
-       * completion wait overrides through `fields`.
+       * since the input arrived.
        */
       function makeRecord(fields) {
         return makeStatusRecord(node.type, {
-          command: commandName,
-          commandId,
-          target,
+          ...recordFields,
           elapsed: Date.now() - startMs,
           ...fields,
         });
@@ -325,32 +300,21 @@ module.exports = function registerMavlinkCommand(RED) {
       // Build and Send finish here; Confirm and Complete share the ack waiter
       // below and differ in what an ACCEPTED ack hands off to.
       switch (delivery) {
-        case 'build': {
-          const message = buildCarrierMessage(configuredCarrier);
-          applyActionStatus(node, 'preview', `build ${displayName}`);
-          // Output 1 reports every terminal outcome, success included (§9); a
-          // successful build emits a 'built' status record for status/debug
-          // consumers, consistent with the other action nodes.
-          const rec = makeRecord({
-            result: 'built',
-            detail: 'build tier: message constructed, not sent',
-          });
-          emitStatus(rec, send, true, message);
+        case 'build':
+          completeBuild(node, send, buildCarrierMessage(configuredCarrier), displayName, makeRecord({}));
           done();
           return;
-        }
         case 'send': {
           const message = buildCarrierMessage(configuredCarrier);
           applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
           connNode.send(message, { band: BAND.CONTROL, target, identityId });
-          const rec = makeRecord({ result: 'sent' });
           applyActionStatus(node, 'ok', `sent ${displayName}`);
-          emitStatus(rec, send, true, message);
+          send([{ payload: message }, makeRecord({ result: 'sent' })]);
           done();
           return;
         }
         case 'confirm':
-          await confirmTier(reportAccepted);
+          await confirmTier();
           return;
         case 'complete':
           await confirmTier(pollCompletion);
@@ -364,12 +328,33 @@ module.exports = function registerMavlinkCommand(RED) {
       return;
 
       /**
-       * Send under the ack waiter and settle on its COMMAND_ACK; an ACCEPTED
-       * hands off to the tier's continuation. Rejections propagate to
-       * handleInput's caller, which routes them to failInput like any other
-       * send failure.
+       * Completion's TAKEOFF datum follows the stack. ArduPilot reads a
+       * takeoff altitude relative to home on both carriers and denies any INT
+       * frame but 3 (§14.74), so the INT frame is the datum there and
+       * COMMAND_LONG (no frame on the wire) reads as relative. PX4 reads
+       * param7 as AMSL on both carriers — `mavlink_receiver` copies `z` to
+       * `param7` with no frame conversion and `navigator` takes it as the
+       * loiter altitude AMSL (§14.79) — so completion compares against what
+       * that vehicle flies to, whatever frame the operator saved (471#49).
        *
-       * @param {(ackOutcome: object, myGen: number, completionFrame: number|undefined) => Promise<void>|void} onAccepted
+       * @returns {number|undefined}
+       */
+      function completionFrame() {
+        switch (profile.firmware) {
+          case 'px4': return MAV_FRAME.GLOBAL;
+          case 'ardupilot': return configuredCarrier === CARRIER.INT ? frame : undefined;
+          default: break; // This space intentionally left blank (§5)
+        }
+        return undefined; // nothing matched: no behavior selected (§5)
+      }
+
+      /**
+       * Send under the ack waiter and settle on its COMMAND_ACK (settleAck);
+       * an ACCEPTED hands off to the tier's continuation when there is one.
+       * Rejections propagate to handleInput's caller, which routes them to
+       * failInput like any other send failure.
+       *
+       * @param {(ackRecord: object, ackOutcome: object, myGen: number) => Promise<void>} [onAccepted]
        */
       async function confirmTier(onAccepted) {
         // ── Delivery: Confirm / Complete ────────────────────────────────────
@@ -379,112 +364,53 @@ module.exports = function registerMavlinkCommand(RED) {
         // The operator's configured carrier (§9): a required choice, so the
         // wire format is stated intent — never a guess. The ack it earns,
         // wrong-carrier codes included, is the result.
-        const ackOutcome = await awaitAckWithBadge(node, slot, connNode, buildCarrierMessage(configuredCarrier), displayName, {
+        let ackOutcome = await awaitAckWithBadge(node, slot, connNode, buildCarrierMessage(configuredCarrier), displayName, {
           target,
           identityId,
           timeoutMs,
           maxRetries: noAutoRetry ? 0 : maxRetries,
         });
 
-        // A redeploy cancelled the wait (close() cancels the waiter slot).
-        // The node is being torn down, so finish quietly: emitting or raising
-        // here would trip a Catch node wired for "command failed → failsafe" on
-        // a mere deploy, which is the same rule mavlink-mission already follows.
-        if (ackOutcome.result === 'cancelled') {
-          done();
-          return;
-        }
-
-        // Completion's TAKEOFF datum follows the stack. ArduPilot reads a
-        // takeoff altitude relative to home on both carriers and denies any INT
-        // frame but 3 (§14.74), so the INT frame is the datum there and
-        // COMMAND_LONG (no frame on the wire) reads as relative. PX4 reads
-        // param7 as AMSL on both carriers — `mavlink_receiver` copies `z` to
-        // `param7` with no frame conversion and `navigator` takes it as the
-        // loiter altitude AMSL (§14.79) — so completion compares against what
-        // that vehicle flies to, whatever frame the operator saved (471#49).
-        let completionFrame;
-        switch (profile.firmware) {
-          case 'px4': completionFrame = MAV_FRAME.GLOBAL; break;
-          case 'ardupilot': completionFrame = configuredCarrier === CARRIER.INT ? frame : undefined; break;
-          default: break; // This space intentionally left blank (§5)
-        }
-
-        // Timeout: check peer table for completion condition.
-        if (ackOutcome.result === 'timeout') {
-          if (completionKey) {
-            const stateCheck = checkCompletion(
-              completionKey,
-              requestedParams,
-              connNode.peerTable,
-              target.sysid,
-              target.compid,
-              completionFrame,
-              profile.firmware
-            );
-            if (stateCheck.done) {
-              // Ack was lost on the return leg; the command ran.
-              const rec = makeRecord({
-                result: 'accepted',
-                confirmedBy: 'state',
-                retries: ackOutcome.retries,
-                detail: `ack timeout but ${stateCheck.detail}`,
-              });
-              applyActionStatus(node, 'ok', `${displayName} accepted`);
-              emitStatus(rec, send, true, rec);
-              done();
-              return;
-            }
+        // A lost ack is checked against the peer table (§9): state that
+        // already shows the condition means the ack was lost on the return
+        // leg and the command ran.
+        if (ackOutcome.result === 'timeout' && completionKey) {
+          const stateCheck = checkCompletion(
+            completionKey,
+            requestedParams,
+            connNode.peerTable,
+            target.sysid,
+            target.compid,
+            completionFrame(),
+            profile.firmware
+          );
+          if (stateCheck.done) {
+            ackOutcome = {
+              ...ackOutcome,
+              result: 'accepted',
+              confirmedBy: 'state',
+              detail: `ack timeout but ${stateCheck.detail}`,
+            };
           }
-
-          // Genuinely unknown — report unconfirmed.
-          const rec = makeRecord({
-            result: 'unconfirmed',
-            retries: ackOutcome.retries,
-            detail: ackOutcome.detail,
-          });
-          applyActionStatus(node, 'error', `timeout ${displayName}`);
-          const cont = unconfirmedContinue;
-          emitStatus(rec, send, cont, cont ? rec : undefined);
-          done();
-          return;
         }
 
-        // Terminal ack result.
-        if (ackOutcome.result === 'accepted') {
-          await onAccepted(ackOutcome, myGen, completionFrame);
-          return;
-        }
-
-        // Any other terminal failure.
-        const rec = makeRecord(ackRecordFields(ackOutcome));
-        applyActionStatus(node, 'error', `${displayName} ${ackOutcome.result}`);
-        emitStatus(rec, send, false);
-        done();
-      }
-
-      /**
-       * Confirm tier: an accepted ack is the whole result, and the waiter's
-       * own elapsed (first send to terminal ack) is the record's.
-       *
-       * @param {object} ackOutcome
-       */
-      function reportAccepted(ackOutcome) {
-        const rec = makeRecord(ackRecordFields(ackOutcome));
-        applyActionStatus(node, 'ok', `${displayName} accepted`);
-        emitStatus(rec, send, true, rec);
-        done();
+        await settleAck(node, send, done, ackOutcome, {
+          label: displayName,
+          fields: recordFields,
+          continueUnconfirmed: unconfirmedContinue,
+          onAccepted: onAccepted && ((ackRecord) => onAccepted(ackRecord, ackOutcome, myGen)),
+        });
       }
 
       /**
        * Complete tier: poll the peer table for the completion condition after
        * an ACCEPTED ack.
        *
+       * @param {object} ackRecord  the accepted ack's status record
        * @param {object} ackOutcome
        * @param {number} myGen  the run's generation, for the stale-run check
-       * @param {number|undefined} completionFrame
        */
-      async function pollCompletion(ackOutcome, myGen, completionFrame) {
+      async function pollCompletion(ackRecord, ackOutcome, myGen) {
         applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
         // Component 0 addresses every component of the system; the one that
         // acked is the one whose state settles completion. No peer advertises
@@ -496,7 +422,7 @@ module.exports = function registerMavlinkCommand(RED) {
           peerTable: connNode.peerTable,
           sysid: target.sysid,
           compid: completionCompid,
-          frame: completionFrame,
+          frame: completionFrame(),
           firmware: profile.firmware,
           timeoutMs: completionTimeoutMs,
         });
@@ -524,33 +450,33 @@ module.exports = function registerMavlinkCommand(RED) {
         }
 
         if (compOutcome.success) {
-          const rec = makeRecord({
-            ...ackRecordFields(ackOutcome),
+          const rec = {
+            ...ackRecord,
             // 'state' when the peer table confirmed; 'ack' when the
             // condition was unverifiable and the accepted ack is the
             // whole evidence (base-only SET_MODE).
             confirmedBy: compOutcome.confirmedBy,
             elapsed: Date.now() - startMs,
             detail: compOutcome.detail,
-          });
+          };
           applyActionStatus(node, 'ok', `${displayName} done`);
-          emitStatus(rec, send, true, rec);
+          send([{ payload: rec }, rec]);
         } else {
           // This branch is gated on an ACCEPTED ack: the vehicle answered,
           // then the state never arrived. The ack's resultParam2 and
           // retry count ride through; its resultCode does not — null is
           // the record's "no terminal verdict" — and neither does its
           // confirmedBy: an accepted ack is not the completion.
-          const rec = makeRecord({
-            ...ackRecordFields(ackOutcome),
+          const rec = {
+            ...ackRecord,
             result: 'timeout',
             resultCode: null,
             confirmedBy: undefined,
             elapsed: Date.now() - startMs,
             detail: compOutcome.detail,
-          });
+          };
           applyActionStatus(node, 'error', `${displayName} timeout`);
-          emitStatus(rec, send, false);
+          send([null, rec]);
           done();
           return;
         }
@@ -559,11 +485,7 @@ module.exports = function registerMavlinkCommand(RED) {
       }
     }
 
-    // Node-RED does not await async input handlers, so an uncaught rejection
-    // would otherwise crash the process — route it like every other sender.
-    node.on('input', (msg, send, done) => {
-      handleInput(msg, send, done).catch((err) => failInput(node, send, err, done));
-    });
+    onActionInput(node, handleInput);
 
     node.on('close', (done) => {
       _generation += 1;
