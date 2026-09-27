@@ -516,10 +516,13 @@ test('a configured key rejects every unsigned inbound frame', async () => {
   connection.close();
 });
 
-test('an UNKNOWN_<id> frame dispatches but records no endpoint (crcVerified gating)', async () => {
-  // An unknown msgid is CRC-unverifiable by construction, so the frame is
-  // forgeable by anyone; letting it record its sender's endpoint would point
-  // directed sends and broadcast fan-out at a spoofed address.
+test('an UNKNOWN_<id> frame dispatches but teaches the peer table nothing (crcVerified gating)', async () => {
+  /**
+   * An unknown msgid is CRC-unverifiable by construction: line noise decodes
+   * as one, and a forged one could point directed sends and broadcast
+   * fan-out at a spoofed address. It must not create a phantom system either
+   * — Fan-out "all" selects from the table (R21).
+   */
   const { connection, dg } = build();
   await connection.start();
 
@@ -532,6 +535,8 @@ test('an UNKNOWN_<id> frame dispatches but records no endpoint (crcVerified gati
 
   assert.equal(received.length, 1, 'the frame still reaches subscribers');
   assert.equal(received[0].name, 'UNKNOWN_22');
+  assert.equal(connection.peerTable.getComponent(7, 1), undefined, 'no phantom component was created');
+  assert.deepEqual(connection.peerTable.snapshot(), [], 'no phantom system either');
   assert.equal(connection.peerTable.endpointFor(7, 1), null, 'no endpoint was learned');
   assert.deepEqual(connection.peerTable.endpointsForBroadcast(1), [], 'no broadcast destination either');
 
