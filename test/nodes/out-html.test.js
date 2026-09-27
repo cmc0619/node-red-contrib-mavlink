@@ -2,7 +2,8 @@
 
 /**
  * mavlink-out help: the three payload shapes in the order the runtime reads
- * them, and ports named the way the node-ports list numbers them.
+ * them, and ports named the way the node-ports list numbers them. The other
+ * action nodes' help carries the same Inputs / Outputs / Details structure.
  */
 
 const test = require('node:test');
@@ -27,4 +28,18 @@ test('Out help documents the topic shape, its precedence, and dialect field spel
 test('Out help names its ports as the node-ports list shows them, never 0/1', () => {
   assert.match(help, /<ol class="node-ports">/);
   assert.doesNotMatch(help, /Output [01]\b/);
+});
+
+test('action-node help follows the Node-RED help structure, ports named Continue and Status (ME-11)', () => {
+  for (const name of ['fanout', 'mission', 'move', 'param', 'payload', 'system']) {
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'nodes', `mavlink-${name}.html`), 'utf8');
+    const start = source.indexOf(`data-help-name="mavlink-${name}"`);
+    const block = source.slice(start, source.indexOf('</script>', start));
+    const inputs = block.indexOf('<h3>Inputs</h3>\n  <dl class="message-properties">');
+    const outputs = block.indexOf('<h3>Outputs</h3>\n  <ol class="node-ports">');
+    const details = block.indexOf('<h3>Details</h3>');
+    assert.ok(inputs !== -1 && inputs < outputs && outputs < details, `${name}: Inputs, Outputs, Details in order`);
+    assert.match(block, /<li>Continue — [\s\S]*<li>Status — /, `${name}: ports named Continue and Status`);
+    assert.doesNotMatch(block, /[Oo]utput [01]\b/, `${name}: no port numbers`);
+  }
 });

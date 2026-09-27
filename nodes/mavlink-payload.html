@@ -544,11 +544,38 @@
 
 <script type="text/html" data-help-name="mavlink-payload">
   <p>Controls camera, gimbal, servo, relay, gripper, winch and parachute payload verbs. Command-backed verbs report command acknowledgement as their confirmation mode.</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object | false</span></dt>
+    <dd>Each key below, when present, overrides its configured field; <code>false</code> suppresses the input.</dd>
+    <dt class="optional">payload.topic <span class="property-type">string</span></dt>
+    <dd>The device: <code>camera</code>, <code>gimbal</code>, <code>servo</code>, …</dd>
+    <dt class="optional">payload.verb <span class="property-type">string</span></dt>
+    <dd>What to do with it.</dd>
+    <dt class="optional">payload.path <span class="property-type">string</span></dt>
+    <dd>The gimbal path, where the verb has more than one.</dd>
+    <dt class="optional">payload.values <span class="property-type">object</span></dt>
+    <dd>Every slot of the verb at once; it replaces the saved set, it does not merge.</dd>
+    <dt class="optional">payload.sendAs <span class="property-type">string</span></dt>
+    <dd><code>int</code> or <code>long</code>: the command carrier.</dd>
+    <dt class="optional">payload.mavFrame <span class="property-type">number</span></dt>
+    <dd>The <code>MAV_FRAME</code> for <code>COMMAND_INT</code>.</dd>
+    <dt class="optional">payload.target <span class="property-type">object</span></dt>
+    <dd><code>{sysid, compid}</code> of the device.</dd>
+    <dt class="optional">payload.identityId <span class="property-type">string</span></dt>
+    <dd>Local identity override.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li>Continue — the built message on <b>Build</b>; <code>{result, message}</code> once sent on <b>Send</b>, and on <b>Send &amp; confirm</b> for a message-kind verb, which has no acknowledgement; for a command-backed verb on <b>Send &amp; confirm</b>, the status record, and only on <code>ACCEPTED</code>.</li>
+    <li>Status — the status record on every outcome.</li>
+  </ol>
+  <h3>Details</h3>
   <p>A <b>Topic</b> is a device on the airframe; a <b>Verb</b> is what to do with it. Topic and verb reshape the form: only the parameters for the selected verb are shown, and their labels, units, enum choices and any real ceiling come from the Vehicle's dialect rather than this page. Unset number controls initialize to that parameter's recipe default so a save stores an explicit value; the dialect's advisory minimums are not enforced, because upstream sometimes contradicts them in its own description text. Gripper, winch and parachute have a single verb each, so their Verb row is hidden.</p>
   <p>Camera photo exposes an interval and a count. A count of 0 with an interval above 0 captures continuously — <b>Stop photo</b> (<code>IMAGE_STOP_CAPTURE</code>) is its off switch; with an interval of 0 ArduPilot takes a single photo, a count of 0 included (measured). The capture sequence number is not a field: for a single photo the node stamps it per camera component, starting at 1 and counting up, so the camera can tell a re-sent command from a second photo; any other count sends 0, as the dialect requires. Trigger by distance carries its own off switch instead: a distance of 0 stops triggering, so stopping is the same verb, not a separate one.</p>
   <p>Camera streaming uses <b>Start stream</b> and <b>Stop stream</b>; tracking offers point, rectangle and stop commands, and <b>Format storage</b> exposes the dialect's storage and image-log switches. Gimbal <b>Take control</b> and <b>Release control</b> send the manager's explicit ownership command; <b>Configure manager</b> exposes all primary and secondary owner slots.</p>
   <p>The <b>Send as</b> field appears only when the choice is observable — a command the dialect marks as carrying a location, i.e. gimbal ROI-set. Elsewhere <code>COMMAND_INT</code> and <code>COMMAND_LONG</code> pass params 1–4 identically, so the node sends <code>COMMAND_INT</code>. Positional values — e.g. ROI latitude / longitude — are entered in decimal degrees regardless of the Send as choice, except on <code>COMMAND_INT</code> with the Local NED frame, where they are metres north / east. <code>msg.payload.sendAs</code> and <code>msg.payload.mavFrame</code> override per message. Message-kind verbs (gimbal manager aiming) never ride a MAV_CMD.</p>
   <p>On <b>Build</b> delivery the Dialect picker supplies editor catalogs. Choose <i>from Vehicle Profile…</i> to use a profile dialect and target defaults; a concrete dialect has no profile target rung. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
-  <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use <b>Send</b> or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
+  <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: Continue fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on Status. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use <b>Send</b> or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed. When the aim should confirm, pick the <code>DO_GIMBAL_MANAGER_PITCHYAW</code> path — the same four fields, and the command form acks where the message form cannot. <b>The units differ by path</b>, and the dialog shows each path's own: the message takes pitch and yaw in radians and the rates in rad/s, the command takes degrees and deg/s (measured — the same number aims 57× apart), and <code>DO_MOUNT_CONTROL</code> takes degrees. On both manager paths a blank field is sent as NaN, the dialect's "unused": leave pitch and yaw blank to aim by rate, or the rates blank to aim by angle. Filling both pairs is not an aim ArduPilot follows — it drops the message, and on the command path it takes the angle and ignores the rates. The <code>GIMBAL_MANAGER_SET_ATTITUDE</code> path adds roll to pitch and yaw: enter roll/pitch/yaw in degrees and the node builds the quaternion the wire carries; it carries no rates. It is a message, so it is always unconfirmed.</p>
 </script>
