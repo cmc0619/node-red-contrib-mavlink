@@ -646,9 +646,8 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_UINT8', {}), true);
   assert.match(String(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_STRING', {})), /must be one of/);
 
-  // Timeout and Max retries are the shared ack definition. Timeout rings on
-  // the wire tiers (where its row shows) and never on Build; Max retries
-  // rings only on the echo-confirmed set, the one mode that re-sends.
+  // Timeout and Max retries are the shared ack definition. Both ring on the
+  // tiers that wait (where their rows show) and never on Build or Send.
   const wire = { delivery: 'confirm', action: 'set' };
   assert.match(String(defaults.timeoutMs.validate.call(wire, '', {})), />= 1/, 'blank reds: the editor default owns absence');
   assert.match(String(defaults.timeoutMs.validate.call(wire, '0', {})), />= 1/, 'a 0 ms window times out before the echo can arrive');
@@ -657,7 +656,12 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.timeoutMs.validate.call({ delivery: 'build' }, '', {}), true, 'hidden on Build, never reds');
   assert.equal(defaults.maxRetries.validate.call(wire, '3', {}), true);
   assert.match(String(defaults.maxRetries.validate.call(wire, '1.5', {})), /whole number/);
-  assert.equal(defaults.maxRetries.validate.call({ delivery: 'confirm', action: 'read' }, '1.5', {}), true, 'a read waits once; the hidden retries row never reds');
+  assert.match(String(defaults.maxRetries.validate.call({ delivery: 'confirm', action: 'read' }, '1.5', {})), /whole number/,
+    'a read re-sends on silence too');
+  assert.match(String(defaults.maxRetries.validate.call({ delivery: 'collect', action: 'request-list' }, '1.5', {})), /whole number/);
+  assert.equal(defaults.maxRetries.validate.call({ delivery: 'send', action: 'set' }, '1.5', {}), true,
+    'Send waits for nothing; its hidden row never reds');
+  assert.equal(defaults.timeoutMs.validate.call({ delivery: 'send', action: 'set' }, '', {}), true);
 
   assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
   assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 1 and 255/);
@@ -693,10 +697,10 @@ test('param id search uses the stock autoComplete widget, not a hand-rolled resu
   assert.doesNotMatch(html, /mav-param-results/);
 });
 
-test('mavlink-param keeps a 10 s window: one deadline over the whole PARAM_VALUE stream', () => {
-  // A read and a list are bounded once, never re-armed, so the 2 s command
-  // ack default the waiting nodes share is not this node's number. The
-  // rings are the shared ones.
+test('mavlink-param keeps a 10 s step window', () => {
+  // Room for a vehicle to start answering a list over a radio, which the 2 s
+  // command-ack default the waiting nodes share is not. The rings are the
+  // shared ones.
   const { loadNodeDefaults } = require('./html-assert');
   const defaults = loadNodeDefaults('mavlink-param');
   assert.equal(defaults.timeoutMs.value, 10000);

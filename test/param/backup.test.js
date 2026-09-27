@@ -109,8 +109,8 @@ test('backup decodes bytewise integer values and returns them in wire-index orde
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.params, [
-    { paramId: 'A', paramType: 5, value: 4000000000 },
-    { paramId: 'B', paramType: 6, value: -7 },
+    { paramId: 'A', paramType: 5, value: 4000000000, index: 0 },
+    { paramId: 'B', paramType: 6, value: -7, index: 1 },
   ]);
   assert.deepEqual(phases, ['request-list'], 'no progress record per PARAM_VALUE (R48)');
   assert.deepEqual(stub.sentNames(), ['PARAM_REQUEST_LIST']);
@@ -192,7 +192,7 @@ test('backup ignores wrong source and completes only from the addressed vehicle'
   const outcome = await new ParamBackup(machineOptions(stub, clock)).start();
 
   assert.equal(outcome.result, 'succeeded');
-  assert.deepEqual(outcome.params, [{ paramId: 'GOOD', paramType: 6, value: 7 }]);
+  assert.deepEqual(outcome.params, [{ paramId: 'GOOD', paramType: 6, value: 7, index: 0 }]);
 });
 
 test('backup decode errors settle and tear down the subscription and timer', async () => {

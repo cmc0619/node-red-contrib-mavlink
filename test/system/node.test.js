@@ -401,7 +401,7 @@ test('a payload paramEncoding of auto resolves the encoding as the configured au
   const Node = loadNode(conn);
   const node = new Node({ ...BASE, service: 'backup', operation: 'backup', path: '/', paramEncoding: 'bytewise' });
   const result = await runInput(node, { payload: { paramEncoding: 'auto' } });
-  assert.deepEqual(result.outputs.at(-1)[0].payload.parameters, [{ paramId: 'A', paramType: 6, value: 7 }],
+  assert.deepEqual(result.outputs.at(-1)[0].payload.parameters, [{ paramId: 'A', paramType: 6, value: 7, index: 0 }],
     'ArduPilot c-cast from the firmware rung, not a NaN from an unmatched token');
 });
 
