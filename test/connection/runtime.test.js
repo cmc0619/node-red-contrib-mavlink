@@ -243,6 +243,7 @@ test('a queued outbound envelope keeps its message and route after caller mutati
   message.fields.target_system = 2;
   message.fields.param1 = 2;
   releases[0]();
+  await Promise.resolve();
 
   assert.equal(writes.length, 2, 'releasing the first write drains the queued send');
   const sent = JSON.parse(writes[1].buffer.toString());
@@ -254,6 +255,48 @@ test('a queued outbound envelope keeps its message and route after caller mutati
     'the queued route keeps its accepted endpoint'
   );
   releases[1]();
+  connection.close();
+});
+
+test('a backlog drained by inline-completing writes does not grow the stack per frame', async () => {
+  /**
+   * A write that completes inline (a stream under its highWaterMark) must not
+   * re-enter _pump from its own completion callback: one level per queued
+   * frame overflows the stack in 'drain' for a full band queue (1472 items).
+   */
+  const { EventEmitter } = require('node:events');
+  const depths = [];
+  let held = null;
+  const transportFactory = () => {
+    const transport = new EventEmitter();
+    transport.open = async () => {};
+    transport.close = (done) => done();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
+    transport.send = (buffer, endpoint, done) => {
+      depths.push(new Error().stack.split('\n').length);
+      if (!held) {
+        held = done;
+        return;
+      }
+      done();
+    };
+    return transport;
+  };
+  const { connection } = build({}, { transportFactory });
+  await connection.start();
+  const limit = Error.stackTraceLimit;
+  Error.stackTraceLimit = Infinity;
+  try {
+    for (let i = 0; i < 200; i += 1) connection.send({ name: `BULK_${i}`, fields: {} }, { band: BAND.BULK });
+    held();
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    Error.stackTraceLimit = limit;
+  }
+  assert.equal(depths.length, 200);
+  const drained = depths.slice(1);
+  assert.equal(Math.max(...drained) - Math.min(...drained), 0, 'every drained write runs at the same stack depth');
   connection.close();
 });
 
