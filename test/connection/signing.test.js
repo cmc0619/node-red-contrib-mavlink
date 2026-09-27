@@ -164,6 +164,25 @@ test('a verified peer ahead of local clock raises the outbound floor for every s
   );
 });
 
+test('the first-contact floor reads the link clock, not local wall time alone (pymavlink parity)', () => {
+  /**
+   * Host clock one hour behind (a Pi with no RTC). After a live verified
+   * frame advances the link clock, a 30-minute-old capture from a new stream
+   * is more than a minute behind link time and is refused, as pymavlink's
+   * `check_signature` refuses it against `signing.timestamp`.
+   */
+  const hostMs = NOW_MS - 60 * 60 * 1000;
+  const state = new SigningState({ hasKey: true, now: () => hostMs });
+  const live = state.acceptInbound(frame({ sysid: 1, compid: 1, timestamp: NOW_UNITS }));
+  assert.equal(live.reason, 'first-contact');
+
+  const capture = state.acceptInbound(
+    frame({ sysid: 1, compid: 100, timestamp: NOW_UNITS - 30 * ONE_MINUTE_UNITS })
+  );
+  assert.equal(capture.accept, false);
+  assert.equal(capture.reason, 'first-contact-too-old');
+});
+
 test('an invalid or unsigned accept never raises the outbound floor', () => {
   // Only a cryptographically verified packet is a time reference worth
   // trusting — the same rule this module already applies to the per-stream
