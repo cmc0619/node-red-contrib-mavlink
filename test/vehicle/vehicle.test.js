@@ -105,7 +105,7 @@ test('component dialects are order-independent for a clean set', () => {
 });
 
 test('a blank additionalDialects field resolves exactly like no field at all', () => {
-  const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
+  const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
   const blank = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
   assert.equal(blank, plain, 'same cached bundle, not a recompile');
 });
