@@ -32,7 +32,6 @@
  *   msg.payload === false → suppress (§9 "What triggers an action node")
  */
 
-const { makeStatusRecord } = require('../lib/command/status-record');
 const { getPreset, presetGroups, buildParamArray } = require('../lib/command/presets');
 const { mergeParams } = require('../lib/command/merge-params');
 const { awaitAckWithBadge, cancelSlot, settleAck, SUPERSEDED } = require('../lib/command/ack');
@@ -55,6 +54,7 @@ const { isBlank } = require('../lib/addressing/resolve');
 const { dialectForTier } = require('../lib/addressing/dialect');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
+  makeStatusRecord,
   applyActionStatus,
   completeBuild,
   onActionInput,
@@ -247,11 +247,16 @@ module.exports = function registerMavlinkCommand(RED) {
       const recordFields = { command: preset.command, commandId, target };
 
       /**
-       * This input's status record: command, target and the elapsed time
-       * since the input arrived.
+       * This input's status record on the Build and Send tiers: the command,
+       * target and elapsed time since the input arrived, with the ack fields
+       * a wire tier's record carries left null.
        */
       function makeRecord(fields) {
         return makeStatusRecord(node.type, {
+          resultCode: null,
+          resultParam2: null,
+          retries: 0,
+          detail: null,
           ...recordFields,
           elapsed: Date.now() - startMs,
           ...fields,

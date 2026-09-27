@@ -39,6 +39,13 @@ test('Build tier: the editor default carries COMMAND_LONG and a top-level status
   assert.ok(sent[0], sent[1] && sent[1].detail);
   assert.equal(sent[0].payload.name, 'COMMAND_LONG');
   assert.equal(sent[1].result, 'built');
+  // One record shape across tiers: the ack fields a Build never has are null.
+  assert.equal(sent[1].command, 'MAV_CMD_COMPONENT_ARM_DISARM');
+  assert.equal(sent[1].commandId, 400);
+  assert.equal(sent[1].resultCode, null);
+  assert.equal(sent[1].resultParam2, null);
+  assert.equal(sent[1].retries, 0);
+  assert.equal(sent[1].detail, null);
 });
 
 test('Run Prearm Checks builds MAV_CMD 401 with no completion wait', async () => {
