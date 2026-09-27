@@ -661,6 +661,23 @@ test('send() throws synchronously for an unserializable message — no phantom s
   connection.close();
 });
 
+test('send() throws when the band queue accepted nothing — no phantom `sent` (R10)', async () => {
+  /**
+   * A Change or Inject node sets `msg.band = "2"` (a string); the queue's
+   * strict case match takes nothing, and the caller must hear it.
+   */
+  const { connection, dg } = build();
+  await connection.start();
+  assert.throws(
+    () => connection.send({ name: 'PROBE', fields: {} }, { band: '2' }),
+    /accepted nothing on band "2"/
+  );
+  await delay(30);
+  const names = dg.sockets[0].sent.map((s) => JSON.parse(s.buffer.toString()).name);
+  assert.equal(names.includes('PROBE'), false);
+  connection.close();
+});
+
 test('_pump backstop: a drain-time serialize throw drops that envelope and keeps draining', async () => {
   // send()-time validation catches every deterministic failure, so reach the
   // backstop by failing only the SECOND serialize of the same message (the
