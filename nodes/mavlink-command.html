@@ -1154,7 +1154,10 @@
       custom-mode params — the vehicle's published <code>AVAILABLE_MODES</code>
       table first, then the profile's shipped table. Sets param1's
       custom-mode-enabled bit; an explicit numeric payload param still wins.
-      A name nothing resolves rides as NaN and fails loudly at the wire.
+      A name nothing resolves fails the input before anything is sent —
+      <code>failed</code> on the status output and an error for Catch — on every tier. On
+      Build that includes any name under a concrete dialect, which carries no
+      firmware to resolve it against; use the Vehicle Profile dialect.
     </dd>
     <dt class="optional">mavFrame <span class="property-type">number</span></dt>
     <dd>Per-message MAV_FRAME override for the COMMAND_INT carrier; takes

@@ -139,11 +139,10 @@ module.exports = function registerMavlinkCommand(RED) {
      * ModeContext). Wire tiers resolve against the addressed peer component
      * (the vehicle-published cache) plus the bound profile's firmware/family
      * and bundle; Build resolves through the Vehicle Profile escape only — a
-     * concrete Build dialect has no firmware axis on this node, so shipped
-     * tables cannot pick and an unmatched name rides to the NaN tail. A tier
-     * the editor's delivery select cannot save composes only the firmware
-     * axis (§5), so name resolution falls to that same NaN tail — and the
-     * tier dispatch in handleInput sends nothing anyway.
+     * concrete Build dialect has no firmware axis on this node, so no name
+     * resolves there and the input fails (applyModeName). A tier the
+     * editor's delivery select cannot save composes only the firmware axis
+     * (§5).
      *
      * @param {{target: {sysid: number, compid: number}, profile: object|null}} resolution
      * @returns {import('../lib/vehicle/modes').ModeContext}
@@ -176,9 +175,16 @@ module.exports = function registerMavlinkCommand(RED) {
      * param keeps winning over the name; the name beats configured params.
      * param1 gains MAV_MODE_FLAG_CUSTOM_MODE_ENABLED — without it the
      * autopilot ignores the custom mode (the preset's help text) — OR-ed into
-     * whatever base-mode flags were already supplied. An unresolvable name is
-     * NaN in param2: loud at the wire choke, never a silent mode 0.
+     * whatever base-mode flags were already supplied.
      *
+     * The pair always carries param2, NaN until a stack's packing writes it.
+     * A name that resolves to nothing fails the input before any send, on
+     * every tier: DO_SET_MODE param2 is a float, so NaN serializes, and
+     * ArduCopter SITL aborted its process on it (3 of 3 vehicles) — the
+     * name's resolution against the vehicle's published modes is runtime
+     * state the editor cannot see (§0 rule 3, owner ruling Q4).
+     *
+     * @throws {Error} when the name resolves to no mode number
      * @param {Object<number, number>} userParams  mergeParams output, mutated
      * @param {*} payload
      * @param {object} resolution  { target, profile } from resolveDeliveryContext
@@ -186,7 +192,7 @@ module.exports = function registerMavlinkCommand(RED) {
     function applyModeName(userParams, payload, resolution) {
       if (commandId !== DO_SET_MODE) return;
       if (isBlank(payload.mode)) return;
-      const modeParams = setModeParams(payload.mode, modeContext(resolution));
+      const modeParams = { 2: NaN, ...setModeParams(payload.mode, modeContext(resolution)) };
       // A resolved mode is one indivisible answer, so an explicit number wins
       // over the *whole* of it, never half. PX4's answer is a pair — param2
       // main_mode, param3 sub_mode — and filling one side from the name while
@@ -197,6 +203,10 @@ module.exports = function registerMavlinkCommand(RED) {
       // already supplied, the name selects nothing — including param1's bit,
       // because a flow spelling out custom-mode numbers owns base_mode too.
       if (Object.keys(modeParams).some((idx) => !isBlank(payload[idx]))) return;
+      if (Number.isNaN(modeParams[2])) {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: the name resolves against the vehicle's published modes, runtime state (Q4)
+        throw new Error(`mode "${payload.mode}" resolves to no mode number here`);
+      }
       for (const [idx, value] of Object.entries(modeParams)) {
         userParams[idx] = value;
       }

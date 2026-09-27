@@ -127,11 +127,69 @@ test('Build tier: payload.mode resolves through the AP profile into param2', asy
   assert.equal(sent[0].payload.fields.param2, 4, 'COPTER_MODE_GUIDED');
   assert.equal(sent[0].payload.fields.param1, 1, 'custom-mode-enabled bit set');
 
-  // An unknown name builds NaN — the loud tail, nothing invented (§5).
+  // An unknown name fails the input: DO_SET_MODE param2 is a float, so a NaN
+  // would serialize, and ArduCopter SITL aborted on it (R16, Q4).
   let bad;
-  node.emit('input', { payload: { mode: 'WARP_9' } }, (m) => { bad = m; }, () => {});
+  let badErr;
+  node.emit('input', { payload: { mode: 'WARP_9' } }, (m) => { bad = m; }, (err) => { badErr = err; });
   await tick();
-  assert.equal(Number.isNaN(bad[0].payload.fields.param2), true);
+  assert.equal(bad[0], null, 'nothing built');
+  assert.equal(bad[1].result, 'failed');
+  assert.match(badErr.message, /WARP_9/);
+});
+
+test('Set Mode by name on a concrete Build dialect fails instead of building the configured mode (R16)', async () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{"1":1,"2":4}',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'set_mode',
+    delivery: 'build',
+    dialect: 'ardupilotmega',
+  });
+
+  let sent;
+  let doneErr;
+  node.emit('input', { payload: { mode: 'RTL' } }, (m) => { sent = m; }, (err) => { doneErr = err; });
+  await tick();
+  assert.equal(sent[0], null, 'no firmware context, so the name resolves to nothing — never GUIDED');
+  assert.match(sent[1].detail, /RTL/);
+  assert.equal(sent[1].result, 'failed');
+  assert.ok(doneErr instanceof Error);
+});
+
+test('Set Mode by an unresolved name puts nothing on the wire (R16, Q4)', async () => {
+  const conn = connStubWithInject();
+  const veh = { getDialect: () => loadBundled('ardupilotmega') };
+  conn.vehicle = { id: 'veh', firmware: 'ardupilot', vehicleFamily: 'copter', targetSystem: 1, targetComponent: 1 };
+  const RED = redStub({ conn, veh });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    connection: 'conn',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'set_mode',
+    delivery: 'send',
+    targetSystem: '1',
+    targetComponent: '1',
+  });
+
+  let sent;
+  node.emit('input', { payload: { mode: 'WARP_9' } }, (m) => { sent = m; }, () => {});
+  await tick();
+  assert.equal(conn.sent.length, 0);
+  assert.equal(sent[1].result, 'failed');
+  assert.match(sent[1].detail, /WARP_9/);
+
+  node.emit('input', { payload: { mode: 'GUIDED' } }, () => {}, () => {});
+  await tick();
+  assert.equal(conn.sent.length, 1, 'a name that resolves still sends');
+  assert.equal(conn.sent[0].message.fields.param2, 4);
 });
 
 test('Build tier: an explicit custom-mode param suppresses the whole named pair', async () => {
