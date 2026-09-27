@@ -42,6 +42,26 @@ test('a companion carries its saved CompID; only SysID is derived', () => {
   assert.deepEqual(second.getIdentity(), { sysid: 7, compid: 192 });
 });
 
+test('a ground station keeps its saved SysID when the Connection binds a vehicle', () => {
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+  const gcs = new Node({ id: 'g', role: 'gcs', sourceSystemId: 255, sourceComponentId: 190, heartbeatIntervalMs: 1000 });
+  gcs.bindVehicleSysid(7);
+  assert.deepEqual(gcs.getIdentity(), { sysid: 255, compid: 190 });
+  assert.equal(gcs.derivesSysidFromVehicle, false);
+});
+
+test('a role no case answers to selects no identity behavior (§5)', () => {
+  /** A stray role must not ride the ground-station arm. */
+  const RED = redStub();
+  require('../../nodes/mavlink-local-identity')(RED);
+  const Node = RED.nodes.types['mavlink-local-identity'];
+  const stray = new Node({ id: 's', role: 'gsc', sourceSystemId: 255, sourceComponentId: 190, heartbeatIntervalMs: 1000 });
+  assert.equal(stray.getIdentity, undefined);
+  assert.equal(stray.bindVehicleSysid, undefined);
+});
+
 test('a never-opened node deploys on the editor concrete defaults, no runtime preset fill', () => {
   const RED = redStub();
   require('../../nodes/mavlink-local-identity')(RED);

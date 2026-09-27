@@ -28,33 +28,41 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     const node = this;
 
     /**
-     * Whether this identity derives its source sysid from the bound vehicle
-     * rather than carrying a fixed value. True only for the companion role.
-     * The Connection stamps the derived sysid at deploy.
+     * CompID is the operator's in every role: MAV_COMPONENT carries four
+     * onboard-computer slots (191-194), so a second companion on a link has
+     * somewhere to sit. Editor validateUint8(1) owns the range; runtime
+     * trusts the form.
+     */
+    node.sourceComponentId = Number(config.sourceComponentId);
+
+    /**
+     * The role selects where the source sysid comes from (§5). A companion
+     * derives it from the bound vehicle — that one field has no saved value
+     * to read, and the Connection binds it at deploy; a ground station or a
+     * custom identity carries its saved value. `derivesSysidFromVehicle` is
+     * the flag addressing reads to target the companion's own vehicle.
+     * `getIdentity` is the wire identity stamped into outbound frame headers;
+     * a companion no Connection has bound yet carries a null sysid. A role no
+     * case answers to defines neither method and craters at the Connection.
      */
     switch (config.role) {
-      case 'companion':
+      case 'companion': {
+        let vehicleSysid = null;
         node.derivesSysidFromVehicle = true;
+        node.sourceSystemId = null;
+        node.bindVehicleSysid = (sysid) => { vehicleSysid = sysid; };
+        node.getIdentity = () => ({ sysid: vehicleSysid, compid: node.sourceComponentId });
         break;
+      }
       case 'gcs':
       case 'custom':
         node.derivesSysidFromVehicle = false;
+        node.sourceSystemId = Number(config.sourceSystemId);
+        node.bindVehicleSysid = () => {};
+        node.getIdentity = () => ({ sysid: node.sourceSystemId, compid: node.sourceComponentId });
         break;
       default: break; // This space intentionally left blank (§5)
     }
-
-    /** @type {number|null} null until a Connection derives it (companion only) */
-    node._vehicleSysid = null;
-
-    /**
-     * Companion role derives its sysid from the vehicle — that one field has no
-     * saved value to read. CompID is the operator's in every role: MAV_COMPONENT
-     * carries four onboard-computer slots (191-194), so a second companion on a
-     * link has somewhere to sit. Editor validateUint8(1) owns the range; runtime
-     * trusts the form.
-     */
-    node.sourceSystemId = node.derivesSysidFromVehicle ? null : Number(config.sourceSystemId);
-    node.sourceComponentId = Number(config.sourceComponentId);
 
     // Both fields carry concrete editor defaults with no blank affordance
     // (mavlink-local-identity.html) — the editor owns the gcs-matching
@@ -66,19 +74,6 @@ module.exports = function registerMavlinkLocalIdentity(RED) {
     node.heartbeatIntervalMs = Number(config.heartbeatIntervalMs);
 
     node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
-
-    /** The Connection binds the vehicle sysid a companion identity derives. */
-    node.bindVehicleSysid = (sysid) => { node._vehicleSysid = sysid; };
-
-    /**
-     * The wire identity to stamp into outbound frame headers. A companion no
-     * Connection has bound yet carries a null sysid.
-     *
-     * @returns {{sysid: number|null, compid: number}}
-     */
-    node.getIdentity = () => node.derivesSysidFromVehicle
-      ? { sysid: node._vehicleSysid, compid: node.sourceComponentId }
-      : { sysid: node.sourceSystemId, compid: node.sourceComponentId };
 
     /**
      * HEARTBEAT content this identity owns (DESIGN.md §7 Heartbeat): the

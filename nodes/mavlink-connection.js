@@ -239,7 +239,7 @@ module.exports = function registerMavlinkConnection(RED) {
  * @returns {{id: string, sysid: number, compid: number, heartbeatIntervalMs: number, heartbeat: object}}
  */
 function identitySnapshot(idNode, defaults, bundle) {
-  if (idNode.derivesSysidFromVehicle) idNode.bindVehicleSysid(defaults.defaultTargetSystem);
+  idNode.bindVehicleSysid(defaults.defaultTargetSystem);
   const wire = idNode.getIdentity();
   const hb = idNode.getHeartbeatFields();
   return {
