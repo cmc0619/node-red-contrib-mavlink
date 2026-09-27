@@ -339,8 +339,8 @@ module.exports = function registerMavlinkMove(RED) {
                   speed: valueFrom(payload, config, 'speed'),
                   radius: valueFrom(payload, config, 'radius'),
                   yaw: valueFrom(payload, config, 'yaw'),
-                  // CHANGE_MODE flies the vehicle into guided — an explicit boolean
-                  // opt-in (editor checkbox, payload override), never a truthy token.
+                  // CHANGE_MODE flies the vehicle into guided — an explicit opt-in
+                  // (editor checkbox, payload override), read by truthiness.
                   // Measured (§14 2026-08-12): the flag is the gate on both stacks;
                   // without it, outside GUIDED (AP) / Hold (PX4), the answer is
                   // DENIED (2).
@@ -407,17 +407,15 @@ module.exports = function registerMavlinkMove(RED) {
  * The setpoint message for a non-command action — everything Move sends that is
  * not an acked MAV_CMD.
  *
- * Extracted from the input handler rather than inlined: with six actions the
- * handler was measured at cyclomatic complexity 36, and five
- * of those branches were only ever choosing which builder to call. The handler
- * keeps the parts that are genuinely about *this* input — suppression, target
- * resolution, delivery, the stream lock — and this owns the wire shape.
+ * The handler keeps the parts that are genuinely about *this* input —
+ * suppression, target resolution, delivery, the stream lock — and this owns
+ * the wire shape.
  *
  * Attitude and manual are setpoints in every way that matters to delivery
  * (Build/Send/Stream, no ack) so they land here rather than growing a parallel
- * path. Neither speaks a frame or a mode: their mask, or manual's axis-invalid
- * sentinel, derives from which fields carry values — the same presence rule
- * Steer uses.
+ * path. Neither speaks a frame or a mode: attitude's mask derives from which
+ * fields carry values — the same presence rule Steer uses — and manual sends
+ * all four axes as given.
  *
  * @param {string} action  a MOVE_ACTIONS member that is not a command action
  * @param {object} payload  msg.payload (trusted — AGENTS.md input trust)
@@ -524,8 +522,9 @@ function completeResult(node, send, result, detail, fields) {
 }
 
 /**
- * A stream reached its TTL: the vehicle already has the stop packet, and this
- * is what tells the flow.
+ * A stream reached its TTL: a position stream has already sent its brake,
+ * an attitude or manual stream has gone quiet, and this is what tells the
+ * flow.
  *
  * **Status port only.** Output 0 is a trigger, not a report (§9): one input
  * fires it at most once, and a consumer never inspects the payload to decide
