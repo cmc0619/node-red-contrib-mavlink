@@ -341,3 +341,55 @@ test('LAND completion without position: disarmed in MAV_STATE_POWEROFF (7) is no
   const res = checkCompletion(COMPLETION.LAND, [0, 0, 0, 0, 0, 0, 0], pt, 3, 1);
   assert.equal(res.done, false);
 });
+
+test('TAKEOFF with a blank altitude on the relative datum reads NaN and stays pending — no throw', () => {
+  // `requested` keeps holes: a Takeoff saved with Altitude blank hands
+  // completion undefined at index 6 (review R2).
+  const pt = peerWithAlts(1, 1, 520000, 20000);
+  const res = checkCompletion(COMPLETION.TAKEOFF, [0, 0, 0, 0, 0, 0, undefined], pt, 1, 1);
+  assert.equal(res.done, false);
+  assert.match(res.detail, /NaN/);
+});
+
+test('waitForCompletion arms no timer when the first check throws', async () => {
+  let polls = 0;
+  const table = {
+    getComponent() {
+      polls += 1;
+      throw new Error('boom');
+    },
+  };
+  assert.throws(() => waitForCompletion({
+    completionKey: COMPLETION.ARM,
+    params: [1, 0, 0, 0, 0, 0, 0],
+    peerTable: table,
+    sysid: 1,
+    compid: 1,
+    pollMs: 5,
+    timeoutMs: 20,
+  }), /boom/);
+  await sleep(40);
+  assert.equal(polls, 1, 'no interval re-runs the throwing check from timer context');
+});
+
+test('waitForCompletion arms no timer when the first check already settles', async () => {
+  let polls = 0;
+  const table = {
+    getComponent() {
+      polls += 1;
+      return { armed: true };
+    },
+  };
+  const wait = waitForCompletion({
+    completionKey: COMPLETION.ARM,
+    params: [1, 0, 0, 0, 0, 0, 0],
+    peerTable: table,
+    sysid: 1,
+    compid: 1,
+    pollMs: 5,
+    timeoutMs: 1000,
+  });
+  assert.equal((await wait.promise).success, true);
+  await sleep(25);
+  assert.equal(polls, 1, 'no poll after the first check settled');
+});
