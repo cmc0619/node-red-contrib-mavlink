@@ -41,24 +41,33 @@ module.exports = function registerMavlinkMove(RED) {
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
 
-    // Stop the active stream and free its single-owner scope. Every
-    // stop the node causes — replacement, a non-stream input, an explicit
-    // stop, close — routes through here so no path can leave the target
-    // locked with nothing streaming to it. `brake` follows GCS practice
-    // (§ "Move setpoint matrix"): the brake marks the end of control, so
-    // replace/supersede handovers pass false — the new setpoint IS the next
-    // command. The bookkeeping runs in `finally` because a brake send can
-    // throw (dead link): the lock must come free even when the brake never
-    // reached the wire, and each caller owns where that throw lands.
-    function stopStream({ brake = true } = {}) {
+    /**
+     * Empty the stream slot and free its single-owner scope. The one owner of
+     * that bookkeeping: an explicit stop, close, TTL expiry and a retarget
+     * handover all end here, so no path can leave the target locked with
+     * nothing streaming to it.
+     */
+    function clearSlot() {
+      const release = releaseStream;
+      stream = null;
+      releaseStream = null;
+      streamKey = null;
+      release();
+    }
+
+    /**
+     * End control of the active stream: an explicit stop or close, so it
+     * brakes (§ "Move setpoint matrix": the brake marks the end of control).
+     * The slot clears in `finally` because a brake send can throw (dead
+     * link): the lock must come free even when the brake never reached the
+     * wire, and each caller owns where that throw lands.
+     */
+    function stopStream() {
       if (!stream) return null;
       try {
-        return stream.stop({ brake });
+        return stream.stop();
       } finally {
-        stream = null;
-        releaseStream();
-        releaseStream = null;
-        streamKey = null;
+        clearSlot();
       }
     }
 
@@ -168,8 +177,8 @@ module.exports = function registerMavlinkMove(RED) {
               break;
             case 'stream': {
               // msg overrides by presence; the editor owns the defaults and rings.
-              const rateHz = payload.rateHz === undefined ? Number(config.rateHz) : payload.rateHz;
-              const ttlMs = payload.ttlMs === undefined ? Number(config.ttlMs) : payload.ttlMs;
+              const rateHz = valueFrom(payload, config, 'rateHz');
+              const ttlMs = valueFrom(payload, config, 'ttlMs');
               // One stream per (connection, target): a second node
               // streaming to the same vehicle would alternate contradictory
               // setpoints — the vehicle oscillates while both nodes report
@@ -208,12 +217,8 @@ module.exports = function registerMavlinkMove(RED) {
                 // the flow. A replaced stream's timer is already cleared, so
                 // this only ever fires for the stream currently in the slot.
                 onExpire: (stopMessage, brakeError) => {
-                  const sent = next.sent;
-                  stream = null;
-                  releaseStream = null;
-                  streamKey = null;
-                  release();
-                  completeExpiry(node, stopMessage, sent, brakeError);
+                  clearSlot();
+                  completeExpiry(node, stopMessage, next.sent, brakeError);
                 },
                 // A tick send that throws is contained in the stream — it
                 // keeps cadence and retries (§ "Move setpoint matrix"). One
@@ -250,18 +255,14 @@ module.exports = function registerMavlinkMove(RED) {
               // a brake throw must not undo the already-running replacement
               // (warn, like close — the lock still frees via finally).
               if (stream) {
-                const old = stream;
-                stream = null;
                 try {
-                  old.stop({ brake: !sameKey });
+                  stream.stop({ brake: !sameKey });
                 } catch (err) {
                   node.warn(`Move stream brake failed on retarget: ${err.message}`);
                 } finally {
-                  // No truthiness guard: stream and releaseStream are assigned
-                  // and cleared together, so inside `if (stream)` the release
-                  // always exists — and if that invariant ever broke, throwing
-                  // here beats silently stranding the old target's lock.
-                  if (!sameKey) releaseStream();
+                  // A retarget frees the old target's scope; the same target
+                  // keeps the lock the new stream is taking over.
+                  if (!sameKey) clearSlot();
                 }
               }
               stream = next;
@@ -475,7 +476,7 @@ function setpointFor(action, payload, config, target, profile) {
       const yaw = valueFrom(payload, config, 'yaw');
       const yawRate = valueFrom(payload, config, 'yawRate');
       return buildMoveMessage({
-        mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
+        mode: deriveSteerMode({ position, velocity, accel }),
         frame: frameForReference(
           valueFrom(payload, config, 'reference'),
           profile

@@ -134,9 +134,9 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   assert.equal(deriveSteerMode(g({ accel: filled })), 'acceleration');
   // Explicit 0 is a value, so a zero vector still names its group.
   assert.equal(deriveSteerMode(g({ velocity: { north: 0, east: '', up: '' } })), 'velocity');
-  // Yaw/yaw-rate alone are the measured-hazard yaw-only mode, still offered.
-  assert.equal(deriveSteerMode(g({ yaw: 90 })), 'yaw-only');
-  assert.equal(deriveSteerMode(g({ yawRate: 10 })), 'yaw-only');
+  // Yaw/yaw-rate alone are the measured-hazard '' mode (no vector group), still offered.
+  assert.equal(deriveSteerMode(g({ yaw: 90 })), '');
+  assert.equal(deriveSteerMode(g({ yawRate: 10 })), '');
   // Yaw rides any mode by presence — it does not change the derived group.
   assert.equal(deriveSteerMode(g({ velocity: filled, yaw: 90 })), 'velocity');
 
@@ -155,10 +155,10 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   assert.equal(deriveSteerMode(g({ accel: filled, position: filled })), 'position-acceleration');
   const { MODES } = require('../../lib/move/frames');
   assert.equal(MODES['position-acceleration'], undefined, 'the unmeasured mix has no wire encoding');
-  // Nothing filled derives yaw-only, which with no yaw is the all-ignore
+  // Nothing filled derives '', which with no yaw is the all-ignore
   // packet (§14 / #115). It used to refuse; the editor requires at least one
   // Steer field now, so the configured path cannot get here.
-  assert.equal(deriveSteerMode(g()), 'yaw-only');
+  assert.equal(deriveSteerMode(g()), '');
 
   // Only the LOCAL triplet names the position group (Codex, #277): a node
   // switched from Go to keeps its hidden lat/lon/alt serialized, and
@@ -167,9 +167,9 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   const staleGlobals = { north: '', east: '', up: '', lat: 47.1, lon: 8.5, alt: 25 };
   assert.equal(deriveSteerMode(g({ position: staleGlobals, velocity: filled })), 'velocity');
   assert.equal(deriveSteerMode(g({ position: staleGlobals, accel: filled })), 'acceleration');
-  // A stale global cannot rescue an empty steer either — it derives yaw-only
+  // A stale global cannot rescue an empty steer either — it derives ''
   // (the all-ignore packet), not position.
-  assert.equal(deriveSteerMode(g({ position: staleGlobals })), 'yaw-only');
+  assert.equal(deriveSteerMode(g({ position: staleGlobals })), '');
 });
 
 
