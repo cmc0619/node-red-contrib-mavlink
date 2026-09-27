@@ -99,6 +99,32 @@ test('a group that cannot be joined fails the deploy loudly', async () => {
   assert.equal(sockets[0].closed, true, 'the port is released on the way out');
 });
 
+test('a bind failure rejects open() and emits no transport error; later errors forward (CONN-CORE-14)', async () => {
+  const { module, sockets } = mockDgram();
+  const create = module.createSocket;
+  module.createSocket = (options) => {
+    const socket = create(options);
+    socket.bind = () => setTimeout(() => {
+      const err = new Error('bind EADDRINUSE 0.0.0.0:14550');
+      err.code = 'EADDRINUSE';
+      socket.emit('error', err);
+    }, 0);
+    return socket;
+  };
+  const failing = new UdpTransport({ bindAddress: '0.0.0.0', bindPort: 14550 }, { dgram: module });
+  const forwarded = [];
+  failing.on('error', (err) => forwarded.push(err));
+  await assert.rejects(() => failing.open(), /EADDRINUSE/);
+  assert.deepEqual(forwarded, [], 'one failure, one report: the rejection');
+
+  const { transport, sockets: live } = build();
+  transport.on('error', (err) => forwarded.push(err.message));
+  await transport.open();
+  live[0].emit('error', new Error('late'));
+  assert.deepEqual(forwarded, ['late']);
+  assert.equal(sockets.length, 1);
+});
+
 test('multicast is decided by the address, across both families', async () => {
   // Measured at the socket: a multicast group is joined, anything else is
   // broadcast-flagged, and no address at all touches neither.

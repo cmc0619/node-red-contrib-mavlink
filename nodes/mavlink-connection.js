@@ -209,10 +209,12 @@ module.exports = function registerMavlinkConnection(RED) {
     node.crcFailureCount = () => node.connection.crcFailureCount();
     Object.defineProperty(node, 'peerTable', { get: () => node.connection.peerTable });
 
-    // start() sets CONNECTING synchronously before its first await, and the
-    // 'state' listener above is already on, so the badge follows it from here.
+    /**
+     * start() sets CONNECTING synchronously before its first await and ERROR
+     * before it rejects, and the 'state' listener above is already on, so the
+     * badge follows it from here; the rejection is the one log line.
+     */
     node.connection.start().catch((err) => {
-      applyStatus(node, STATE.ERROR, signing.acceptInvalid);
       node.error(err.message);
     });
 

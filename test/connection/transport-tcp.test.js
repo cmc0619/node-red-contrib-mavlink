@@ -178,6 +178,21 @@ test('server listens, receives from a client, and writes back to the matching en
   assert.equal(client.writes[1].toString(), 'single-client');
 });
 
+test('a listen failure rejects open() and emits no transport error (CONN-CORE-14)', async () => {
+  const net = mockNet();
+  const createServer = net.module.createServer;
+  net.module.createServer = (options, listener) => {
+    const server = createServer(options, listener);
+    server.listen = () => setTimeout(() => server.emit('error', new Error('listen EADDRINUSE')), 0);
+    return server;
+  };
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
+  const forwarded = [];
+  transport.on('error', (err) => forwarded.push(err));
+  await assert.rejects(() => transport.open(), /EADDRINUSE/);
+  assert.deepEqual(forwarded, []);
+});
+
 test('client connects and sends on the connected socket', async () => {
   const net = mockNet();
   const transport = new TcpTransport(

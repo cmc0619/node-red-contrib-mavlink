@@ -1462,7 +1462,7 @@ const { timestampFromMs } = require('../../lib/connection/signing');
  *   which always succeeds) reject before one succeeds
  * @param {number} [options.initialOpenFailures]  initial opens that reject
  * @param {boolean} [options.failFirstOpen]  the deploy-time open itself fails,
- *   emitting a transport error first the way a real bind failure does
+ *   as a rejection only, the way a real bind failure reaches the runtime
  * @param {boolean} [options.holdInitialOpen]  the deploy-time open hangs until
  *   the test releases it, for the error-while-opening race
  * @param {boolean} [options.holdRedialOpen]  redial opens hang until the test
@@ -1497,11 +1497,9 @@ function reconnectBuild({
       opens += 1;
       if (opens <= initialOpenFailures) return Promise.reject(new Error('not ready'));
       if (opens === 1 && failFirstOpen) {
-        // A real bind failure (EADDRINUSE, missing device) emits the transport
-        // error event and rejects the open — mimic both.
-        const err = new Error('EADDRINUSE');
-        transport.emit('error', err);
-        return Promise.reject(err);
+        // A real bind failure (EADDRINUSE) rejects the open; the transport
+        // forwards no error event before it is listening.
+        return Promise.reject(new Error('EADDRINUSE'));
       }
       if (opens === 1 && holdInitialOpen) {
         return new Promise((resolve) => heldOpens.push(resolve));
@@ -1738,9 +1736,12 @@ test('an error while a redial open() settles does not let the stale continuation
 test('a transport that never opened does not enter the redial loop — deploy failures stay loud', async () => {
   const { connection, redials } = reconnectBuild({ failFirstOpen: true });
 
+  const errors = [];
+  connection._logger.error = (m) => errors.push(m);
   await assert.rejects(() => connection.start(), /EADDRINUSE/);
   assert.equal(connection.getState(), STATE.ERROR, 'pre-establishment errors stay terminal (§2)');
   assert.equal(redials().length, 0, 'no redial is ever armed for a config that never worked');
+  assert.deepEqual(errors, [], 'the rejection is the one report — the runtime logs nothing of its own');
 });
 
 test('a TCP listener that never opened does not enter the redial loop', async () => {
