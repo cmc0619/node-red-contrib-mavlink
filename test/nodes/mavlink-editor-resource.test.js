@@ -138,7 +138,7 @@ test('resolveCatalogTarget wire tier: the connection bound profile is the catalo
   const { RED } = loadResource(
     { '#node-input-connection': 'connection-1' },
     {
-      'connection-1': { vehicle: { id: 'vehicle-1' } },
+      'connection-1': { vehicle: 'vehicle-1' },
       'vehicle-1': { dialect: 'common' },
     }
   );
@@ -174,7 +174,7 @@ test('resolveCatalogTarget surfaces the wire profile firmware (Mission type gati
   const { RED } = loadResource(
     { '#node-input-delivery': 'confirm', '#node-input-connection': 'connection-1' },
     {
-      'connection-1': { vehicle: { id: 'vehicle-1', targetSystem: 1 } },
+      'connection-1': { vehicle: 'vehicle-1' },
       'vehicle-1': { dialect: 'ardupilotmega', firmware: 'ardupilot', vehicleFamily: 'copter' },
     }
   );
@@ -1558,7 +1558,7 @@ test('px4ModeEntries answers only for DO_SET_MODE param2 on a PX4 profile', () =
   const px4 = loadResource(
     { '#node-input-connection': 'conn-1' },
     {
-      'conn-1': { vehicle: { id: 'veh-1' } },
+      'conn-1': { vehicle: 'veh-1' },
       'veh-1': { dialect: 'common', firmware: 'px4' },
     }
   ).RED;
@@ -1571,7 +1571,7 @@ test('px4ModeEntries answers only for DO_SET_MODE param2 on a PX4 profile', () =
   const ap = loadResource(
     { '#node-input-connection': 'conn-1' },
     {
-      'conn-1': { vehicle: { id: 'veh-1' } },
+      'conn-1': { vehicle: 'veh-1' },
       'veh-1': { dialect: 'ardupilotmega', firmware: 'ardupilot', vehicleFamily: 'copter' },
     }
   ).RED;

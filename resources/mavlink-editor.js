@@ -200,19 +200,16 @@
    * @param {string|number|null} [opts.saved]  saved wire value
    * @param {string} [opts.title]  hover text (the XML description)
    * @param {string} [opts.className]  class the collector scrapes
+   * @param {string|number} [opts.trueValue]  wire value when ticked; omitted,
+   *   it is the TRUE entry's, which every such caller has proven present with
+   *   {@link RED.mavlink.isFalseTrueEnum}
    * @returns {jQuery} an `<input type="checkbox">` carrying data-kind="boolean"
    */
   RED.mavlink.booleanEnumInput = function (entries, opts) {
     opts = opts || {};
-    let trueValue = opts.trueValue !== undefined ? String(opts.trueValue) : null;
-    if (trueValue === null) {
-      let trueEntry = null;
-      for (let i = 0; i < entries.length; i++) {
-        const name = entries[i] && entries[i].name ? entries[i].name : '';
-        if (isTrueName(name)) trueEntry = entries[i];
-      }
-      trueValue = trueEntry ? String(trueEntry.value) : '1';
-    }
+    const trueValue = String(opts.trueValue !== undefined
+      ? opts.trueValue
+      : entries.find((entry) => isTrueName(entry.name)).value);
     const saved = opts.saved;
     const checked = saved !== undefined && saved !== null && saved !== ''
       && String(saved) === trueValue;
@@ -610,20 +607,6 @@
   }
 
   /**
-   * Config-node id from an editor property or a deployed Connection's frozen
-   * `vehicle` snapshot (`{ id, targetSystem, … }`).
-   *
-   * @param {string|{id?: string}|null|undefined} ref
-   * @returns {string}
-   */
-  RED.mavlink.vehicleIdFrom = function (ref) {
-    if (!ref) return '';
-    if (typeof ref === 'string') return ref;
-    if (typeof ref === 'object' && typeof ref.id === 'string') return ref.id;
-    return '';
-  };
-
-  /**
    * Vehicle / dialect query for admin catalog routes (enums, field-tips, …).
    *
    * A thin remainder over {@link RED.mavlink.resolveCatalogTarget}, which owns
@@ -638,7 +621,7 @@
    *   has a Build delivery but no dialect row, so it always resolves by wire)
    * @returns {Object<string, string>}
    */
-  function currentEnumQuery(names, opts) {
+  RED.mavlink.currentCatalogQuery = function (names, opts) {
     const target = RED.mavlink.resolveCatalogTarget(
       opts && typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : undefined
     );
@@ -659,7 +642,7 @@
     }
     addEnumNames(query, names);
     return query;
-  }
+  };
 
   function addEnumNames(query, names) {
     if (Array.isArray(names) && names.length) {
@@ -668,7 +651,6 @@
       query.names = names.trim();
     }
   }
-  RED.mavlink.currentCatalogQuery = currentEnumQuery;
 
   /**
    * Resolve which Vehicle / dialect the editor catalogs (messages, commands,
@@ -698,7 +680,7 @@
    *   the delivery/tier selector value === 'build' decides.
    * @returns {{key: string, query: object|null, dialect: string, vehicleId: string,
    *   firmware: string, vehicleFamily: string, isBuild: boolean}} `isBuild`
-   *   reports which branch answered, so thin remainders (`currentEnumQuery`'s
+   *   reports which branch answered, so thin remainders (`currentCatalogQuery`'s
    *   config-dialog fallback) need not re-detect the tier.
    */
   RED.mavlink.resolveCatalogTarget = function (opts) {
@@ -794,9 +776,8 @@
     // Wire tier: the connection's bound Vehicle Profile is the catalog source.
     const connectionId = read('connection', connectionSelector);
     if (connectionId) {
-      const conn = RED.nodes.node(connectionId);
-      const vehicleRef = RED.mavlink.vehicleIdFrom(conn?.vehicle);
-      if (vehicleRef) return forProfile(vehicleRef);
+      const vehicleId = RED.nodes.node(connectionId)?.vehicle;
+      if (vehicleId) return forProfile(vehicleId);
     }
     return empty();
   };
@@ -869,7 +850,7 @@
    */
   RED.mavlink.loadEnumsCatalog = function (names, cb, token, opts) {
     opts = opts || {};
-    const query = currentEnumQuery(names, opts);
+    const query = RED.mavlink.currentCatalogQuery(names, opts);
     if (!query.dialect && !query.vehicle && opts.dialect) {
       query.dialect = opts.dialect;
       addEnumNames(query, names);
@@ -1184,10 +1165,6 @@
    */
   RED.mavlink.fillCompIdSelect = function ($select, entries, opts) {
     opts = opts || {};
-    if (!opts.suggest) {
-      RED.mavlink.fillEnumSelect($select, entries, opts);
-      return;
-    }
     const split = RED.mavlink.splitCompIdsByTopic(entries, opts.suggest);
     if (!split.suggested.length) {
       RED.mavlink.fillEnumSelect($select, entries, opts);

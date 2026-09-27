@@ -164,8 +164,7 @@ test('shared applyFieldTitle / applyFieldUnits / applyFieldMeta helpers live on 
 test('Payload catalogQuery reuses shared currentCatalogQuery', () => {
   const html = readHtml('mavlink-payload');
   assert.match(html, /RED\.mavlink\.currentCatalogQuery/);
-  assert.match(resourceScript, /RED\.mavlink\.currentCatalogQuery\s*=\s*currentEnumQuery/);
-  assert.match(resourceScript, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
+  assert.match(resourceScript, /RED\.mavlink\.currentCatalogQuery\s*=\s*function/);
 });
 
 test('Payload editor keeps no field or enum table of its own (§6)', () => {

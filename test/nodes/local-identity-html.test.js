@@ -474,7 +474,7 @@ test('currentCatalogQuery on wire tiers keeps the connection profile behavior', 
     '#node-input-dialect': 'development',
     '#node-input-vehicle': 'stale-vehicle',
   }, {
-    'connection-1': { vehicle: { id: 'vehicle-1' } },
+    'connection-1': { vehicle: 'vehicle-1' },
     'vehicle-1': { dialect: 'ardupilotmega' },
     'stale-vehicle': { dialect: 'common' },
   });
