@@ -286,6 +286,33 @@ test('stream ticks re-stamp time_boot_ms without mutating the built message', ()
 });
 
 
+test('a stream flies its snapshot: an in-place edit of the emitted message changes no tick (R8)', () => {
+  const { createMoveStream } = require('../../lib/move');
+  const sent = [];
+  const message = {
+    name: 'SET_ATTITUDE_TARGET',
+    fields: { time_boot_ms: 0, target_system: 1, target_component: 1, type_mask: 7, q: [1, 0, 0, 0], thrust: 0.5 },
+  };
+  let tick = null;
+  const stream = createMoveStream({
+    message,
+    braking: false,
+    connection: { send: (m) => sent.push(m) },
+    rateHz: 4,
+    ttlMs: 0,
+    setInterval: (fn) => { tick = fn; return { unref() { /* injected */ } }; },
+    clearInterval: () => { /* injected */ },
+  });
+  stream.start();
+  // What a downstream Function node does to output 0's payload.message.
+  message.fields.thrust = 1;
+  message.fields.q[0] = 0;
+  tick();
+  stream.stop();
+  assert.equal(sent[1].fields.thrust, 0.5);
+  assert.deepEqual(sent[1].fields.q, [1, 0, 0, 0]);
+});
+
 test('braking is opt-out, and attitude/manual streams end in silence (§9 ruling 1)', () => {
   // The hazard this pins: a regression to always-brake would synthesize a
   // zero-velocity POSITION brake at a vehicle being attitude- or stick-flown —
