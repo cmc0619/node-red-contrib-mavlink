@@ -34,16 +34,8 @@
       // dispatches these tokens with affirmative cases only, so a hand-edited
       // stray value must be caught here, the only place that can see it.
       shape: { value: 'line', validate: RED.mavlink.oneOf(['line', 'column', 'grid', 'wedge', 'circle', 'sphere']) },
-      spacing: {
-        value: 10,
-        validate(v, _opt) {
-          // Spacing must be a positive distance: 0 stacks every vehicle on the
-          // same point — a commanded collision, not a formation.
-          const n = Number(v);
-          if (Number.isFinite(n) && n > 0) return true;
-          return 'must be a distance in metres > 0 — 0 stacks the fleet on one point';
-        },
-      },
+      /** A positive distance: 0 stacks every vehicle on one point — a commanded collision. */
+      spacing: { value: 10, validate: RED.mavlink.validatePositive('metres') },
       sysids: {
         value: '',
         validate(v, _opt) {
@@ -66,11 +58,9 @@
       promoteLeader: { value: false },
       leader: {
         value: '',
-        validate: whenAnchorMode('leader', (v, _opt) => {
-          const n = Number(v);
-          if (Number.isInteger(n) && n >= 1 && n <= 255) return true;
-          return 'must be the leader\'s SysID (1–255)';
-        }),
+        validate: whenAnchorMode('leader', (v, opt) => (RED.mavlink.isBlank(v)
+          ? 'needs the leader\'s SysID'
+          : RED.mavlink.validateUint8(1)(v, opt))),
       },
       // A fixed anchor must be a place on the ellipsoid: latitude ±90,
       // longitude ±180. Out of range is a typo, not a position.
