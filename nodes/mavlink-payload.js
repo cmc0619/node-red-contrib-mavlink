@@ -11,10 +11,10 @@ const { awaitAckWithBadge, cancelSlot, settleAck } = require('../lib/command/ack
 const { resolveFrame } = require('../lib/command/carrier');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 const {
-  shouldSuppress,
   makeStatusRecord,
   applyActionStatus,
   failInput,
+  onActionInput,
   completeBuild,
 } = require('../lib/delivery');
 const { resolveCatalogSource } = require('../lib/metadata/admin-catalog');
@@ -49,92 +49,83 @@ module.exports = function registerMavlinkPayload(RED) {
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
 
-    node.on('input', (msg, send, done) => {
-      try {
-        if (shouldSuppress(msg)) {
-          done();
-          return;
-        }
+    onActionInput(node, (msg, send, done) => {
+      // The editor owns the defaults and the number rings.
+      const timeoutMs = Number(config.timeoutMs);
+      const maxRetries = Number(config.maxRetries);
 
-        // The editor owns the defaults and the number rings.
-        const timeoutMs = Number(config.timeoutMs);
-        const maxRetries = Number(config.maxRetries);
+      const payload = msg.payload;
+      // Payload: compidFromConfig keeps the compid field authoritative even
+      // under a companion identity — compid addresses a payload device, not
+      // the autopilot (DESIGN.md §6 spec'd exception).
+      const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
+        delivery,
+        config,
+        payload,
+        connectionNode: connAtDeploy,
+        compidFromConfig: true,
+      });
 
-        const payload = msg.payload;
-        // Payload: compidFromConfig keeps the compid field authoritative even
-        // under a companion identity — compid addresses a payload device, not
-        // the autopilot (DESIGN.md §6 spec'd exception).
-        const { connectionNode, target, identityId } = resolveDeliveryContext(RED, {
-          delivery,
-          config,
-          payload,
-          connectionNode: connAtDeploy,
-          compidFromConfig: true,
-        });
+      const builtCmd = buildPayloadMessage({
+        topic: valueFrom(payload, config, 'topic'),
+        verb: valueFrom(payload, config, 'verb'),
+        path: valueFrom(payload, config, 'path'),
+        target,
+        values: valueFrom(payload, config, 'values'),
+        // Required for command-backed verbs (§9): a non-member carrier
+        // selects no builder (§5), so the message ships undefined and
+        // craters at the tier that touches it.
+        carrier: valueFrom(payload, config, 'sendAs'),
+        frame: resolveFrame(payload.mavFrame, config.frame),
+      });
 
-        const builtCmd = buildPayloadMessage({
-          topic: valueFrom(payload, config, 'topic'),
-          verb: valueFrom(payload, config, 'verb'),
-          path: valueFrom(payload, config, 'path'),
+      /**
+       * Send a command-backed verb and wait for its COMMAND_ACK. The ack,
+       * whatever it says, is the result (§9): a wrong-carrier code is reported
+       * like any other rejection and the flow decides what to send next.
+       */
+      async function awaitAck(built) {
+        const outcome = await awaitAckWithBadge(node, waiterSlot, connectionNode, built.message, built.message.name, {
           target,
-          values: valueFrom(payload, config, 'values'),
-          // Required for command-backed verbs (§9): a non-member carrier
-          // selects no builder (§5), so the message ships undefined and
-          // craters at the tier that touches it.
-          carrier: valueFrom(payload, config, 'sendAs'),
-          frame: resolveFrame(payload.mavFrame, config.frame),
+          identityId,
+          timeoutMs,
+          maxRetries,
         });
-
-        /**
-         * Send a command-backed verb and wait for its COMMAND_ACK. The ack,
-         * whatever it says, is the result (§9): a wrong-carrier code is reported
-         * like any other rejection and the flow decides what to send next.
-         */
-        async function awaitAck(built) {
-          const outcome = await awaitAckWithBadge(node, waiterSlot, connectionNode, built.message, built.message.name, {
-            target,
-            identityId,
-            timeoutMs,
-            maxRetries,
-          });
-          settleAck(node, send, done, outcome, {
-            label: built.message.name,
-            fields: { message: built.message, confirmation: built.confirmation },
-          });
-        }
-
-        // Affirmative dispatch on the tier (§5): a non-member matches no case,
-        // nothing reaches the wire, and the input completes as a no-op — the
-        // same shape as State's mode. No connection guard on the wire cases:
-        // the editor is the protector, and a missing Connection craters at
-        // `.send` / `.subscribe` like any other absent config node.
-        switch (delivery) {
-          case 'build':
-            completeBuild(node, send, builtCmd.message, 'payload', { confirmation: builtCmd.confirmation });
-            break;
-          case 'confirm':
-            // Wait for the COMMAND_ACK so a DENIED / TEMPORARILY_REJECTED /
-            // timeout can halt the chain (§9). Gimbal-manager setpoints carry
-            // no acknowledgement, so they fall through and send unconfirmed.
-            switch (builtCmd.confirmation) {
-              case 'command_ack':
-                awaitAck(builtCmd).catch((err) => failInput(node, send, err, done));
-                return;
-              default: break; // This space intentionally left blank (§5)
-            }
-            // falls through
-          case 'send': {
-            connectionNode.send(builtCmd.message, { band: BAND.CONTROL, target, identityId });
-            const detail = builtCmd.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
-            completeResult(node, send, 'sent', detail, builtCmd);
-            break;
-          }
-          default: break; // This space intentionally left blank (§5)
-        }
-        done();
-      } catch (err) {
-        failInput(node, send, err, done);
+        settleAck(node, send, done, outcome, {
+          label: built.message.name,
+          fields: { message: built.message, confirmation: built.confirmation },
+        });
       }
+
+      // Affirmative dispatch on the tier (§5): a non-member matches no case,
+      // nothing reaches the wire, and the input completes as a no-op — the
+      // same shape as State's mode. No connection guard on the wire cases:
+      // the editor is the protector, and a missing Connection craters at
+      // `.send` / `.subscribe` like any other absent config node.
+      switch (delivery) {
+        case 'build':
+          completeBuild(node, send, builtCmd.message, 'payload', { confirmation: builtCmd.confirmation });
+          break;
+        case 'confirm':
+          // Wait for the COMMAND_ACK so a DENIED / TEMPORARILY_REJECTED /
+          // timeout can halt the chain (§9). Gimbal-manager setpoints carry
+          // no acknowledgement, so they fall through and send unconfirmed.
+          switch (builtCmd.confirmation) {
+            case 'command_ack':
+              awaitAck(builtCmd).catch((err) => failInput(node, send, err, done));
+              return;
+            default: break; // This space intentionally left blank (§5)
+          }
+          // falls through
+        case 'send': {
+          connectionNode.send(builtCmd.message, { band: BAND.CONTROL, target, identityId });
+          const detail = builtCmd.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
+          completeResult(node, send, 'sent', detail, builtCmd);
+          break;
+        }
+        default: break; // This space intentionally left blank (§5)
+      }
+      done();
     });
 
     node.on('close', (done) => {

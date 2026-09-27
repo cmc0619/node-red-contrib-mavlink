@@ -21,9 +21,8 @@
 
 const {
   makeStatusRecord,
-  shouldSuppress,
   applyActionStatus,
-  failInput,
+  onActionInput,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkHealth(RED) {
@@ -65,50 +64,40 @@ module.exports = function registerMavlinkHealth(RED) {
       })]);
     });
 
-    node.on('input', (msg, send, done) => {
-      // §9 suppress: msg.payload === false → silent no-op.
-      if (shouldSuppress(msg)) {
-        done();
-        return;
-      }
-
-      try {
-        // No `?? {}`: the health verb lives only on the payload — there is no
-        // configured fallback verb, so a missing payload is absence, not an
-        // empty selection, and synthesizing `{}` would turn it into a silent
-        // no-op. It craters into failInput instead; absence is never invented.
-        const payload = msg.payload;
-        // Affirmative dispatch (§5): a health value naming neither member
-        // selects no behavior — nothing asserted, nothing sent, nothing
-        // reported, the same unmatched-tier contract mavlink-param and
-        // mavlink-command carry for their own closed-vocabulary msg fields.
-        switch (payload.health) {
-          case 'ok': {
-            const ttlS = payload.ttl_s === undefined ? defaultTtlS : payload.ttl_s;
-            connectionNode.assertHealth(identityId, true, ttlS * 1000);
-            applyActionStatus(node, 'ok', `healthy (${ttlS}s lease)`);
-            send([msg, makeStatusRecord(node.type, {
-              result: 'healthy',
-              identity: identityId,
-              ttlS,
-            })]);
-            break;
-          }
-          case 'fatal': {
-            connectionNode.assertHealth(identityId, false, 0);
-            applyActionStatus(node, 'error', 'faulted');
-            send([msg, makeStatusRecord(node.type, {
-              result: 'faulted',
-              identity: identityId,
-            })]);
-            break;
-          }
-          default: break; // This space intentionally left blank (§5)
+    onActionInput(node, (msg, send, done) => {
+      // No `?? {}`: the health verb lives only on the payload — there is no
+      // configured fallback verb, so a missing payload is absence, not an
+      // empty selection, and synthesizing `{}` would turn it into a silent
+      // no-op. It craters into failInput instead; absence is never invented.
+      const payload = msg.payload;
+      // Affirmative dispatch (§5): a health value naming neither member
+      // selects no behavior — nothing asserted, nothing sent, nothing
+      // reported, the same unmatched-tier contract mavlink-param and
+      // mavlink-command carry for their own closed-vocabulary msg fields.
+      switch (payload.health) {
+        case 'ok': {
+          const ttlS = payload.ttl_s === undefined ? defaultTtlS : payload.ttl_s;
+          connectionNode.assertHealth(identityId, true, ttlS * 1000);
+          applyActionStatus(node, 'ok', `healthy (${ttlS}s lease)`);
+          send([msg, makeStatusRecord(node.type, {
+            result: 'healthy',
+            identity: identityId,
+            ttlS,
+          })]);
+          break;
         }
-        done();
-      } catch (err) {
-        failInput(node, send, err, done);
+        case 'fatal': {
+          connectionNode.assertHealth(identityId, false, 0);
+          applyActionStatus(node, 'error', 'faulted');
+          send([msg, makeStatusRecord(node.type, {
+            result: 'faulted',
+            identity: identityId,
+          })]);
+          break;
+        }
+        default: break; // This space intentionally left blank (§5)
       }
+      done();
     });
 
     node.on('close', () => {

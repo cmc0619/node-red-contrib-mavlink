@@ -4,6 +4,9 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+/** Lets a handler's rejected promise reach failInput before the asserts read it. */
+const settle = () => new Promise(setImmediate);
+
 
 
 
@@ -51,7 +54,7 @@ test('mavlink-move stream: a replaced or closed stream expires silently', async 
   assert.equal(emitted.length, 0, 'replacement and close emit nothing');
 });
 
-test('mavlink-move stream: one owner per (connection, target) — a second node is refused, the owner may replace itself (#176)', () => {
+test('mavlink-move stream: one owner per (connection, target) — a second node is refused, the owner may replace itself (#176)', async () => {
   const conn = { id: 'conn', vehicle: {}, send() {} };
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
@@ -78,6 +81,7 @@ test('mavlink-move stream: one owner per (connection, target) — a second node 
   let sent;
   let doneError;
   b.emit('input', { payload: {} }, (m) => { sent = m; }, (err) => { doneError = err; });
+  await settle();
   assert.equal(sent[0], null, 'conflict must not fire the continue port');
   assert.equal(sent[1].result, 'failed');
   assert.match(doneError.message, /stream to 1\.1 is already running on this connection/);
@@ -232,7 +236,7 @@ test('a payload action that is not "stop" selects no stop and rides the build pa
   assert.ok(sends.length, 'the setpoint reached the wire');
 });
 
-test('mavlink-move stream: {action:"stop"} releases the target for a new stream (#176)', () => {
+test('mavlink-move stream: {action:"stop"} releases the target for a new stream (#176)', async () => {
   const conn = { id: 'conn', vehicle: {}, send() {} };
   const RED = redStub({ conn });
   require('../../nodes/mavlink-move')(RED);
@@ -256,6 +260,7 @@ test('mavlink-move stream: {action:"stop"} releases the target for a new stream 
   a.emit('input', { payload: {} }, () => {}, () => {});
   let refused;
   b.emit('input', { payload: {} }, (m) => { refused = m; }, () => {});
+  await settle();
   assert.equal(refused[1].result, 'failed', 'target held while a streams');
 
   let stopped;
@@ -340,7 +345,7 @@ test('mavlink-move stream: expiry brake failure keeps the documented discriminat
   node.emit('close', () => {});
 });
 
-test('mavlink-move stream: a failed handover send leaves the old stream running (Codex, #240)', () => {
+test('mavlink-move stream: a failed handover send leaves the old stream running (Codex, #240)', async () => {
   // The replacement's initial send throwing must not leave the vehicle with
   // no retrying stream and no brake — the old stream keeps the slot.
   const sends = [];
@@ -377,6 +382,7 @@ test('mavlink-move stream: a failed handover send leaves the old stream running 
   let failed;
   let doneErr;
   node.emit('input', { payload: { velocity: { north: 2, east: 0, up: 0 } } }, (m) => { failed = m; }, (err) => { doneErr = err; });
+  await settle();
   assert.match(doneErr.message, /identity unresolved/);
   assert.equal(failed[1].result, 'failed');
 
@@ -422,7 +428,7 @@ test('mavlink-move stream: a retarget brakes the old target after the new stream
   node.emit('close', () => {});
 });
 
-test('mavlink-move stream: a failed retarget frees only the new scope, old stream keeps its own (Codex, #240)', () => {
+test('mavlink-move stream: a failed retarget frees only the new scope, old stream keeps its own (Codex, #240)', async () => {
   let failNext = false;
   const conn = {
     id: 'conn',
@@ -454,12 +460,14 @@ test('mavlink-move stream: a failed retarget frees only the new scope, old strea
   failNext = true;
   let doneErr;
   a.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, () => {}, (err) => { doneErr = err; });
+  await settle();
   assert.match(doneErr.message, /identity unresolved/);
 
   // Target 1 is still held by a's surviving stream; target 2 was released on
   // the way out of the failed retarget.
   let held;
   b.emit('input', { payload: {} }, (m) => { held = m; }, () => {});
+  await settle();
   assert.match(held[1].detail, /already running/);
   let freed;
   b.emit('input', { payload: { target: { sysid: 2, compid: 1 } } }, (m) => { freed = m; }, () => {});

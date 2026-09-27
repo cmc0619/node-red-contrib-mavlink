@@ -54,77 +54,69 @@ module.exports = function registerMavlinkFormation(RED) {
       frame: DEFAULT_FRAME,
     });
 
-    node.on('input', async (msg, send, done) => {
-      try {
-        if (delivery.shouldSuppress(msg)) {
-          done();
-          return;
-        }
-        const payload = msg.payload;
-        const sysids = parseSysidList(valueFrom(payload, config, 'sysids'));
-        const { anchor, headingDeg, leaderSysid } = resolveAnchor(
-          config, payload, connectionNode.peerTable
-        );
-        const pitchDeg = resolvePitch(config, payload);
-        /**
-         * Slot 0 sits on the anchor. On a leader anchor that slot is the
-         * leader's own: the followers fill slots 1..N in sysid order and the
-         * leader is never commanded (it is already where slot 0 is).
-         */
-        const followers = sysids.filter((id) => id !== leaderSysid).sort((a, b) => a - b);
-        const targets = formationTargets({
-          shape: config.shape,
-          spacing: config.spacing,
-          anchor,
-          headingDeg,
-          pitchDeg,
-          sysids: leaderSysid === undefined ? followers : [leaderSysid, ...followers],
-        }).filter((target) => target.sysid !== leaderSysid);
+    delivery.onActionInput(node, async (msg, send, done) => {
+      const payload = msg.payload;
+      const sysids = parseSysidList(valueFrom(payload, config, 'sysids'));
+      const { anchor, headingDeg, leaderSysid } = resolveAnchor(
+        config, payload, connectionNode.peerTable
+      );
+      const pitchDeg = resolvePitch(config, payload);
+      /**
+       * Slot 0 sits on the anchor. On a leader anchor that slot is the
+       * leader's own: the followers fill slots 1..N in sysid order and the
+       * leader is never commanded (it is already where slot 0 is).
+       */
+      const followers = sysids.filter((id) => id !== leaderSysid).sort((a, b) => a - b);
+      const targets = formationTargets({
+        shape: config.shape,
+        spacing: config.spacing,
+        anchor,
+        headingDeg,
+        pitchDeg,
+        sysids: leaderSysid === undefined ? followers : [leaderSysid, ...followers],
+      }).filter((target) => target.sysid !== leaderSysid);
 
-        const memberTargets = targets.map((target) => ({
-          sysid: target.sysid,
-          x: scaleLatLon(target.lat),
-          y: scaleLatLon(target.lon),
-          z: target.alt,
-        }));
+      const memberTargets = targets.map((target) => ({
+        sysid: target.sysid,
+        x: scaleLatLon(target.lat),
+        y: scaleLatLon(target.lon),
+        z: target.alt,
+      }));
 
-        const aggregate = await inFlight.track((signal) => executeFanout({
-          signal,
-          // Aggregates from this node say mavlink-formation, not the library's
-          // replicator — failure records already do (§9 one record owner).
-          nodeType: node.type,
-          connection: connectionNode,
-          message,
-          targets: memberTargets,
-          mode: 'sequential',
-          // One vehicle at a time, as the help promises. The retry budget,
-          // interval and timeout are the editor's, read as saved.
-          concurrency: 1,
-          maxRetries: config.maxRetries,
-          delivery: config.delivery,
-          intervalMs: config.intervalMs,
-          timeoutMs: config.timeoutMs,
-        }));
+      const aggregate = await inFlight.track((signal) => executeFanout({
+        signal,
+        // Aggregates from this node say mavlink-formation, not the library's
+        // replicator — failure records already do (§9 one record owner).
+        nodeType: node.type,
+        connection: connectionNode,
+        message,
+        targets: memberTargets,
+        mode: 'sequential',
+        // One vehicle at a time, as the help promises. The retry budget,
+        // interval and timeout are the editor's, read as saved.
+        concurrency: 1,
+        maxRetries: config.maxRetries,
+        delivery: config.delivery,
+        intervalMs: config.intervalMs,
+        timeoutMs: config.timeoutMs,
+      }));
 
-        // A redeploy cancelled us: finish quietly rather than emitting or
-        // raising on a closed node (same rule as mavlink-fanout).
-        if (aggregate.result === 'cancelled') {
-          done();
-          return;
-        }
-
-        // Which vehicle actually anchored the pattern. Present on every
-        // leader-anchored run, not only a promoted one, so a flow reads one
-        // field rather than inferring a substitution from its absence. Copied
-        // rather than threaded through lib/fanout: the replicator has no
-        // notion of a leader and should not grow one for a single caller.
-        const record = leaderSysid === undefined
-          ? aggregate
-          : { ...aggregate, leader: leaderSysid };
-        reportAggregate(node, send, done, record, config.delivery);
-      } catch (err) {
-        delivery.failInput(node, send, err, done);
+      // A redeploy cancelled us: finish quietly rather than emitting or
+      // raising on a closed node (same rule as mavlink-fanout).
+      if (aggregate.result === 'cancelled') {
+        done();
+        return;
       }
+
+      // Which vehicle actually anchored the pattern. Present on every
+      // leader-anchored run, not only a promoted one, so a flow reads one
+      // field rather than inferring a substitution from its absence. Copied
+      // rather than threaded through lib/fanout: the replicator has no
+      // notion of a leader and should not grow one for a single caller.
+      const record = leaderSysid === undefined
+        ? aggregate
+        : { ...aggregate, leader: leaderSysid };
+      reportAggregate(node, send, done, record, config.delivery);
     });
 
     node.on('close', (done) => inFlight.close(done));

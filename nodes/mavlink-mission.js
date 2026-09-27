@@ -26,9 +26,8 @@
 
 const {
   makeStatusRecord,
-  shouldSuppress,
   applyActionStatus,
-  failInput,
+  onActionInput,
 } = require('../lib/delivery');
 const { BAND } = require('../lib/connection/bands');
 const { missionTypeValue, OPERATION } = require('../lib/mission/types');
@@ -74,25 +73,9 @@ module.exports = function registerMavlinkMission(RED) {
      */
     const activeByKey = new Map();
 
-    node.on('input', (msg, send, done) => {
-      // A sync throw from an input handler is logged by Node-RED but never
-      // completes the message — done() is not called and output 1 stays
-      // silent. Everything below that can throw (items JSON, a wire tier
-      // whose Connection did not resolve) routes through failInput instead,
-      // like every other sender.
-      try {
-        handle(msg, send, done);
-      } catch (err) {
-        failInput(node, send, err, done);
-      }
-    });
+    onActionInput(node, handle);
 
     function handle(msg, send, done) {
-      if (shouldSuppress(msg)) {
-        done();
-        return;
-      }
-
       const payload = msg.payload;
       // Only an absent override selects the configured value; numeric 0 and
       // every other explicit value ride unchanged.
