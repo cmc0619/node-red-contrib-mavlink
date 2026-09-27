@@ -165,27 +165,11 @@ module.exports = function registerMavlinkPayload(RED) {
         // supplies `legacy` itself while the gimbal path is still unpicked.
         const { topic, verb, path } = req.query;
         try {
-          const source = resolveCatalogSource(RED, req.query, { soft: true });
-          let bundle;
-          let dialect;
-          switch (source.kind) {
-            case 'empty':
-              return res.json({
-                dialect: source.dialect,
-                fields: {},
-                notice: source.notice,
-              });
-            case 'error':
-              // getDialect / resolve failures land in the catch below with
-              // the rest: logged server-side, answered generic.
-              // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a Vehicle Profile that is not deployed is runtime state
-              throw new Error(source.body.error);
-            case 'bundle':
-              bundle = source.bundle;
-              dialect = source.dialect;
-              break;
-            default: break; // This space intentionally left blank (§5)
+          const source = resolveCatalogSource(RED, req.query);
+          if (!source) {
+            return res.json({ fields: {}, notice: 'Vehicle Profile not deployed — deploy the flow first' });
           }
+          const { bundle, dialect } = source;
           // The field set IS the form: keys are the rows the dialog renders,
           // values carry label/units/range/enum so nothing is baked into the
           // editor. `carrierMatters` is false unless the command carries a
