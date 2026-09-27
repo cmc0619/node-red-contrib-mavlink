@@ -112,26 +112,28 @@ module.exports = function registerMavlinkConnection(RED) {
       vehicleFamily: defaults.vehicleFamily,
     });
 
-    // Disabled means no runtime is constructed at all: no dialing, listening,
-    // or timers (§7) — the dialect compile above waits too. Show the grey
-    // disabled badge and stop.
-    //
-    // The read-side stubs still answer, because a disabled Connection is a
-    // valid choice, not a broken reference. An empty peer table (no timers —
-    // sweeping is driven by the runtime, which does not exist here) lets
-    // action nodes report "no members" instead of "invalid config", which is
-    // the honest answer: the flow is configured correctly and the link is
-    // switched off. The vehicle snapshot above is part of that read side —
-    // wire-tier nodes resolve their dialect through it at deploy, so the flow
-    // loads and fails at send time. `send` refuses instead — swallowing a
-    // frame would let the sender report "sent" over a link that moved
-    // nothing (§2).
     /**
      * The identity-override rule the runtime's sends use, answered on every
      * branch for a node that keys state by identity id (mavlink-health).
      */
     node.resolveIdentityId = (overrideId) => resolveIdentityId(config.localIdentity, overrideId);
 
+    /**
+     * Disabled means no runtime is constructed at all: no dialing, listening,
+     * or timers (§7), and the profile's bundle is never read. Show the grey
+     * disabled badge and stop.
+     *
+     * The read-side stubs still answer, because a disabled Connection is a
+     * valid choice, not a broken reference. An empty peer table (no timers —
+     * sweeping is driven by the runtime, which does not exist here) lets
+     * action nodes report "no members" instead of "invalid config", which is
+     * the honest answer: the flow is configured correctly and the link is
+     * switched off. The vehicle snapshot above is part of that read side —
+     * wire-tier nodes resolve their dialect through it at deploy, so the flow
+     * loads and fails at send time. `send` refuses instead — swallowing a
+     * frame would let the sender report "sent" over a link that moved
+     * nothing (§2).
+     */
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
@@ -297,8 +299,9 @@ function buildTransportConfig(config) {
  * Node-RED encrypted credentials; the key is derived from it via node-mavlink's
  * primitive whenever a passphrase is present (§7). Sign-outbound remains an
  * independent outbound switch; key presence selects the inbound verification
- * regime. Sign-outbound with no passphrase still fails the connection closed in
- * the runtime.
+ * regime. Sign-outbound with no key is the signer's own refusal: a flow send
+ * throws in send()'s dry run, and each heartbeat is dropped at serialize with
+ * a logged error while the link stays up.
  *
  * @param {object} config
  * @param {object} credentials  the node's credentials object (Node-RED always assigns one)
