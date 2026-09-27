@@ -497,6 +497,10 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   assert.equal(defaults.broadcastPort.validate.call({ id: 'c1', mode: 'serial' }, '0', {}), true);
 
   assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '57600', {}), true);
+  // ArduPilot's SERIALn_BAUD rates a companion UART runs at.
+  for (const baud of ['111100', '256000', '500000', '1500000', '2000000']) {
+    assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, baud, {}), true, baud);
+  }
   // Closed list: a rate off it reds, whether it is nonsense or merely a real
   // baud the dropdown does not offer.
   assert.match(

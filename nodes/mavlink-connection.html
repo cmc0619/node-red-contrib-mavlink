@@ -8,10 +8,13 @@
 
 <script type="text/javascript">
   (function () {
-  // Serial baud rates, as strings because that is what a <select> saves. A
-  // closed list, not a suggestion list: the standard rates are a fixed
-  // vocabulary, so nothing outside them needs to stay typeable.
-  const SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
+  /**
+   * Serial baud rates, as strings because that is what a <select> saves:
+   * ArduPilot's SERIALn_BAUD table (AP_SerialManager.cpp @Values) from 9600
+   * up, 1.5 and 2 Mbaud included for companion UARTs.
+   */
+  const SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '111100', '115200', '230400', '256000',
+    '460800', '500000', '921600', '1500000', '2000000'];
 
   // Remote host and port are a pair — both blank (listen-only) or both set.
   // The runtime trusts this: a half-configured remote never deploys, so the
