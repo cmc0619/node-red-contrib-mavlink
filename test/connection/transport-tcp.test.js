@@ -7,8 +7,10 @@ const { EventEmitter } = require('node:events');
 const {
   TcpTransport,
   TCP_NO_DESTINATION,
-  TCP_PEER_GONE,
 } = require('../../lib/connection/transport/tcp');
+
+/** The loud gone-peer code the runtime's failover reads (not quiet, not transient). */
+const TCP_PEER_GONE = 'TCP_PEER_GONE';
 
 /** @returns {Promise<void>} */
 function tick() {

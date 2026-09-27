@@ -15,11 +15,11 @@
  */
 
 const { capBadge } = require('../lib/delivery');
-const { setCompiledCacheDir, clearCompiledCache } = require('../lib/metadata/bundled');
+const { setCompiledCacheDir, clearCompiledCache, knownDialects } = require('../lib/metadata/bundled');
 const { XmlCatalog, dialectLibrary } = require('../lib/metadata/xml-catalog');
 const { catalogEnumsFromBundle } = require('../lib/metadata/enums-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
-const { resolveDialect, knownDialects } = require('../lib/vehicle');
+const { resolveDialect } = require('../lib/vehicle');
 
 /** Admin endpoint path for dialect list. */
 const DIALECTS_ROUTE = '/mavlink/dialects';

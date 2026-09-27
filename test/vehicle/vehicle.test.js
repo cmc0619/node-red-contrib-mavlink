@@ -14,11 +14,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const {
-  resolveDialect,
-  knownDialects,
-} = require('../../lib/vehicle');
-const { seedSources } = require('../../lib/metadata/bundled');
+const { resolveDialect } = require('../../lib/vehicle');
+const { seedSources, knownDialects } = require('../../lib/metadata/bundled');
 
 /* ---------- knownDialects ---------- */
 
