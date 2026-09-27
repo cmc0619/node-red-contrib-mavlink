@@ -78,7 +78,9 @@ test('a disabled Connection still exposes an empty peer table and the vehicle sn
   // the peer table existing, so without this they report "invalid config"
   // when the truth is "the link is switched off and nobody is on it".
   assert.ok(node.peerTable, 'peer table is present');
-  assert.equal(node.localIdentity, 'id-1', 'the Local Identity id is readable on every branch (mavlink-health)');
+  assert.equal(node.resolveIdentityId(''), 'id-1', 'the identity rule answers on every branch (mavlink-health)');
+  assert.equal(node.resolveIdentityId(undefined), 'id-1');
+  assert.equal(node.resolveIdentityId('other'), 'other');
   assert.equal(typeof node.subscribe, 'function');
   // The vehicle snapshot is read side too: a wire-tier Build resolves its
   // dialect through `vehicle.id` in its constructor, so without this a

@@ -23,14 +23,6 @@ function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/**
- * @param {object} input
- * @returns {{identityId: string, source: string}}
- */
-function resolveIdentity(input) {
-  return { identityId: input.overrideId || input.defaultIdentityId, source: 'test' };
-}
-
 class FakeTransport extends EventEmitter {
   /** @param {Array<string>} events */
   constructor(events) {
@@ -210,7 +202,6 @@ test('Connection pump marks each dequeued band immediately before transport send
       setInterval: timers.setInterval,
       clearInterval: timers.clearInterval,
       wire: fakeWire(),
-      resolveIdentity,
       transportFactory: () => transport,
     }
   );

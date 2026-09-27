@@ -21,18 +21,6 @@ function delay(ms) {
 }
 
 /**
- * A stub identity resolver so the runtime tests do not couple to lib/identity.
- *
- * @param {object} input
- * @returns {{identityId: string, source: string}}
- */
-function resolveIdentity(input) {
-  const override = input.overrideId;
-  if (override) return { identityId: override, source: 'override' };
-  return { identityId: input.defaultIdentityId, source: 'default' };
-}
-
-/**
  * @param {object} [configOverrides]
  * @param {object} [depOverrides]
  * @returns {{connection: Connection, dg: object, timers: object}}
@@ -62,7 +50,6 @@ function build(configOverrides = {}, depOverrides = {}) {
     clearInterval: timers.clearInterval,
     dgram: dg.module,
     wire: fakeWire(),
-    resolveIdentity,
     ...depOverrides,
   });
   return { connection, dg, timers };
@@ -781,6 +768,18 @@ test('an open() rejected by a racing close() resolves start() quietly, not as an
   connection.close();
   await starting; // must not reject
   assert.equal(connection.getState(), STATE.CLOSED, 'the race must settle in CLOSED, not CONNECTING');
+});
+
+test('a blank identity override (undefined, null, empty) sends as the default identity', async () => {
+  const { resolveIdentityId } = require('../../lib/connection/runtime');
+  for (const blank of [undefined, null, '']) assert.equal(resolveIdentityId('gcs', blank), 'gcs');
+  assert.equal(resolveIdentityId('gcs', 'other'), 'other', 'a non-blank override rides as given');
+  const { connection } = build();
+  await connection.start();
+  for (const blank of [undefined, null, '']) {
+    assert.deepEqual(connection.resolveSourceIds(blank), { sysid: 255, compid: 190 });
+  }
+  connection.close();
 });
 
 test('an identity override the connection does not carry craters in send(), never falling back', async () => {
@@ -1531,7 +1530,6 @@ function reconnectBuild({
     {
       transportFactory,
       wire,
-      resolveIdentity,
       setInterval: timers.setInterval,
       clearInterval: timers.clearInterval,
       setTimeout: (fn, ms) => {

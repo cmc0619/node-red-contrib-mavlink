@@ -10,6 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const registerMavlinkHealth = require('../../nodes/mavlink-health');
+const { resolveIdentityId } = require('../../lib/connection/runtime');
 
 /** Minimal RED with a config-node registry. */
 function makeRED(configNodes) {
@@ -27,7 +28,7 @@ function makeRED(configNodes) {
 /** A connection stub recording assertHealth calls and its identity shape. */
 function makeConnection(shape) {
   return {
-    localIdentity: shape.localIdentity,
+    resolveIdentityId: (overrideId) => resolveIdentityId(shape.localIdentity, overrideId),
     additionalIdentities: shape.additionalIdentities,
     _asserts: [],
     assertHealth(id, healthy, ttlMs) { this._asserts.push({ id, healthy, ttlMs }); },
@@ -89,7 +90,22 @@ test('multi-identity Connection honours a bound, existing saved pick', () => {
   assert.equal(conn._asserts[0].healthy, false);
 });
 
-test('a saved id the Connection does not bind still rides — assertHealth is the loud path', () => {
+test('an omitted identity key asserts the Local Identity, like a blank one (R24)', () => {
+  /**
+   * An Admin-API deploy omits keys (DESIGN.md §14.41); an omitted key keyed
+   * the fault under `undefined`, so `fatal` reported `faulted` while the
+   * Local Identity kept heartbeating.
+   */
+  const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: [] });
+  const RED = makeRED({ conn });
+  registerMavlinkHealth(RED);
+  const node = makeNode();
+  RED._type().call(node, { connection: 'conn', ttlS: 5 });
+  node._input({ payload: { health: 'fatal' } });
+  assert.equal(conn._asserts[0].id, 'comp');
+});
+
+test('a saved id the Connection does not bind still rides as given (DESIGN.md §14.141)', () => {
   const conn = makeConnection({ localIdentity: 'comp', additionalIdentities: ['dangling'] });
   const node = build({ identity: 'loose' }, conn);
   node._input({ payload: { health: 'ok' } });

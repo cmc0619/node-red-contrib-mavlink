@@ -19,10 +19,9 @@
  * nodes are never re-resolved during teardown (§7).
  */
 
-const { Connection, STATE } = require('../lib/connection/runtime');
+const { Connection, STATE, resolveIdentityId } = require('../lib/connection/runtime');
 const { PeerTable } = require('../lib/connection/peer-table');
 const { listSerialPorts } = require('../lib/connection/transport/serial');
-const { resolveIdentity } = require('../lib/identity/resolve');
 const { capBadge } = require('../lib/delivery');
 
 /** Admin endpoint path listing host serial ports for the editor (§6). */
@@ -127,9 +126,11 @@ module.exports = function registerMavlinkConnection(RED) {
     // loads and fails at send time. `send` refuses instead — swallowing a
     // frame would let the sender report "sent" over a link that moved
     // nothing (§2).
-    // The Local Identity id, read live by a node whose editor hides the
-    // Identity field on a single-identity Connection (mavlink-health).
-    node.localIdentity = config.localIdentity;
+    /**
+     * The identity-override rule the runtime's sends use, answered on every
+     * branch for a node that keys state by identity id (mavlink-health).
+     */
+    node.resolveIdentityId = (overrideId) => resolveIdentityId(config.localIdentity, overrideId);
 
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
@@ -191,7 +192,6 @@ module.exports = function registerMavlinkConnection(RED) {
           warn: (m) => node.warn(m),
           error: (m) => node.error(m),
         },
-        resolveIdentity,
     });
 
     node.connection.on('state', (state) => applyStatus(node, state, signing.acceptInvalid));

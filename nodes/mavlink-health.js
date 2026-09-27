@@ -36,12 +36,15 @@ module.exports = function registerMavlinkHealth(RED) {
 
     const connectionNode = RED.nodes.getNode(config.connection);
 
-    // Which identity's health this asserts. The editor writes blank for a
-    // single-identity Connection (its field is hidden), and blank reads the
-    // Connection's Local Identity live — a Connection whose identity was
-    // changed is followed without re-saving this node. A multi-identity pick
-    // rides as saved.
-    const identityId = config.identity === '' ? connectionNode.localIdentity : config.identity;
+    /**
+     * Which identity's health this asserts, through the Connection's one
+     * override rule: the editor writes blank for a single-identity Connection
+     * (its field is hidden), and a blank or omitted key (an Admin-API deploy,
+     * DESIGN.md §14.41) reads the Connection's Local Identity — a Connection
+     * whose identity was changed is followed without re-saving this node. A
+     * multi-identity pick rides as saved.
+     */
+    const identityId = connectionNode.resolveIdentityId(config.identity);
 
     // The editor owns the default and the positive-number ring — just convert
     // it. msg.payload.ttl_s overrides by presence (§0 presence-fallback).
