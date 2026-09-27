@@ -188,7 +188,7 @@ test('a retry send that throws settles the transaction instead of escaping the t
   conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
 
   const outcome = await p;
-  assert.equal(outcome.result, 'send failed');
+  assert.equal(outcome.result, 'failed');
   assert.match(outcome.detail, /queue overflow/);
   assert.equal(sends, 2, 'the retry was attempted');
 });

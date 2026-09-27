@@ -191,9 +191,10 @@ test('a silence re-send that throws settles the transaction instead of escaping 
   const outcome = await waiter.start();
 
   assert.equal(sends, 2);
-  assert.equal(outcome.result, 'send failed');
+  assert.equal(outcome.result, 'failed');
   assert.equal(outcome.retries, 1);
   assert.equal(outcome.detail, 'retry send failed: queue full');
+  assert.equal(outcome.error.message, 'queue full', 'the error rides the settle for done(err)');
 });
 
 test('a TEMPORARILY_REJECTED retry is a fresh transmission: silence after it spends the remaining budget', async () => {

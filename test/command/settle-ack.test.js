@@ -78,5 +78,16 @@ test('settleAck: any other terminal is its MAV_RESULT name on output 1 only', ()
   assert.equal(h.sent[0][1].result, 'denied');
   assert.equal(h.sent[0][1].resultCode, 2);
   assert.equal(h.statuses[0].fill, 'red');
-  assert.deepEqual(h.doneArgs, []);
+  assert.equal(h.doneArgs[0], undefined);
+});
+
+test('settleAck: a re-send that threw is failed on output 1 and its error reaches done (R39)', () => {
+  const h = harness();
+  const error = new Error('control queue full');
+  settleAck(h.node, h.send, h.done, outcome({
+    result: 'failed', resultCode: null, confirmedBy: undefined, retries: 1, error,
+  }), { label: 'Arm', fields: {} });
+  assert.equal(h.sent[0][1].result, 'failed');
+  assert.equal('error' in h.sent[0][1], false, 'the Error object stays out of the record');
+  assert.equal(h.doneArgs[0], error, 'Catch sees a mid-retry failure like a first-send one');
 });

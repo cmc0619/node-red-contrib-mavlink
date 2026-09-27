@@ -1173,7 +1173,7 @@ test('a vehicle\'s MAV_RESULT_CANCELLED is a terminal answer on output 1, not a 
   assert.equal(outputs[0][1].result, 'cancelled');
   assert.equal(outputs[0][1].resultCode, 6, 'the vehicle said it');
   assert.equal(outputs[0][1].confirmedBy, 'ack');
-  assert.deepEqual(doneArgs, []);
+  assert.equal(doneArgs[0], undefined, 'a vehicle verdict is data, not an error for Catch');
   node.emit('close', () => {});
 });
 
