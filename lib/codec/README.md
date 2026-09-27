@@ -5,10 +5,10 @@ Two small modules the send path reads. Neither imports `node-mavlink`,
 
 ## `types.js`
 
-The MAVLink scalar type table — size, `kind`, and byte width per type string —
-plus `normalizeType` (collapses `uint8_t_mavlink_version` to `uint8_t`) and
-`is64BitKind`. `lib/connection/wire.js` and `wire-classes.js` read it to lay
-out payloads and synthesize message classes.
+The MAVLink scalar type table — size, `kind`, and byte width per type string
+as the compiled bundle carries it — plus `is64BitKind`.
+`lib/connection/wire.js` and `wire-classes.js` read it to lay out payloads and
+synthesize message classes.
 
 ## `param-union.js`
 
