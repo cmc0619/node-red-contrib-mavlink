@@ -3,10 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const {
-  executeFanout,
-  selectFanoutMembers,
-} = require('../../lib/fanout');
+const { executeFanout } = require('../../lib/fanout');
 
 // Every runtime caller hands executeFanout the in-flight tracker's abort
 // signal; the tests share one that never fires.
@@ -16,7 +13,7 @@ const { streamLocks } = require('../../lib/delivery/lock');
 const { offsetLatLon } = require('../../lib/formation');
 const { paramValueToWire } = require('../../lib/codec/param-union');
 
-test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
+test('selection resolves all, explicit list, and filters while excluding stale peers', async () => {
   const peerTable = peerTableStub([
     peer(1, { type: 2, firmware: 'ardupilot', armed: true }),
     peer(2, { type: 3, firmware: 'px4', armed: false }),
@@ -24,18 +21,18 @@ test('selection resolves all, explicit list, and filters while excluding stale p
     { sysid: 4, components: [{ compid: 154, state: 'active', type: 26 }] },
   ]);
 
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'all' }).map((m) => m.sysid), [1, 2]);
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: '2, 3' }).map((m) => m.sysid), [2]);
+  assert.deepEqual(await selected(peerTable, { mode: 'all' }), [1, 2]);
+  assert.deepEqual(await selected(peerTable, { mode: 'list', sysids: '2, 3' }), [2]);
   assert.deepEqual(
-    selectFanoutMembers(peerTable, {
+    await selected(peerTable, {
       mode: 'filter',
       filter: { type: 2, firmware: 'ardupilot', armed: true },
-    }).map((m) => m.sysid),
+    }),
     [1]
   );
 });
 
-test('a list selection coerces its sysids — an entry naming no vehicle selects none', () => {
+test('a list selection coerces its sysids — an entry naming no vehicle selects none', async () => {
   const peerTable = peerTableStub([peer(1), peer(2), peer(4)]);
 
   // The editor bounds every configured sysid (the members table,
@@ -44,16 +41,31 @@ test('a list selection coerces its sysids — an entry naming no vehicle selects
   // aggregate record names the members that were actually selected.
   for (const bad of [[1, 'abc'], [1, 300], [1, 0], '1, 300', '1, abc']) {
     assert.deepEqual(
-      selectFanoutMembers(peerTable, { mode: 'list', sysids: bad }).map((m) => m.sysid),
+      await selected(peerTable, { mode: 'list', sysids: bad }),
       [1],
       `${JSON.stringify(bad)} selects only the entry that names a vehicle`
     );
   }
 
   // Readable lists are untouched, in either spelling.
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: [1, 4] }).map((m) => m.sysid), [1, 4]);
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: ['1', '4'] }).map((m) => m.sysid), [1, 4]);
+  assert.deepEqual(await selected(peerTable, { mode: 'list', sysids: [1, 4] }), [1, 4]);
+  assert.deepEqual(await selected(peerTable, { mode: 'list', sysids: ['1', '4'] }), [1, 4]);
 });
+
+/**
+ * The sysids a selection resolves to, read off a Build run's aggregate —
+ * Build sends nothing, so the members are exactly the selection.
+ */
+async function selected(peerTable, selection) {
+  const aggregate = await executeFanout({ signal, selection,
+    connection: { peerTable },
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'build',
+    intervalMs: 0,
+  });
+  return aggregate.members.map((m) => m.sysid);
+}
 
 test('an empty resolution records which selection produced it (#226)', async () => {
   // The node's loud/quiet decision branches on the field: a filter matching
