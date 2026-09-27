@@ -67,14 +67,20 @@ module.exports = function registerMavlinkFormation(RED) {
           config, payload, connectionNode.peerTable
         );
         const pitchDeg = resolvePitch(config, payload);
+        /**
+         * Slot 0 sits on the anchor. On a leader anchor that slot is the
+         * leader's own: the followers fill slots 1..N in sysid order and the
+         * leader is never commanded (it is already where slot 0 is).
+         */
+        const followers = sysids.filter((id) => id !== leaderSysid).sort((a, b) => a - b);
         const targets = formationTargets({
           shape: config.shape,
           spacing: config.spacing,
           anchor,
           headingDeg,
           pitchDeg,
-          sysids,
-        });
+          sysids: leaderSysid === undefined ? followers : [leaderSysid, ...followers],
+        }).filter((target) => target.sysid !== leaderSysid);
 
         const memberTargets = targets.map((target) => ({
           sysid: target.sysid,

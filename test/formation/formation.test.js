@@ -206,7 +206,7 @@ test('formationTargets rotates the pattern by the heading', () => {
   approx(targets[1].lat, 47.397742, 1e-12, 'slot 1 lat');
 });
 
-test('formationTargets dedupes and sorts sysids, coercing numeric strings', () => {
+test('formationTargets dedupes sysids in the caller\'s slot order, coercing numeric strings', () => {
   const targets = formationTargets({
     shape: 'line',
     spacing: 10,
@@ -214,7 +214,7 @@ test('formationTargets dedupes and sorts sysids, coercing numeric strings', () =
     headingDeg: 0,
     sysids: ['5', 3, 5], pitchDeg: 0,
   });
-  assert.deepEqual(targets.map((t) => t.sysid), [3, 5]);
+  assert.deepEqual(targets.map((t) => t.sysid), [5, 3], 'the first listing keeps its slot');
 });
 
 test('anchor coordinates are coerced, not refused — the editor owns the boxes', () => {
@@ -247,7 +247,7 @@ test('sysid entries are trusted input: Number() coercion, never a refusal', () =
   const coerced = formationTargets({
     shape: 'line', spacing: 10, anchor: { lat: 47, lon: 8, alt: 30 }, sysids: [1, null], pitchDeg: 0,
   });
-  assert.deepEqual(coerced.map((target) => target.sysid), [0, 1]);
+  assert.deepEqual(coerced.map((target) => target.sysid), [1, 0]);
 });
 
 test('spacing is trusted config: Number() coercion only — the editor validator is the guard', () => {

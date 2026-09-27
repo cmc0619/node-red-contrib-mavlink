@@ -85,13 +85,49 @@ test('leader anchor reads position, relative altitude and heading from the peer 
   await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
 
   assert.equal(sent[1].result, 'succeeded');
+  assert.equal(connection.sends.length, 2, 'only the followers are commanded');
   const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
-  assert.equal(bySysid[1].x, e7(47.4), 'slot 0 sits on the leader position');
-  assert.equal(bySysid[1].y, e7(8.5));
   assert.equal(bySysid[1].z, 30, 'altitude is the leader relativeAlt (GLOBAL_RELATIVE_ALT), not AMSL alt');
-  // Leader heading 90 rotates the line: "right of the leader" now points south.
-  assert.ok(bySysid[2].x < e7(47.4), 'slot 1 is south of the leader at heading 90');
-  assert.equal(bySysid[2].y, e7(8.5), 'slot 1 stays on the leader longitude at heading 90');
+  // Leader heading 90 rotates the line: "right of the leader" now points
+  // south. The leader holds slot 0; sysid 1 takes slot 1 and sysid 2 slot 2.
+  assert.ok(bySysid[1].x < e7(47.4), 'slot 1 is south of the leader at heading 90');
+  assert.equal(bySysid[1].y, e7(8.5), 'slot 1 stays on the leader longitude at heading 90');
+  assert.ok(bySysid[2].x > e7(47.4), 'slot 2 is north of the leader');
+});
+
+test('on a leader anchor no follower is sent onto the leader, and a listed leader is never commanded (R5)', async () => {
+  const leader = peer(1, { position: { lat: 47.4, lon: 8.5, alt: 430, relativeAlt: 30, heading: 0 } });
+  for (const sysids of ['2,3', '1,2,3', '3,1,2']) {
+    const connection = connectionStub([leader, peer(2), peer(3)]);
+    const RED = redStub({ conn: connection });
+    require('../../nodes/mavlink-formation')(RED);
+    const node = new (RED.nodes.types['mavlink-formation'])({
+      connection: 'conn',
+      shape: 'wedge',
+      spacing: 10,
+      sysids,
+      anchorMode: 'leader',
+      leader: 1,
+      pitchDeg: 0,
+      delivery: 'send',
+      intervalMs: 0,
+    });
+    let sent;
+    await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
+
+    assert.equal(sent[1].result, 'succeeded', sysids);
+    assert.deepEqual(
+      connection.sends.map((s) => s.message.fields.target_system).sort(),
+      [2, 3],
+      `${sysids}: the leader is never commanded`
+    );
+    for (const { message } of connection.sends) {
+      assert.ok(
+        message.fields.x !== e7(47.4) || message.fields.y !== e7(8.5),
+        `${sysids}: sysid ${message.fields.target_system} is not sent onto the leader`
+      );
+    }
+  }
 });
 
 test('leader with no reported position fails loudly — nothing is sent', async () => {
@@ -149,8 +185,12 @@ function leaderNode(rows, leader, promoteLeader) {
   };
 }
 
-/** Where slot 0 (the lowest member sysid) was commanded — i.e. the anchor. */
-function slotZero(connection) {
+/**
+ * Where slot 1 (the lowest follower, sysid 1) was commanded. The leader holds
+ * slot 0 on the anchor; a heading-0 line puts slot 1 due east of it, on the
+ * anchor's latitude — so its x is the anchor's.
+ */
+function slotOne(connection) {
   return connection.sends
     .map((s) => s.message.fields)
     .find((fields) => fields.target_system === 1);
@@ -169,7 +209,7 @@ test('a leader-anchored run reports which sysid the pattern hung off', async () 
   // field rather than inferring a substitution from a missing one.
   assert.equal(sent[1].leader, 7, 'status record names the anchoring vehicle');
   assert.equal(sent[0].payload.leader, 7, 'continue output carries it too');
-  assert.equal(slotZero(connection).x, e7(47.4), 'the pattern hung off sysid 7');
+  assert.equal(slotOne(connection).x, e7(47.4), 'the pattern hung off sysid 7');
 });
 
 test('a fixed anchor reports no leader — there is none', async () => {
@@ -209,7 +249,7 @@ test('without Promote a stale leader still anchors the pattern', async () => {
   await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
 
   assert.equal(sent[1].leader, 7, 'the stale configured leader still anchors');
-  assert.equal(slotZero(connection).x, e7(47.4), 'anchored on its last fix');
+  assert.equal(slotOne(connection).x, e7(47.4), 'anchored on its last fix');
 });
 
 test('Promote hands a stale leader off to the next live sysid above it', async () => {
@@ -223,7 +263,8 @@ test('Promote hands a stale leader off to the next live sysid above it', async (
   await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
 
   assert.equal(sent[1].leader, 9, 'the lowest live sysid above 7, not the highest');
-  assert.equal(slotZero(connection).x, e7(10), 'the pattern moved to sysid 9');
+  assert.equal(slotOne(connection).x, e7(10), 'the pattern moved to sysid 9');
+  assert.ok(connection.sends.every((s) => s.message.fields.target_system !== 9), 'the promoted leader is not commanded');
 });
 
 test('Promote passes over a live peer that has never reported a position', async () => {
@@ -239,7 +280,7 @@ test('Promote passes over a live peer that has never reported a position', async
   await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
 
   assert.equal(sent[1].leader, 11, 'sysid 9 has no position to anchor on');
-  assert.equal(slotZero(connection).x, e7(20));
+  assert.equal(slotOne(connection).x, e7(20));
 });
 
 test('Promote wraps to the lowest live sysid when the leader is the highest', async () => {
@@ -253,7 +294,12 @@ test('Promote wraps to the lowest live sysid when the leader is the highest', as
   await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
 
   assert.equal(sent[1].leader, 2, 'wrapped past the top to the lowest live sysid');
-  assert.equal(slotZero(connection).x, e7(10));
+  assert.equal(slotOne(connection).x, e7(10));
+  assert.deepEqual(
+    connection.sends.map((s) => s.message.fields.target_system).sort(),
+    [1, 3],
+    'the promoted leader is listed but holds slot 0 and is not commanded'
+  );
 });
 
 test('Promote with nobody live to promote leaves the configured leader in place', async () => {
@@ -267,7 +313,7 @@ test('Promote with nobody live to promote leaves the configured leader in place'
   await emitInput(node, { payload: {} }, (messages) => { sent = messages; });
 
   assert.equal(sent[1].leader, 7);
-  assert.equal(slotZero(connection).x, e7(47.4), 'still its last fix');
+  assert.equal(slotOne(connection).x, e7(47.4), 'still its last fix');
 });
 
 test('Promote does not rescue an input when nothing in the fleet has a position', async () => {
@@ -301,7 +347,7 @@ test('a promoted leader is not remembered — the configured one takes it back',
   await emitInput(node, { payload: {} }, (messages) => { second = messages; });
 
   assert.equal(second[1].leader, 7, 'the configured leader leads again once it reports');
-  assert.equal(slotZero(connection).x, e7(47.4));
+  assert.equal(slotOne(connection).x, e7(47.4));
 });
 
 test('unknown leader heading stays unknown — north is not invented', async () => {
