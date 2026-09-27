@@ -397,14 +397,14 @@ test('the node passes the resolved source identity through, so a misaddressed ac
   });
 
   const Node = loadNode(conn);
-  // Valid, short retry budget on purpose: the node reads `config.timeout` /
+  // Valid, short retry budget on purpose: the node reads `config.timeoutMs` /
   // `config.maxRetries` as Number(), so an omitted pair is NaN and the machine
   // aborts on the spot — a "not succeeded" would then pass for the wrong
   // reason. With a real budget the only route to an abort is the retry path
   // running out because every ack was ignored.
   const node = new Node({
     operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'mission',
-    timeout: 20, maxRetries: 2,
+    timeoutMs: 20, maxRetries: 2,
   });
   const res = await runInput(node, { payload: {} });
   const last = res.outputs.at(-1);
@@ -432,7 +432,7 @@ test('the node passes the resolved source identity through, and an ack addressed
   const Node = loadNode(conn);
   const node = new Node({
     operation: 'clear', connection: 'conn', delivery: 'confirm', missionType: 'mission',
-    timeout: 20, maxRetries: 2,
+    timeoutMs: 20, maxRetries: 2,
   });
   const res = await runInput(node, { payload: {} });
   const last = res.outputs.at(-1);
