@@ -219,9 +219,9 @@ function canAnchor(entry) {
 /**
  * Pick the vehicle whose telemetry anchors the pattern.
  *
- * Without promotion this is the configured leader, whatever state it is in —
- * the historical behaviour, kept because the config names one vehicle and
- * substituting another is a decision the flow has to opt into (§4).
+ * Without promotion this is the configured leader, whatever state it is in:
+ * the config names one vehicle, and substituting another is a decision the
+ * flow has to opt into (§4).
  *
  * With promotion on, a configured leader that has gone stale or has never
  * reported a position hands the pattern to the next vehicle that can carry it:

@@ -238,7 +238,7 @@ test('a fixed anchor reports no leader — there is none', async () => {
 });
 
 test('without Promote a stale leader still anchors the pattern', async () => {
-  // The historical behaviour, and the reason Promote exists as a choice: the
+  // The unpromoted behaviour, and the reason Promote exists as a choice: the
   // config names one vehicle, so its last fix is what the flow asked for.
   const { node, connection } = leaderNode([
     peer(1), peer(2), peer(3),
