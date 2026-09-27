@@ -288,6 +288,15 @@
     return null;
   }
 
+  /**
+   * Whether the saved or live tier waits on an answer. Only Confirm and
+   * Complete read the ack rows (timeout, retries, continue-if-unconfirmed);
+   * Build constructs and Send fires and forgets.
+   */
+  function waitsOnAck(owner) {
+    return ['confirm', 'complete'].includes(RED.mavlink.liveOr(owner, '#node-input-delivery', owner.delivery));
+  }
+
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
   // Command's mode field is `delivery` and it has no Firmware field.
   const commandDefaults = {
@@ -343,10 +352,17 @@
       // reds only a hand-edited flow. Blank inherits the profile default.
       targetComponent:      { value: '', validate: RED.mavlink.validateUint8(0) },
       // ACK timeout and Max retries: the shared definition, hidden with the
-      // rows on Build.
-      ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire),
+      // rows on the tiers that wait on no ack.
+      ...RED.mavlink.ackDefaults(waitsOnAck),
       unconfirmedContinue: { value: false },
-      completionTimeout: { value: '60000', validate: RED.mavlink.validateAtLeast(0) },
+      // Read by the Complete tier only, and hidden on every other.
+      completionTimeout: {
+        value: '60000',
+        validate(v, opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'complete') return true;
+          return RED.mavlink.validateAtLeast(0).call(this, v, opt);
+        },
+      },
       // The preset params blob. Nothing checked it before, and the runtime
       // refused blank/out-of-range coordinates on its behalf; that refusal is
       // gone (AGENTS.md, input trust), so this is now the only thing between a
@@ -456,9 +472,10 @@
         $('#row-cmd-identity').toggle(
           !isBuild && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
         );
-        $('#row-cmd-timeoutMs')[isBuild ? 'hide' : 'show']();
-        $('#row-cmd-maxRetries')[isBuild ? 'hide' : 'show']();
-        $('#row-cmd-unconfirmedContinue')[isBuild ? 'hide' : 'show']();
+        const onAck = waitsOnAck(node);
+        $('#row-cmd-timeoutMs').toggle(onAck);
+        $('#row-cmd-maxRetries').toggle(onAck);
+        $('#row-cmd-unconfirmedContinue').toggle(onAck);
 
         // Wire + companion → target derived; Build always shows (must stamp).
         RED.mavlink.applyCompanionTargetVisibility({

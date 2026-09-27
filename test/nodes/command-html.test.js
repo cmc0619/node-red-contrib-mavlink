@@ -615,6 +615,24 @@ test('mavlink-command: an unreadable params blob reds in Advanced mode too', () 
   assert.match(String(verdict('')), /valid JSON/);
 });
 
+test('mavlink-command: ack and completion rows red only on the tiers that read them (COMMAND-9)', () => {
+  const { timeoutMs, maxRetries, completionTimeout } = loadNodeDefaults('mavlink-command');
+  const on = (delivery, field, v) => field.validate.call({ id: 'c1', delivery }, v, {});
+  for (const delivery of ['build', 'send']) {
+    assert.equal(on(delivery, timeoutMs, ''), true, `${delivery} never waits on an ack`);
+    assert.equal(on(delivery, maxRetries, ''), true, `${delivery} never re-sends`);
+  }
+  for (const delivery of ['confirm', 'complete']) {
+    assert.notEqual(on(delivery, timeoutMs, ''), true, `${delivery} reads the ack timeout`);
+    assert.notEqual(on(delivery, maxRetries, '-1'), true, `${delivery} reads the retry budget`);
+  }
+  for (const delivery of ['build', 'send', 'confirm']) {
+    assert.equal(on(delivery, completionTimeout, ''), true, `${delivery} has no completion wait`);
+  }
+  assert.notEqual(on('complete', completionTimeout, ''), true, 'Complete reads its completion timeout');
+  assert.equal(completionTimeout.validate.length, 2, 'a reason-returning validator declares (v, opt)');
+});
+
 test('mavlink-command: frame and compid carry their own red rings', () => {
   // Frame is a closed-vocabulary select — the dialog's own options. Relative
   // alt (3) is the editor default, saved explicitly. Other frames stay
