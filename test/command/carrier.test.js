@@ -308,3 +308,25 @@ test('NaN param sentinels survive both carriers to the wire (#240)', () => {
   assert.ok(Number.isNaN(int.fields.param4), 'COMMAND_INT carries the NaN yaw');
   assert.equal(int.fields.param1, -1);
 });
+
+test('buildCarrier dispatches the configured carrier; a non-member builds nothing (R61, §5)', () => {
+  const { buildCarrier } = require('../../lib/command/carrier');
+  const target = { sysid: 3, compid: 1 };
+  const params = [1, 0, 0, 0, -35, 149, 50];
+  const long = buildCarrier('long', 22, target, params);
+  assert.equal(long.name, 'COMMAND_LONG');
+  assert.equal(long.fields.confirmation, 0);
+  assert.equal(long.fields.target_system, 3);
+  let asked = 0;
+  const int = buildCarrier('int', 22, target, params, {
+    frame: 3,
+    get coordKinds() { asked += 1; return null; },
+  });
+  assert.equal(int.name, 'COMMAND_INT');
+  assert.equal(int.fields.x, -350000000);
+  assert.equal(asked, 1, 'the INT carrier reads coordKinds');
+  assert.equal(buildCarrier('long', 22, target, params, { get coordKinds() { asked += 1; return null; } }).name,
+    'COMMAND_LONG');
+  assert.equal(asked, 1, 'the LONG carrier never asks for the dialect');
+  assert.equal(buildCarrier('', 22, target, params), undefined);
+});

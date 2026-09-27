@@ -38,8 +38,7 @@ const { mergeParams } = require('../lib/command/merge-params');
 const { awaitAckWithBadge, cancelSlot, settleAck, SUPERSEDED } = require('../lib/command/ack');
 const { checkCompletion, waitForCompletion } = require('../lib/command/completion');
 const {
-  buildCommandLong,
-  buildCommandInt,
+  buildCarrier,
   CARRIER,
   MAV_FRAME,
   intCoordKinds,
@@ -112,23 +111,6 @@ module.exports = function registerMavlinkCommand(RED) {
     const configParams = JSON.parse(config.params);
 
     const delivery = config.delivery;
-
-    /**
-     * How this command's param5/6 ride the INT carrier, per the dialect XML
-     * (§9 "ask the XML"): scaled lat/lon, natively degE7, or raw non-location
-     * values. Resolved lazily — the wire tier's vehicle bundle attaches at
-     * connection start. A dialect that cannot be loaded throws here, and that
-     * throw is the input's failure (§0).
-     * @returns {{5: string, 6: string}|null}
-     */
-    let _coordKinds;
-    let _coordKindsResolved = false;
-    function coordKinds() {
-      if (_coordKindsResolved) return _coordKinds;
-      _coordKinds = intCoordKinds(dialectForTier(RED, delivery, config, connNode), commandId);
-      _coordKindsResolved = true;
-      return _coordKinds;
-    }
 
     // Read as saved; the per-input dispatch below selects on it (§5), so a
     // hand-edited token is a per-message no-op, never a throw at deploy.
@@ -240,7 +222,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
     async function handleInput(msg, send, done) {
       // The editor's `sendAs` select is the vocabulary (mavlink-command.html);
-      // buildCarrierMessage dispatches it affirmatively.
+      // buildCarrier dispatches it affirmatively.
       const configuredCarrier = config.sendAs;
 
       // The editor owns the defaults and the number rings.
@@ -284,26 +266,22 @@ module.exports = function registerMavlinkCommand(RED) {
       const { wire: paramArray, requested: requestedParams } = getParams(payload, { target, profile });
 
       /**
-       * Build the wire message for a carrier. The LONG carrier's confirmation
-       * byte is stamped per (re-)send by the ack waiter's sendFn (lib/command
-       * sendFnFor); the canonical params are always degrees, scaled per
-       * carrier by the carrier module (§9).
+       * The wire message on the operator's configured carrier (lib/command
+       * buildCarrier). Only the INT carrier reads `coordKinds` — how param5/6
+       * ride per the dialect XML (§9 "ask the XML") — so the dialect is
+       * looked up (commandByValue indexes it once per bundle) only when it
+       * is asked; a dialect that cannot be loaded throws, and that throw is
+       * the input's failure (§0).
        *
-       * @param {'long'|'int'} carrier
-       * @returns {{name: string, fields: object}}
+       * @returns {{name: string, fields: object}|undefined}
        */
-      function buildCarrierMessage(carrier) {
-        switch (carrier) {
-          case CARRIER.INT:
-            return buildCommandInt(commandId, target.sysid, target.compid, paramArray, {
-              frame,
-              coordKinds: coordKinds(),
-            });
-          case CARRIER.LONG:
-            return buildCommandLong(commandId, target.sysid, target.compid, paramArray, 0);
-          default: break; // This space intentionally left blank (§5)
-        }
-        return undefined; // nothing matched: no behavior selected (§5)
+      function buildCarrierMessage() {
+        return buildCarrier(configuredCarrier, commandId, target, paramArray, {
+          frame,
+          get coordKinds() {
+            return intCoordKinds(dialectForTier(RED, delivery, config, connNode), commandId);
+          },
+        });
       }
 
       // ── Delivery ──────────────────────────────────────────────────────────
@@ -311,11 +289,11 @@ module.exports = function registerMavlinkCommand(RED) {
       // below and differ in what an ACCEPTED ack hands off to.
       switch (delivery) {
         case 'build':
-          completeBuild(node, send, buildCarrierMessage(configuredCarrier), displayName, makeRecord({}));
+          completeBuild(node, send, buildCarrierMessage(), displayName, makeRecord({}));
           done();
           return;
         case 'send': {
-          const message = buildCarrierMessage(configuredCarrier);
+          const message = buildCarrierMessage();
           applyActionStatus(node, 'sending', `sending ${displayName}\u2026`);
           connNode.send(message, { band: BAND.CONTROL, target, identityId });
           applyActionStatus(node, 'ok', `sent ${displayName}`);
@@ -374,7 +352,7 @@ module.exports = function registerMavlinkCommand(RED) {
         // The operator's configured carrier (§9): a required choice, so the
         // wire format is stated intent — never a guess. The ack it earns,
         // wrong-carrier codes included, is the result.
-        let ackOutcome = await awaitAckWithBadge(node, slot, connNode, buildCarrierMessage(configuredCarrier), displayName, {
+        let ackOutcome = await awaitAckWithBadge(node, slot, connNode, buildCarrierMessage(), displayName, {
           target,
           identityId,
           timeoutMs,
