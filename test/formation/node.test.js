@@ -542,6 +542,34 @@ test('Build previews: a yellow badge, nothing sent, one built message per member
   assert.equal(sent[1].result, 'succeeded');
 });
 
+test('Change mode sets the DO_REPOSITION CHANGE_MODE flag in param2; radius rides 0 (ignored)', async () => {
+  for (const [changeMode, flags] of [[true, 1], [false, 0]]) {
+    const connection = connectionStub([peer(1)]);
+    const RED = redStub({ conn: connection });
+    require('../../nodes/mavlink-formation')(RED);
+    const node = new (RED.nodes.types['mavlink-formation'])({
+      connection: 'conn',
+      shape: 'line',
+      spacing: 10,
+      sysids: '1',
+      anchorMode: 'fixed',
+      lat: ANCHOR.lat,
+      lon: ANCHOR.lon,
+      alt: ANCHOR.alt,
+      headingDeg: 0,
+      pitchDeg: 0,
+      delivery: 'send',
+      changeMode,
+      intervalMs: 0,
+    });
+    await emitInput(node, { payload: {} }, () => {});
+    const fields = connection.sends[0].message.fields;
+    assert.equal(fields.param2, flags);
+    assert.equal(fields.param3, 0);
+    assert.equal(fields.frame, 3);
+  }
+});
+
 test('close aborts an in-flight formation run and waits for it to unwind', async () => {
   // Same close discipline as mavlink-fanout: a 60 s inter-member interval
   // parks the member loop in the pause, so close is guaranteed to land

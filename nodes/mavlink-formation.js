@@ -4,9 +4,8 @@ const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive, reportAggregate } = require('../lib/fanout');
 const { isBlank, valueFrom } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
-const { REPOSITION_FLAG_CHANGE_MODE } = require('../lib/move/reposition');
-const { getPreset, buildParamArray } = require('../lib/command/presets');
-const { buildCommandInt, DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
+const { buildRepositionMessage } = require('../lib/move/reposition');
+const { DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
 
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.
@@ -35,25 +34,25 @@ module.exports = function registerMavlinkFormation(RED) {
     // delivery.inFlightTracker.
     const inFlight = delivery.inFlightTracker();
 
-    // Input-invariant Reposition scaffold, built once from the Go To /
-    // Reposition preset (MAV_CMD_DO_REPOSITION; params 1 speed, 2 flags,
-    // 3 radius, 4 yaw, 5 lat, 6 lon, 7 alt). The preset's blank sentinels
-    // carry speed -1 (vehicle default) and yaw NaN (hold heading — the
-    // formation heading rotates the pattern, not the noses); the coordinates
-    // are zero here and patched in per member as degE7 x/y, since Fan-out
-    // patches are the raw wire surface (§10) and executeFanout never mutates
-    // its base message. DO_REPOSITION is positional and the references carry
-    // it as COMMAND_INT only, so there is no carrier choice to make; guided
-    // reposition is relative-alt, so the frame is passed explicitly. Param 2
-    // carries MAV_DO_REPOSITION_FLAGS_CHANGE_MODE when the editor's Change
-    // mode box is ticked — the gate on both stacks (§14.108): without it the
-    // reposition is DENIED unless the vehicle is already in GUIDED / Hold.
-    const preset = getPreset('reposition');
-    const message = buildCommandInt(
-      Number(preset.commandId), 0, 0,
-      buildParamArray(preset, { 2: config.changeMode ? REPOSITION_FLAG_CHANGE_MODE : 0 }),
-      { frame: DEFAULT_FRAME }
-    );
+    /**
+     * Input-invariant Reposition scaffold, built once by Move's owner of
+     * MAV_CMD_DO_REPOSITION (COMMAND_INT). Blank speed and yaw ride the
+     * spec's sentinels, speed -1 (vehicle default) and yaw NaN (hold
+     * heading — the formation heading rotates the pattern, not the noses).
+     * The coordinates are zero here and patched in per member as degE7 x/y,
+     * since Fan-out patches are the raw wire surface (§10) and executeFanout
+     * never mutates its base message. Guided reposition is relative-alt, so
+     * the frame is passed explicitly. Change mode sets
+     * MAV_DO_REPOSITION_FLAGS_CHANGE_MODE — the gate on both stacks
+     * (§14.108): without it the reposition is DENIED unless the vehicle is
+     * already in GUIDED / Hold.
+     */
+    const message = buildRepositionMessage({
+      position: { lat: 0, lon: 0, alt: 0 },
+      target: { sysid: 0, compid: 0 },
+      changeMode: config.changeMode,
+      frame: DEFAULT_FRAME,
+    });
 
     node.on('input', async (msg, send, done) => {
       try {
