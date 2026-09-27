@@ -149,6 +149,12 @@ test('members validator: per-row reasons, offsets-vs-position-patch conflict red
     'a position-field patch without offsets is legitimate');
   assert.match(String(onList([{ sysid: 1, patch: { target: 2 } }])), /may not set target —/,
     'MANUAL_CONTROL\'s system field is addressing, like target_system');
+  // The runtime strips target ids and overrides sysid, so those red; a
+  // patched `command` is sent like any other wire field, so it does not.
+  for (const key of ['sysid', 'target', 'target_system', 'target_component']) {
+    assert.match(String(onList([{ sysid: 1, patch: { [key]: 2 } }])), new RegExp(`may not set ${key}`));
+  }
+  assert.equal(onList([{ sysid: 1, patch: { command: 21 } }]), true, 'command is a wire field like any other');
 });
 
 test('members validation reads the open editable-list value', () => {
