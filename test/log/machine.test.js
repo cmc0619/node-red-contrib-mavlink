@@ -163,8 +163,10 @@ test('log download assembles out of order data and does not complete on a hole',
   assert.equal(stub.subscriberCount(), 1);
 
   clock.flush(1);
-  assert.equal(stub.sent.at(-1).message.fields.ofs, 90, 'the gap, not offset zero, is retried');
-  assert.equal(stub.sent.at(-1).message.fields.count, 90);
+  assert.equal(stub.sent[1].message.fields.ofs, 90, 'the gap, not offset zero, is retried');
+  assert.equal(stub.sent[1].message.fields.count, 90);
+  assert.equal(stub.sent[2].message.fields.ofs, 270,
+    'the gap fill answered in full, the rest of the window is asked for at once');
   stub.inject({
     name: 'LOG_DATA', sysid: 42, compid: 1,
     fields: { id: 7, ofs: 270, count: 0, data: Buffer.alloc(90) },
@@ -176,7 +178,7 @@ test('log download assembles out of order data and does not complete on a hole',
   assert.equal(outcome.data[0], 0x61);
   assert.equal(outcome.data[90], 0x62);
   assert.equal(outcome.data[180], 0x63);
-  assert.equal(stub.sentNames().filter((name) => name === 'LOG_REQUEST_DATA').length, 2);
+  assert.equal(stub.sentNames().filter((name) => name === 'LOG_REQUEST_DATA').length, 3);
 });
 
 test('log download advances a full window before requesting the next window', async () => {
@@ -301,7 +303,7 @@ test('out-of-order data does not re-send the unchanged EOF gap, while retries an
     { ofs: 0, count: 180 },
   ]);
 
-  clock.flush(1);
+  clock.flush();
   const outcome = await done;
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(requests(), [
@@ -310,6 +312,57 @@ test('out-of-order data does not re-send the unchanged EOF gap, while retries an
     { ofs: 0, count: 180 },
     { ofs: 90, count: 90 },
   ]);
+});
+
+test('a packet lost mid-window is re-requested when the window\'s last packet arrives, not after the step timeout (R33)', async () => {
+  // verify/ap.md R33: one LOG_DATA lost in the middle of a window stalled the
+  // download for the whole 10 s step timeout, though ArduPilot had already
+  // stopped sending at the requested count.
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    if (message.name !== 'LOG_REQUEST_DATA') return;
+    const { ofs, count } = message.fields;
+    for (let at = ofs; at < ofs + count && at < LOG_REQUEST_BYTES; at += 90) {
+      if (!(count === LOG_REQUEST_BYTES && at === 900)) deliver(data(7, at, Buffer.alloc(90, 1)));
+    }
+    if (ofs + count > LOG_REQUEST_BYTES) {
+      deliver({ name: 'LOG_DATA', sysid: 42, compid: 1, fields: { id: 7, ofs: LOG_REQUEST_BYTES, count: 0, data: Buffer.alloc(90) } });
+    }
+  });
+
+  const outcome = await new LogDownload(machineOptions(stub, clock, { id: 7, timeoutMs: 10000 })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.data.length, LOG_REQUEST_BYTES);
+  assert.equal(clock.now, 0, 'no step timeout was waited out');
+  const requests = stub.sent.filter(({ message }) => message.name === 'LOG_REQUEST_DATA')
+    .map(({ message }) => [message.fields.ofs, message.fields.count]);
+  assert.deepEqual(requests, [[0, LOG_REQUEST_BYTES], [900, 90], [LOG_REQUEST_BYTES, LOG_REQUEST_BYTES]]);
+});
+
+test('a gap fill after EOF is one request per gap, not one per packet received (SPS-12)', async () => {
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend((message, deliver) => {
+    if (message.name !== 'LOG_REQUEST_DATA') return;
+    const { ofs, count } = message.fields;
+    if (count === LOG_REQUEST_BYTES) {
+      deliver(data(7, 0, Buffer.alloc(90, 1)));
+      deliver(data(7, 90, Buffer.alloc(90, 1)));
+      deliver(data(7, 630, Buffer.alloc(10, 1)));
+      return;
+    }
+    for (let at = ofs; at < ofs + count; at += 90) deliver(data(7, at, Buffer.alloc(90, 2)));
+  });
+
+  const outcome = await new LogDownload(machineOptions(stub, clock, { id: 7 })).start();
+
+  assert.equal(outcome.result, 'succeeded');
+  assert.equal(outcome.data.length, 640);
+  const requests = stub.sent.filter(({ message }) => message.name === 'LOG_REQUEST_DATA')
+    .map(({ message }) => [message.fields.ofs, message.fields.count]);
+  assert.deepEqual(requests, [[0, LOG_REQUEST_BYTES], [180, 450]]);
 });
 
 test('wrong log id and wrong source do not settle the download', async () => {
