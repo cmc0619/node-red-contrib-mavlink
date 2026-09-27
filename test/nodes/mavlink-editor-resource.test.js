@@ -882,13 +882,24 @@ test('refreshIdentitySelect reads the live connection and forwards rolesAllowed'
 
 // ── BAND_OPTIONS + companion target visibility ───────────────────────────────
 
-test('BAND_OPTIONS lists the five §7 queue bands once', () => {
+test('BAND_OPTIONS mirrors lib/connection/bands, every band but Liveness', () => {
   const { RED } = loadResource();
-  assert.deepEqual(
-    plain(RED.mavlink.BAND_OPTIONS.map((o) => o.value)),
-    ['0', '1', '2', '3', '4']
-  );
-  assert.equal(RED.mavlink.BAND_OPTIONS[2].label, 'Control (2)');
+  const { BAND, BAND_NAME } = require('../../lib/connection/bands');
+  const expected = BAND_NAME
+    .map((name, band) => ({ value: String(band), label: `${name[0].toUpperCase()}${name.slice(1)} (${band})` }))
+    .filter((opt) => Number(opt.value) !== BAND.LIVENESS);
+  assert.deepEqual(plain(RED.mavlink.BAND_OPTIONS), expected);
+});
+
+test('the editor custom-mode table mirrors lib/vehicle/modes AP_MODE_ENUMS', () => {
+  const { AP_MODE_ENUMS, DO_SET_MODE } = require('../../lib/vehicle/modes');
+  const literal = resourceScript.match(/const CUSTOM_MODE_ENUMS = (\{[\s\S]*?\});/)[1];
+  assert.deepEqual(plain(vm.runInNewContext(`(${literal})`)), AP_MODE_ENUMS);
+  const { RED } = loadResource();
+  for (const [family, enumName] of Object.entries(AP_MODE_ENUMS)) {
+    RED.mavlink.resolveCatalogTarget = () => ({ firmware: 'ardupilot', vehicleFamily: family });
+    assert.equal(RED.mavlink.customModeEnum(DO_SET_MODE, 2), enumName, family);
+  }
 });
 
 test('fillBandSelect rebuilds options and restores the saved band', () => {
@@ -920,7 +931,7 @@ test('fillBandSelect rebuilds options and restores the saved band', () => {
   };
   vm.runInNewContext(resourceScript, context);
   context.RED.mavlink.fillBandSelect($select, '3');
-  assert.equal(options.length, 5);
+  assert.equal(options.length, 4);
   assert.equal(options[0].text, 'Emergency (0)');
   assert.equal(selected, '3');
 });

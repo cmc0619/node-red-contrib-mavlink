@@ -37,11 +37,12 @@ test('band is ringed to the shared BAND_OPTIONS vocabulary on Build and Out', ()
   // drift from what the dialog offers (walled garden).
   for (const nodeName of ['mavlink-build', 'mavlink-out']) {
     const { band } = loadNodeDefaults(nodeName);
-    for (const member of ['0', '1', '2', '3', '4']) {
+    for (const member of ['0', '2', '3', '4']) {
       assert.equal(band.validate.call({}, member, {}), true, `${nodeName}: band ${member}`);
     }
     assert.match(String(band.validate.call({}, '', {})), /must be one of/, `${nodeName}: blank reds`);
     assert.match(String(band.validate.call({}, '5', {})), /must be one of/, `${nodeName}: out of range reds`);
+    assert.match(String(band.validate.call({}, '1', {})), /must be one of/, `${nodeName}: Liveness is the heartbeat's band`);
   }
 });
 

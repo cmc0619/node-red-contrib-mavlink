@@ -58,7 +58,9 @@
       </ul>
     </dd>
     <dt class="optional">band <span class="property-type">number</span></dt>
-    <dd>Queue band (0–4). Overrides the node default.</dd>
+    <dd>Queue band: 0 Emergency, 2 Control, 3 Streaming, 4 Bulk. Overrides the node default.
+      Band 1 (Liveness) holds one frame per identity for the Connection's own HEARTBEAT, so any
+      other frame sent there is replaced by the next heartbeat.</dd>
     <dt class="optional">target <span class="property-type">object</span></dt>
     <dd><code>{ sysid, compid }</code> destination. Uses connection default when absent.</dd>
     <dt class="optional">identityId <span class="property-type">string</span></dt>

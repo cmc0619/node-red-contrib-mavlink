@@ -53,12 +53,16 @@
 
   /**
    * Outbound queue band picker options (DESIGN.md §7). Editor-side copy of
-   * `lib/connection/bands` names — browser HTML cannot require() the module.
-   * Labels are Title Case (`Emergency (0)`), not screaming-snake enum names.
+   * `lib/connection/bands` names — browser HTML cannot require() the module —
+   * pinned to `BAND_NAME` by drift test. Labels are Title Case
+   * (`Emergency (0)`), not screaming-snake enum names.
+   *
+   * Liveness (1) is not offered: that band keeps one frame per identity for
+   * the Connection's own HEARTBEAT, so any other frame queued there is
+   * replaced by the next heartbeat.
    */
   RED.mavlink.BAND_OPTIONS = [
     { value: '0', label: 'Emergency (0)' },
-    { value: '1', label: 'Liveness (1)' },
     { value: '2', label: 'Control (2)' },
     { value: '3', label: 'Streaming (3)' },
     { value: '4', label: 'Bulk (4)' },
