@@ -832,11 +832,7 @@
 
       /** Blank, or an integer the packed byte can hold \u2014 the pair the PX4
        * mode select can represent without rewriting it on save. */
-      function px4ByteOrBlank(v) {
-        if (v === undefined || v === null || v === '') return true;
-        const n = Number(v);
-        return Number.isInteger(n) && n >= 0 && n <= 255;
-      }
+      const px4Byte = RED.mavlink.validateUint8(0);
 
       /**
        * The PX4 flight-mode select: options are the baked table, valued by
@@ -854,7 +850,7 @@
        * @returns {?jQuery}
        */
       function px4ModeInput(entries) {
-        if (!px4ByteOrBlank(savedParams[2]) || !px4ByteOrBlank(savedParams[3])) return null;
+        if (px4Byte(savedParams[2]) !== true || px4Byte(savedParams[3]) !== true) return null;
         const sel = $('<select class="param-input"></select>')
           .attr('data-idx', 2)
           .attr('data-kind', 'px4mode')

@@ -113,8 +113,8 @@
         // open-and-save. Surviving is right; deploying is not.
         messageName: {
           value: 'HEARTBEAT',
+          required: true,
           validate(v, _opt) {
-            if (RED.mavlink.isBlank(v)) return 'is required — pick a message from the dialect';
             if (RED.mavlink.isMissingFromDialect(this, '#node-input-messageName', v)) {
               return 'is not in this dialect — pick a message the Connection speaks';
             }
