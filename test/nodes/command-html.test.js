@@ -615,6 +615,24 @@ test('mavlink-command: an unreadable params blob reds in Advanced mode too', () 
   assert.match(String(verdict('')), /valid JSON/);
 });
 
+test('mavlink-command: ack and completion rows red only on the tiers that read them (COMMAND-9)', () => {
+  const { timeoutMs, maxRetries, completionTimeout } = loadNodeDefaults('mavlink-command');
+  const on = (delivery, field, v) => field.validate.call({ id: 'c1', delivery }, v, {});
+  for (const delivery of ['build', 'send']) {
+    assert.equal(on(delivery, timeoutMs, ''), true, `${delivery} never waits on an ack`);
+    assert.equal(on(delivery, maxRetries, ''), true, `${delivery} never re-sends`);
+  }
+  for (const delivery of ['confirm', 'complete']) {
+    assert.notEqual(on(delivery, timeoutMs, ''), true, `${delivery} reads the ack timeout`);
+    assert.notEqual(on(delivery, maxRetries, '-1'), true, `${delivery} reads the retry budget`);
+  }
+  for (const delivery of ['build', 'send', 'confirm']) {
+    assert.equal(on(delivery, completionTimeout, ''), true, `${delivery} has no completion wait`);
+  }
+  assert.notEqual(on('complete', completionTimeout, ''), true, 'Complete reads its completion timeout');
+  assert.equal(completionTimeout.validate.length, 2, 'a reason-returning validator declares (v, opt)');
+});
+
 test('mavlink-command: frame and compid carry their own red rings', () => {
   // Frame is a closed-vocabulary select — the dialog's own options. Relative
   // alt (3) is the editor default, saved explicitly. Other frames stay
@@ -639,7 +657,8 @@ test('mavlink-command: NAN_CENTRE_PRESETS matches the library\'s NaN param5/6 se
   // on the async catalog, so it carries its own copy and this compares them.
   // A preset that starts encoding a blank centre as NaN — or stops — must land
   // on both sides or fail here.
-  const { PRESETS } = require('../../lib/command/presets');
+  const { presetGroups, getPreset } = require('../../lib/command/presets');
+  const PRESETS = presetGroups().flatMap((g) => g.presets).map((row) => getPreset(row.id));
   const set = /const NAN_CENTRE_PRESETS = new Set\(\[([^\]]*)\]\);/.exec(html);
   assert.ok(set, 'NAN_CENTRE_PRESETS must be extractable');
   const fromEditor = [...set[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
@@ -760,12 +779,12 @@ test('mavlink-command: PRESET_PARAMS covers exactly the presets the dropdown off
   // entirely when Move took the motion intents. Dead rows are cheap to ignore
   // until something reads the table as authoritative — which the `preset`
   // validator below now does, so the equality has to be executed.
-  const { PRESETS } = require('../../lib/command/presets');
+  const { presetGroups } = require('../../lib/command/presets');
   const table = /const PRESET_PARAMS = \{[\s\S]*?\n {2}\};/.exec(html);
   assert.ok(table, 'PRESET_PARAMS must be extractable');
 
   const fromEditor = [...table[0].matchAll(/^\s{4}(\w+):/gm)].map((m) => m[1]).sort();
-  const offered = PRESETS.map((p) => p.id).sort();
+  const offered = presetGroups().flatMap((g) => g.presets).map((p) => p.id).sort();
   assert.deepEqual(fromEditor, offered, 'every offered preset has a row, and no row outlives its preset');
 });
 

@@ -205,10 +205,10 @@ test('move stream validators: saved stream tier is checked on deploy', () => {
   const registered = loadNodeHtml('mavlink-move.html');
   const defaults = registered['mavlink-move'].defaults;
   const saved = { id: 'm1', delivery: 'stream' };
-  assert.match(String(defaults.rateHz.validate.call(saved, 0, {})), /at least 0\.1 Hz/);
-  assert.match(String(defaults.rateHz.validate.call(saved, 'abc', {})), /at least 0\.1 Hz/);
+  assert.match(String(defaults.rateHz.validate.call(saved, 0, {})), />= 0\.1/);
+  assert.match(String(defaults.rateHz.validate.call(saved, 'abc', {})), />= 0\.1/);
   assert.equal(defaults.rateHz.validate.call(saved, 5, {}), true);
-  assert.match(String(defaults.ttlMs.validate.call(saved, -5, {})), /milliseconds/);
+  assert.match(String(defaults.ttlMs.validate.call(saved, -5, {})), />= 0/);
   assert.equal(defaults.ttlMs.validate.call(saved, 0, {}), true, '0 = no TTL is legal');
 });
 
@@ -220,7 +220,7 @@ test('move stream validators: own dialog reads the live tier, foreign does not',
   });
   assert.match(
     String(own['mavlink-move'].defaults.rateHz.validate.call({ id: 'm1', delivery: 'send' }, 0, {})),
-    /at least 0\.1 Hz/
+    />= 0\.1/
   );
 
   // Foreign dialog showing 'stream': a closed Send-tier node must not have

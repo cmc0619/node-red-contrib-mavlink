@@ -134,9 +134,9 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   assert.equal(deriveSteerMode(g({ accel: filled })), 'acceleration');
   // Explicit 0 is a value, so a zero vector still names its group.
   assert.equal(deriveSteerMode(g({ velocity: { north: 0, east: '', up: '' } })), 'velocity');
-  // Yaw/yaw-rate alone are the measured-hazard yaw-only mode, still offered.
-  assert.equal(deriveSteerMode(g({ yaw: 90 })), 'yaw-only');
-  assert.equal(deriveSteerMode(g({ yawRate: 10 })), 'yaw-only');
+  // Yaw/yaw-rate alone are the measured-hazard '' mode (no vector group), still offered.
+  assert.equal(deriveSteerMode(g({ yaw: 90 })), '');
+  assert.equal(deriveSteerMode(g({ yawRate: 10 })), '');
   // Yaw rides any mode by presence — it does not change the derived group.
   assert.equal(deriveSteerMode(g({ velocity: filled, yaw: 90 })), 'velocity');
 
@@ -155,10 +155,10 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   assert.equal(deriveSteerMode(g({ accel: filled, position: filled })), 'position-acceleration');
   const { MODES } = require('../../lib/move/frames');
   assert.equal(MODES['position-acceleration'], undefined, 'the unmeasured mix has no wire encoding');
-  // Nothing filled derives yaw-only, which with no yaw is the all-ignore
+  // Nothing filled derives '', which with no yaw is the all-ignore
   // packet (§14 / #115). It used to refuse; the editor requires at least one
   // Steer field now, so the configured path cannot get here.
-  assert.equal(deriveSteerMode(g()), 'yaw-only');
+  assert.equal(deriveSteerMode(g()), '');
 
   // Only the LOCAL triplet names the position group (Codex, #277): a node
   // switched from Go to keeps its hidden lat/lon/alt serialized, and
@@ -167,9 +167,9 @@ test('deriveSteerMode: filling fields IS the mode — the CSV rule, total at the
   const staleGlobals = { north: '', east: '', up: '', lat: 47.1, lon: 8.5, alt: 25 };
   assert.equal(deriveSteerMode(g({ position: staleGlobals, velocity: filled })), 'velocity');
   assert.equal(deriveSteerMode(g({ position: staleGlobals, accel: filled })), 'acceleration');
-  // A stale global cannot rescue an empty steer either — it derives yaw-only
+  // A stale global cannot rescue an empty steer either — it derives ''
   // (the all-ignore packet), not position.
-  assert.equal(deriveSteerMode(g({ position: staleGlobals })), 'yaw-only');
+  assert.equal(deriveSteerMode(g({ position: staleGlobals })), '');
 });
 
 
@@ -286,6 +286,33 @@ test('stream ticks re-stamp time_boot_ms without mutating the built message', ()
 });
 
 
+test('a stream flies its snapshot: an in-place edit of the emitted message changes no tick (R8)', () => {
+  const { createMoveStream } = require('../../lib/move');
+  const sent = [];
+  const message = {
+    name: 'SET_ATTITUDE_TARGET',
+    fields: { time_boot_ms: 0, target_system: 1, target_component: 1, type_mask: 7, q: [1, 0, 0, 0], thrust: 0.5 },
+  };
+  let tick = null;
+  const stream = createMoveStream({
+    message,
+    braking: false,
+    connection: { send: (m) => sent.push(m) },
+    rateHz: 4,
+    ttlMs: 0,
+    setInterval: (fn) => { tick = fn; return { unref() { /* injected */ } }; },
+    clearInterval: () => { /* injected */ },
+  });
+  stream.start();
+  // What a downstream Function node does to output 0's payload.message.
+  message.fields.thrust = 1;
+  message.fields.q[0] = 0;
+  tick();
+  stream.stop();
+  assert.equal(sent[1].fields.thrust, 0.5);
+  assert.deepEqual(sent[1].fields.q, [1, 0, 0, 0]);
+});
+
 test('braking is opt-out, and attitude/manual streams end in silence (§9 ruling 1)', () => {
   // The hazard this pins: a regression to always-brake would synthesize a
   // zero-velocity POSITION brake at a vehicle being attitude- or stick-flown —
@@ -355,7 +382,8 @@ test('quaternionFromEuler composes mixed angles in aerospace ZYX order, pinned t
 test('Move streams on the Streaming band until TTL and emits a zero-velocity stop', () => {
   const sends = [];
   let timer;
-  let now = 0;
+  let expire;
+  let expiryMs;
   const handle = { unref() { /* not a real timer */ } };
   const stream = createMoveStream({
     connection: {
@@ -373,7 +401,6 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
     identityId: 'gcs',
     rateHz: 10,
     ttlMs: 250,
-    now: () => now,
     setInterval(fn) {
       timer = fn;
       return handle;
@@ -381,17 +408,23 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
     clearInterval(cleared) {
       assert.equal(cleared, handle);
     },
+    setTimeout(fn, ms) {
+      expire = fn;
+      expiryMs = ms;
+      return { unref() { /* not a real timer */ } };
+    },
+    clearTimeout() { /* injected */ },
   });
 
   stream.start();
   assert.equal(sends.length, 1);
   assert.equal(sends[0].options.band, BAND.STREAMING);
   assert.equal(sends[0].message.fields.vz, -3);
+  // The TTL owns its own timer: the brake lands at ttlMs, not on the next tick.
+  assert.equal(expiryMs, 250);
 
-  now = 100;
   timer();
-  now = 260;
-  timer();
+  expire();
 
   assert.equal(stream.active, false);
   assert.equal(sends.length, 3);
@@ -405,3 +438,23 @@ test('Move streams on the Streaming band until TTL and emits a zero-velocity sto
 
 
 
+
+test('TTL expiry is not rounded up to the next tick: 1 Hz with TTL 30 ms brakes long before 1 s (R30)', async () => {
+  const sent = [];
+  const started = Date.now();
+  // The stream's timers are unref'd; this one holds the event loop open.
+  const keepAlive = setTimeout(() => { /* held open */ }, 2000);
+  const elapsed = await new Promise((resolve) => {
+    createMoveStream({
+      message: buildMoveMessage({ frame: 1, mode: 'velocity', target: { sysid: 1, compid: 1 }, velocity: { north: 1, east: 0, up: 0 } }),
+      connection: { send: (m) => sent.push(m) },
+      rateHz: 1,
+      ttlMs: 30,
+      onExpire: () => resolve(Date.now() - started),
+    }).start();
+  });
+  clearTimeout(keepAlive);
+  assert.ok(elapsed < 500, `braked at ${elapsed} ms`);
+  assert.equal(sent.length, 2, 'the first setpoint, then the brake');
+  assert.equal(sent[1].fields.type_mask, 3527);
+});

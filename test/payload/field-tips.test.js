@@ -10,19 +10,19 @@ const assert = require('node:assert/strict');
 
 const { loadBundled } = require('../../lib/metadata/bundled');
 const {
-  recipeFor,
   fieldMetaFromBundle,
   carrierMattersFor,
   buildPayloadMessage,
-  MAV_CMD,
 } = require('../../lib/payload');
 
-test('recipeFor camera photo maps Sequence to IMAGE_START_CAPTURE param4', () => {
-  const recipe = recipeFor('camera', 'photo', '');
-  assert.ok(recipe);
-  assert.equal(recipe.kind, 'command');
-  assert.equal(recipe.command, MAV_CMD.IMAGE_START_CAPTURE);
-  assert.equal(recipe.params[3].field, 'sequence');
+test('camera photo rides IMAGE_START_CAPTURE with the capture sequence in param4', () => {
+  const built = buildPayloadMessage({
+    carrier: 'long', topic: 'camera', verb: 'photo',
+    target: { sysid: 9, compid: 100 }, values: { cameraId: 0, interval: 0, count: 1 },
+  });
+  assert.equal(built.confirmation, 'command_ack');
+  assert.equal(built.message.fields.command, 2000, 'MAV_CMD_IMAGE_START_CAPTURE');
+  assert.ok(built.message.fields.param4 >= 1, 'a single capture carries a sequence number');
 });
 
 test('fieldMetaFromBundle renders no control for the driver-owned Sequence slot', () => {
@@ -76,28 +76,16 @@ test('a topic/verb pair with no recipe selects no builder', () => {
 });
 
 test('fieldMetaFromBundle blanks Empty / Reserved param descriptions', () => {
-  const recipe = recipeFor('camera', 'photo', '');
-  assert.ok(recipe && recipe.command);
-  const params = recipe.params.map((slot, i) => {
-    const index = i + 1;
-    if (!slot) return { index, description: 'Empty', reserved: true };
-    if (slot.field === 'sequence') {
-      return { index, description: 'Capture sequence number', reserved: false };
-    }
-    if (slot.field === 'cameraId') {
-      return { index, description: 'Empty', reserved: false };
-    }
-    if (slot.field === 'count') {
-      return { index, description: 'Empty.', reserved: false };
-    }
-    if (slot.field === 'interval') {
-      return { index, description: 'Reserved', reserved: false };
-    }
-    return { index, description: 'keep', reserved: false };
-  });
+  // IMAGE_START_CAPTURE's slots: cameraId, interval, count, sequence.
+  const params = [
+    { index: 1, description: 'Empty', reserved: false },
+    { index: 2, description: 'Reserved', reserved: false },
+    { index: 3, description: 'Empty.', reserved: false },
+    { index: 4, description: 'Capture sequence number', reserved: false },
+  ];
   const bundle = {
     commands: {
-      IMAGE_START_CAPTURE: { value: recipe.command, params },
+      IMAGE_START_CAPTURE: { value: 2000, params },
     },
   };
   const meta = fieldMetaFromBundle(bundle, 'camera', 'photo', '');
@@ -121,10 +109,9 @@ test('buildPayloadMessage and field tips share the photo recipe param order', ()
   // count 3 is not a single capture: the dialect says sequence 0, whatever the
   // operator or the counter would have said.
   assert.equal(built.message.fields.param4, 0);
-  const recipe = recipeFor('camera', 'photo', '');
   assert.deepEqual(
-    recipe.params.map((s) => s.field),
-    ['cameraId', 'interval', 'count', 'sequence']
+    Object.keys(fieldMetaFromBundle(loadBundled('ardupilotmega'), 'camera', 'photo', '')),
+    ['cameraId', 'interval', 'count']
   );
 });
 
@@ -183,18 +170,14 @@ test('every recipe derives exactly the fields the dialog shows', () => {
 
 test('a pinned slot is filled by the recipe and never offered as a control', () => {
   const bundle = loadBundled('ardupilotmega');
-  const aim = recipeFor('gimbal', 'aim', 'legacy');
-  const mountMode = aim.params[6];
-  assert.equal(mountMode.pinned, true);
-  assert.equal(mountMode.default, 2, 'MAV_MOUNT_MODE_MAVLINK_TARGETING');
   assert.ok(!('mode' in fieldMetaFromBundle(bundle, 'gimbal', 'aim', 'legacy')));
 
   // Still sent on the wire — pinned means "not the operator's", not "absent".
   const built = buildPayloadMessage({
     topic: 'gimbal', verb: 'aim', path: 'legacy', carrier: 'long',
-    target: { sysid: 1, compid: 1 }, values: { pitch: 10 },
+    target: { sysid: 1, compid: 1 }, values: { pitch: 10, mode: 0 },
   });
-  assert.equal(built.message.fields.param7, 2);
+  assert.equal(built.message.fields.param7, 2, 'MAV_MOUNT_MODE_MAVLINK_TARGETING, whatever values says');
 });
 
 test('the carrier is only a real choice where the command carries a location', () => {
@@ -202,7 +185,7 @@ test('the carrier is only a real choice where the command carries a location', (
   assert.equal(carrierMattersFor(bundle, 'gimbal', 'roi-set', ''), true);
   for (const [topic, verb, path] of [
     ['camera', 'photo', ''], ['camera', 'set-mode', ''], ['gimbal', 'aim', 'legacy'],
-    ['gimbal', 'aim', 'manager'], ['servo', 'set', ''], ['winch', 'operate', ''],
+    ['gimbal', 'aim', 'manager'], ['gimbal', 'aim', 'attitude'], ['servo', 'set', ''], ['winch', 'operate', ''],
   ]) {
     assert.equal(carrierMattersFor(bundle, topic, verb, path), false, `${topic}/${verb}/${path}`);
   }

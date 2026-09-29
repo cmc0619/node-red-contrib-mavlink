@@ -113,8 +113,8 @@
         // open-and-save. Surviving is right; deploying is not.
         messageName: {
           value: 'HEARTBEAT',
+          required: true,
           validate(v, _opt) {
-            if (RED.mavlink.isBlank(v)) return 'is required — pick a message from the dialect';
             if (RED.mavlink.isMissingFromDialect(this, '#node-input-messageName', v)) {
               return 'is not in this dialect — pick a message the Connection speaks';
             }
@@ -634,7 +634,10 @@
     <dt class="optional">band <span class="property-type">number</span></dt>
     <dd>Queue band override (0–4).</dd>
     <dt class="optional">target <span class="property-type">object</span></dt>
-    <dd><code>{ sysid, compid }</code> destination.</dd>
+    <dd><code>{ sysid, compid }</code> destination (Send). Read at the message
+        root, like <code>band</code>, not under <code>payload</code>.</dd>
+    <dt class="optional">identityId <span class="property-type">string</span></dt>
+    <dd>Local Identity node id the frame is sent as (Send), at the message root.</dd>
   </dl>
   <h3>Outputs</h3>
   <ol class="node-ports">
@@ -666,5 +669,5 @@
   <p><b>Delivery</b>: <i>Build</i> emits the merged message without sending; no
   connection needed. <i>Send</i> enqueues directly on the Connection.</p>
   <p><b>Repeat</b>: when set, the node fires independently of inbound triggers at
-  the configured interval. The status badge names the configured rate.</p>
+  the configured interval. The status badge names the configured interval.</p>
 </script>

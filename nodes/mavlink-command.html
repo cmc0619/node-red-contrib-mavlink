@@ -138,11 +138,11 @@
 
   // Presets whose *blank* param5/6 encodes the spec's NaN "use current
   // position" sentinel (`blankParams` in lib/command/presets.js). int32 has no
-  // NaN, so those presets can only say "here" over COMMAND_LONG —
-  // `longToIntFields` refuses the pair at build. The carrier is an editor
-  // field, so the impossibility is a deploy-time verdict rather than a
-  // first-message surprise. Drift-tested against the library, like the map
-  // below.
+  // NaN, so those presets can only say "here" over COMMAND_LONG — the INT
+  // build carries NaN x/y and the serializer refuses it at pack. The carrier
+  // is an editor field, so the impossibility is a deploy-time verdict rather
+  // than a first-message surprise. Drift-tested against the library, like
+  // the map below.
   const NAN_CENTRE_PRESETS = new Set(['orbit']);
 
   // Which offered presets cannot be sent with a blank coordinate. The editor
@@ -255,17 +255,17 @@
     return values;
   }
 
+  /** Whether the COMMAND_INT carrier is selected — the int32 param5/6 path. */
+  function intCarrierSelected(owner) {
+    return RED.mavlink.liveOr(owner, '#node-input-sendAs', owner.sendAs, 'long') === 'int';
+  }
+
   /**
    * True when param5/6 carry metres rather than degrees, so the ±90/±180 gate
    * must not fire. Only COMMAND_INT carries a frame at all; the LONG carrier
    * and every unknown frame stay on the degree path, which is the safe
    * direction — a missing frame must not buy a bypass (§9).
    */
-  /** Whether the COMMAND_INT carrier is selected — the int32 param5/6 path. */
-  function intCarrierSelected(owner) {
-    return RED.mavlink.liveOr(owner, '#node-input-sendAs', owner.sendAs, 'long') === 'int';
-  }
-
   function localFrameSelected(owner) {
     if (!intCarrierSelected(owner)) return false;
     const frame = Number(RED.mavlink.liveOr(owner, '#node-input-frame', owner.frame, ''));
@@ -286,6 +286,15 @@
       if (p) return p;
     }
     return null;
+  }
+
+  /**
+   * Whether the saved or live tier waits on an answer. Only Confirm and
+   * Complete read the ack rows (timeout, retries, continue-if-unconfirmed);
+   * Build constructs and Send fires and forgets.
+   */
+  function waitsOnAck(owner) {
+    return ['confirm', 'complete'].includes(RED.mavlink.liveOr(owner, '#node-input-delivery', owner.delivery));
   }
 
   // Dialect + Vehicle Profile validators are the shared Build-tier rule (§6);
@@ -343,10 +352,17 @@
       // reds only a hand-edited flow. Blank inherits the profile default.
       targetComponent:      { value: '', validate: RED.mavlink.validateUint8(0) },
       // ACK timeout and Max retries: the shared definition, hidden with the
-      // rows on Build.
-      ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire),
+      // rows on the tiers that wait on no ack.
+      ...RED.mavlink.ackDefaults(waitsOnAck),
       unconfirmedContinue: { value: false },
-      completionTimeout: { value: '60000', validate: RED.mavlink.validateAtLeast(0) },
+      // Read by the Complete tier only, and hidden on every other.
+      completionTimeout: {
+        value: '60000',
+        validate(v, opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'complete') return true;
+          return RED.mavlink.validateAtLeast(0).call(this, v, opt);
+        },
+      },
       // The preset params blob. Nothing checked it before, and the runtime
       // refused blank/out-of-range coordinates on its behalf; that refusal is
       // gone (AGENTS.md, input trust), so this is now the only thing between a
@@ -385,7 +401,7 @@
             return 'Takeoff needs an altitude — a blank is sent as 0';
           }
           // A blank centre on these presets is the NaN sentinel, and int32 has
-          // no NaN: the build refuses the pair, so the operator would meet it
+          // no NaN: pack refuses the pair, so the operator would meet it
           // on the first message instead of at deploy.
           if (NAN_CENTRE_PRESETS.has(preset) && intCarrierSelected(this) &&
               (!presentParam(values[5]) || !presentParam(values[6]))) {
@@ -456,9 +472,10 @@
         $('#row-cmd-identity').toggle(
           !isBuild && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
         );
-        $('#row-cmd-timeoutMs')[isBuild ? 'hide' : 'show']();
-        $('#row-cmd-maxRetries')[isBuild ? 'hide' : 'show']();
-        $('#row-cmd-unconfirmedContinue')[isBuild ? 'hide' : 'show']();
+        const onAck = waitsOnAck(node);
+        $('#row-cmd-timeoutMs').toggle(onAck);
+        $('#row-cmd-maxRetries').toggle(onAck);
+        $('#row-cmd-unconfirmedContinue').toggle(onAck);
 
         // Wire + companion → target derived; Build always shows (must stamp).
         RED.mavlink.applyCompanionTargetVisibility({
@@ -832,11 +849,7 @@
 
       /** Blank, or an integer the packed byte can hold \u2014 the pair the PX4
        * mode select can represent without rewriting it on save. */
-      function px4ByteOrBlank(v) {
-        if (v === undefined || v === null || v === '') return true;
-        const n = Number(v);
-        return Number.isInteger(n) && n >= 0 && n <= 255;
-      }
+      const px4Byte = RED.mavlink.validateUint8(0);
 
       /**
        * The PX4 flight-mode select: options are the baked table, valued by
@@ -854,7 +867,7 @@
        * @returns {?jQuery}
        */
       function px4ModeInput(entries) {
-        if (!px4ByteOrBlank(savedParams[2]) || !px4ByteOrBlank(savedParams[3])) return null;
+        if (px4Byte(savedParams[2]) !== true || px4Byte(savedParams[3]) !== true) return null;
         const sel = $('<select class="param-input"></select>')
           .attr('data-idx', 2)
           .attr('data-kind', 'px4mode')
@@ -1190,14 +1203,21 @@
     <li>Continue
       <dl class="message-properties">
         <dt>payload <span class="property-type">object</span></dt>
-        <dd>The status record on success; the built carrier message
-            (<code>COMMAND_INT</code> or <code>COMMAND_LONG</code>) in Build mode.</dd>
+        <dd>The status record when the vehicle accepted (or, with
+            <em>Continue chain if unconfirmed</em>, when nobody answered); the carrier
+            message (<code>COMMAND_INT</code> or <code>COMMAND_LONG</code>) on Build and
+            Send.</dd>
       </dl>
     </li>
     <li>Status — plain status object at the message root on every terminal outcome:
       <dl class="message-properties">
         <dt>result <span class="property-type">string</span></dt>
-        <dd>Outcome name (<code>accepted</code>, <code>failed</code>, <code>unconfirmed</code>, …).</dd>
+        <dd>Outcome name: <code>built</code>, <code>sent</code>, <code>accepted</code>,
+            <code>unconfirmed</code> (no answer), <code>failed</code> (the input failed
+            here), <code>timeout</code> (accepted, completion never seen), or the
+            vehicle's MAV_RESULT name (<code>denied</code>, <code>cancelled</code>, …).
+            A wait replaced by a newer input reports <code>cancelled</code> with detail
+            <code>superseded</code>; a redeploy ends a wait silently.</dd>
         <dt>resultCode <span class="property-type">number | null</span></dt>
         <dd>MAV_RESULT code when the outcome came from COMMAND_ACK.</dd>
         <dt>resultParam2 <span class="property-type">number | null</span></dt>
@@ -1214,7 +1234,7 @@
         <dd>Milliseconds from start to terminal outcome.</dd>
         <dt>retries <span class="property-type">number</span></dt>
         <dd>Re-transmissions beyond the first send — TEMPORARILY_REJECTED
-            back-offs.</dd>
+            back-offs and re-sends into a silent ack window, from one budget.</dd>
         <dt>command <span class="property-type">string</span></dt>
         <dd>Friendly command name when known.</dd>
         <dt>commandId <span class="property-type">number</span></dt>
@@ -1231,7 +1251,7 @@
         <em>Dialect</em>, or choose <em>from Vehicle Profile…</em> to use a custom XML dialect
         and that profile's default target. Identity and connection are not used.</li>
     <li><b>Send</b> — fire-and-forget; no acknowledgement waiting.</li>
-    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; retry on TEMPORARILY_REJECTED. Two nodes waiting on the same command to the same target from the same identity cannot be told apart: COMMAND_ACK carries the command id and the result, nothing from the request, so the first ack settles both.
+    <li><b>Send &amp; confirm</b> (default) — wait for COMMAND_ACK; re-send on TEMPORARILY_REJECTED and into a silent ack window while <em>Max retries</em> lasts, then report <code>unconfirmed</code>. Two nodes waiting on the same command to the same target from the same identity cannot be told apart: COMMAND_ACK carries the command id and the result, nothing from the request, so the first ack settles both.
         While the vehicle answers IN_PROGRESS the status badge shows the
         progress it reports.</li>
     <li><b>Send &amp; await completion</b> — after ACCEPTED, poll the peer table until the

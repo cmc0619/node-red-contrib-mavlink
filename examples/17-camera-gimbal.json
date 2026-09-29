@@ -95,8 +95,7 @@
     "values": {
       "cameraId": 0,
       "count": 1,
-      "interval": 0,
-      "sequence": 0
+      "interval": 0
     }
   },
   {
@@ -231,10 +230,12 @@
     ],
     "sendAs": "long",
     "values": {
-      "pitch": -45,
-      "roll": 0,
-      "yaw": 90,
-      "modeValue": 0
+      "flags": 0,
+      "gimbalDeviceId": 0,
+      "pitch": -0.785,
+      "yaw": 1.571,
+      "pitchRate": "",
+      "yawRate": ""
     }
   },
   {

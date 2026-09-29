@@ -231,8 +231,9 @@ test('Build dialect select uses the shared helper and includes __vehicle escape 
 });
 
 test('Build vehicle default no longer has required: true', () => {
-  assert.ok(
-    !html.includes('required: true'),
+  assert.notEqual(
+    loadNodeDefaults('mavlink-build').vehicle.required,
+    true,
     'vehicle must not carry required: true once the dialect picker is added'
   );
 });
@@ -342,9 +343,10 @@ test('mavlink-build: a blank message name reds in the editor (§6 status ruling,
   // Config validity is the editor's verdict (§6), so this validator is the
   // only thing between a cleared field and a node whose every input fails with
   // "dialect or message unresolved".
+  // Node-RED's own `required` reds the blank; the select offers no
+  // whitespace name to save.
   const { messageName } = loadNodeDefaults('mavlink-build');
-  assert.match(String(messageName.validate.call({}, '', {})), /is required/);
-  assert.match(String(messageName.validate.call({}, '   ', {})), /is required/, 'whitespace is blank');
+  assert.equal(messageName.required, true);
   assert.equal(messageName.validate.call({}, 'HEARTBEAT', {}), true);
   assert.equal(messageName.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
 });

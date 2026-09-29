@@ -450,3 +450,22 @@ test('gimbal attitude aim NaN-s the angular-velocity triple, not zero-rate (issu
   assert.ok(Number.isNaN(built.message.fields.angular_velocity_y), 'pitch rate NaN');
   assert.ok(Number.isNaN(built.message.fields.angular_velocity_z), 'yaw rate NaN');
 });
+
+test('gimbal manager rate aim: blank pitch/yaw ride NaN on both manager paths (R17)', () => {
+  // Rate control needs the angle pair unset; ArduPilot drops the message and
+  // aims the command at 0/0 when both pairs carry numbers.
+  const message = buildPayloadMessage({
+    topic: 'gimbal', verb: 'aim', path: 'manager',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: '', yaw: '', pitchRate: 0.1, yawRate: 0.2 },
+  }).message.fields;
+  assert.ok(Number.isNaN(message.pitch) && Number.isNaN(message.yaw));
+  assert.equal(message.pitch_rate, 0.1);
+  const command = buildPayloadMessage({
+    topic: 'gimbal', verb: 'aim', path: 'manager-cmd', carrier: 'long',
+    target: { sysid: 2, compid: 154 },
+    values: { pitch: '', yaw: '', pitchRate: -5, yawRate: -10, flags: 0, gimbalDeviceId: 0 },
+  }).message.fields;
+  assert.ok(Number.isNaN(command.param1) && Number.isNaN(command.param2));
+  assert.equal(command.param3, -5);
+});

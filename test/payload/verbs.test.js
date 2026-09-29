@@ -4,32 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  PAYLOAD_RECIPES,
   buildPayloadMessage,
   fieldMetaFromBundle,
 } = require('../../lib/payload');
 
-
-test('every recipe builds without error', () => {
-  for (const key of Object.keys(PAYLOAD_RECIPES)) {
-    const [topic, verb, path] = key.split('|');
-    const input = {
-      topic,
-      verb,
-      target: { sysid: 1, compid: 1 },
-      values: {},
-      carrier: 'long',
-    };
-    if (path) input.path = path;
-    // roi-set is the one verb whose coordinates are required rather than
-    // defaulted — a blank ROI must fail loud rather than aim at 0,0 (§10).
-    // Supply them so this still exercises the build path.
-    if (topic === 'gimbal' && verb === 'roi-set') {
-      input.values = { lat: 47.397742, lon: 8.545594, alt: 30 };
-    }
-    assert.doesNotThrow(() => buildPayloadMessage(input), key);
-  }
-});
 
 test('shared field keys map to colliding enum families, so a stashed id must not cross verbs', () => {
   // `mode` and `action` are one row key each, reused across verbs that resolve
@@ -88,10 +66,6 @@ test('gimbal roi-set does not invent 0 for a blank coordinate (#88)', () => {
   const blank = buildPayloadMessage({ ...base, values: { lon: 8.5, alt: 30 } });
   assert.equal(blank.message.fields.param5, undefined, 'blank lat rides unset — NaN on the wire, never 0');
   assert.equal(blank.message.fields.param6, 8.5);
-
-  // The slot still carries `required` — as metadata for the dialog.
-  const { PAYLOAD_RECIPES } = require('../../lib/payload');
-  assert.ok(PAYLOAD_RECIPES['gimbal|roi-set|'].params[4].required);
 
   // An explicit 0 is a real coordinate and still sends.
   const built = buildPayloadMessage({ ...base, values: { lat: 0, lon: 0, alt: 0 } });

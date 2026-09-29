@@ -239,6 +239,18 @@ test('a document with no definitions is written as zero definitions', async (t) 
   assert.equal(fs.existsSync(holdingFile(userDir, 'profile-empty-doc')), true);
 });
 
+test('a profile id carrying path segments cannot address a file outside the holding directory', async (t) => {
+  const userDir = tempUserDir(t);
+  fs.writeFileSync(path.join(userDir, 'flows.json'), '[]');
+
+  await updateParamDefs(userDir, '../../flows', 'https://example.test/good.json', {
+    fetchFn: async () => documentFor('PWNED'),
+  });
+
+  assert.equal(fs.readFileSync(path.join(userDir, 'flows.json'), 'utf8'), '[]');
+  assert.deepEqual([...(await readParamDefs(userDir, 'flows')).keys()], ['PWNED']);
+});
+
 test('a failed update preserves the last good profile holding file', async (t) => {
   const userDir = tempUserDir(t);
   await updateParamDefs(userDir, 'profile-preserve', 'https://example.test/good.json', {

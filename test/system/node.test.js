@@ -365,6 +365,29 @@ test('a backup keeps the sections that transferred when one fails', async () => 
   assert.ok(record.failed.files.reason, 'the outcome names why the files section did not make it');
 });
 
+test('a payload paramEncoding of auto resolves the encoding as the configured auto does (R15)', async () => {
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
+  conn.onSend((message, deliver) => {
+    if (message.name === 'PARAM_REQUEST_LIST') {
+      deliver(paramValue({ paramId: 'A', paramType: 6, paramIndex: 0, paramCount: 1, value: 7 }));
+      return;
+    }
+    if (message.name === 'MISSION_REQUEST_LIST') {
+      deliver({ name: 'MISSION_COUNT', sysid: 42, compid: 1,
+        fields: { count: 0, mission_type: message.fields.mission_type, target_system: 0, target_component: 0 } });
+      return;
+    }
+    if (message.name !== 'FILE_TRANSFER_PROTOCOL') return;
+    deliver(ftpReply(message, OPCODE.NAK, Buffer.from([NAK_ERROR.EOF])));
+  });
+  const Node = loadNode(conn);
+  const node = new Node({ ...BASE, service: 'backup', operation: 'backup', path: '/', paramEncoding: 'bytewise' });
+  const result = await runInput(node, { payload: { paramEncoding: 'auto' } });
+  assert.deepEqual(result.outputs.at(-1)[0].payload.parameters, [{ paramId: 'A', paramType: 6, value: 7 }],
+    'ArduPilot c-cast from the firmware rung, not a NaN from an unmatched token');
+});
+
 test('a restore of one section runs that section alone, on its own band', async () => {
   const conn = new StubConnection();
   conn.vehicle = { firmware: 'px4', targetSystem: 42, targetComponent: 1 };

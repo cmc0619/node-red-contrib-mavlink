@@ -21,10 +21,10 @@
  *   build    — construct the selected carrier message and emit on output 0;
  *              no send.
  *   send     — fire-and-forget; no acknowledgement waiting.
- *   confirm  — wait for COMMAND_ACK; re-send on TEMPORARILY_REJECTED up to
- *              the editor's retry budget (a preset marked noAutoRetry
- *              forces 0); a silent window settles unconfirmed and triggers
- *              the peer-table check.
+ *   confirm  — wait for COMMAND_ACK; re-send on TEMPORARILY_REJECTED and
+ *              into a silent window, from one retry budget (a preset marked
+ *              noAutoRetry forces 0); silence past the budget runs the
+ *              peer-table check and otherwise settles unconfirmed.
  *   complete — after ACCEPTED, poll peer table until completion condition met.
  *              Only offered for commands that have a completion condition (§9).
  *
@@ -115,8 +115,7 @@ module.exports = function registerMavlinkCommand(RED) {
 
     const delivery = config.delivery;
 
-    // Read as saved; the per-input dispatch below selects on it (§5), so a
-    // hand-edited token is a per-message no-op, never a throw at deploy.
+    // A checkbox: settleAck fires output 0 on `unconfirmed` when it is set.
     const unconfirmedContinue = config.unconfirmedContinue;
 
     /**
@@ -399,7 +398,7 @@ module.exports = function registerMavlinkCommand(RED) {
        * @param {number} myGen  the run's generation, for the stale-run check
        */
       async function pollCompletion(ackRecord, ackOutcome, myGen) {
-        applyActionStatus(node, 'sending', `${displayName} climbing\u2026`);
+        applyActionStatus(node, 'sending', `${displayName} completing\u2026`);
         // Component 0 addresses every component of the system; the one that
         // acked is the one whose state settles completion. No peer advertises
         // compid 0, so looking it up would never find a row.

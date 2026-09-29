@@ -486,14 +486,14 @@ function machineOptions(context) {
   return undefined;
 }
 
+/**
+ * The parameter encoding for a backup or restore: `msg.payload.paramEncoding`
+ * over the configured one, and `'auto'` — the dialog's own option value,
+ * whichever source it comes from — asks the capabilities and firmware rungs.
+ */
 function resolvedEncoding(config, payload, connNode, target, profile) {
-  const payloadEncoding = payload.paramEncoding;
-  const configuredEncoding = payloadEncoding === undefined
-    ? config.paramEncoding
-    : payloadEncoding;
-  const encoding = payloadEncoding === undefined && configuredEncoding === 'auto'
-    ? undefined
-    : configuredEncoding;
+  const chosen = payload.paramEncoding === undefined ? config.paramEncoding : payload.paramEncoding;
+  const encoding = chosen === 'auto' ? undefined : chosen;
   return resolveParamEncoding({
     encoding,
     capabilities: capabilitiesFromPeer(connNode, target),

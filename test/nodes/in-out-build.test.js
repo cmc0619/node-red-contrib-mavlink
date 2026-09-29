@@ -1336,6 +1336,31 @@ test('mavlink-build: close stops the repeat timer', () => {
   assert.ok(node._closed);
 });
 
+test('mavlink-build: a repeat badge names the interval (COMMAND-12)', () => {
+  const RED = makeRED();
+  RED.nodes._register('v1', makeVehicleStub());
+  const { stub } = makeConnectionStub();
+  RED.nodes._register('conn-1', stub);
+  require('../../nodes/mavlink-build')(RED);
+  const Constructor = RED._nodeTypes['mavlink-build'];
+  const node = makeNodeInstance({ vehicle: 'v1', connection: 'conn-1' });
+  const statuses = [];
+  node.status = (s) => statuses.push(s);
+  Constructor.call(node, {
+    vehicle: 'v1',
+    connection: 'conn-1',
+    messageName: 'HEARTBEAT',
+    tier: 'send',
+    band: '2',
+    fields: JSON.stringify({ type: 6 }),
+    repeatMs: 3000,
+  });
+
+  node._input({ payload: {} });
+  node._close();
+  assert.equal(statuses[0].text, 'HEARTBEAT every 3000 ms', 'the interval, not a rounded 0 Hz');
+});
+
 // ---------------------------------------------------------------------------
 // Integration: mavlink-build Build tier → mavlink-out
 // ---------------------------------------------------------------------------

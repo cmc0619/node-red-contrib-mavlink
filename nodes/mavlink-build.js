@@ -157,9 +157,7 @@ module.exports = function registerMavlinkBuild(RED) {
             tier: 'send',
             band,
           });
-          applyActionStatus(node, 'ok', repeatMs > 0
-            ? `${messageName} ${Math.round(1000 / repeatMs)}Hz`
-            : messageName);
+          applyActionStatus(node, 'ok', repeatMs > 0 ? `${messageName} every ${repeatMs} ms` : messageName);
           emit([outMsg, sr]);
           return true;
         }

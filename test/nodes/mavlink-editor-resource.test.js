@@ -1061,24 +1061,6 @@ test('resolveEnumEntry names an entry only by its exact number or exact name', (
   assert.equal(msg('3'), undefined);
 });
 
-// ── payloadVerbIgnoresCarrier — drift pin against lib/payload (§9) ───────────
-
-test('payloadVerbIgnoresCarrier mirrors the lib recipe table exactly', () => {
-  const { RED } = loadResource({});
-  const { PAYLOAD_RECIPES } = require('../../lib/payload');
-  // The editor-side predicate cannot require() the lib, so it hardcodes the
-  // message-kind set. This pin fails the moment a recipe is added or changed
-  // in lib/payload without updating the mirror (Codex #61 review).
-  for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
-    const [topic, verb, path] = key.split('|');
-    assert.equal(
-      RED.mavlink.payloadVerbIgnoresCarrier(topic, verb, path || 'legacy'),
-      recipe.kind === 'message',
-      `${key}: editor predicate must match lib kind '${recipe.kind}'`
-    );
-  }
-});
-
 /**
  * `loadResource`'s `$` answers selectors only — booleanEnumInput builds an
  * element and chains against it, so these tests supply a recording element.

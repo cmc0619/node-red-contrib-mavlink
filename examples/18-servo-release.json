@@ -164,7 +164,7 @@
     "sendAs": "long",
     "values": {
       "instance": 1,
-      "actionValue": 1
+      "action": 1
     }
   },
   {
@@ -198,7 +198,7 @@
     "sendAs": "long",
     "values": {
       "instance": 1,
-      "actionValue": 1,
+      "action": 1,
       "length": 2,
       "rate": 0.5
     }
@@ -233,7 +233,7 @@
     ],
     "sendAs": "long",
     "values": {
-      "actionValue": 2
+      "action": 2
     }
   },
   {

@@ -41,24 +41,33 @@ module.exports = function registerMavlinkMove(RED) {
     const delivery = config.delivery;
     const connAtDeploy = RED.nodes.getNode(config.connection);
 
-    // Stop the active stream and free its single-owner scope. Every
-    // stop the node causes — replacement, a non-stream input, an explicit
-    // stop, close — routes through here so no path can leave the target
-    // locked with nothing streaming to it. `brake` follows GCS practice
-    // (§ "Move setpoint matrix"): the brake marks the end of control, so
-    // replace/supersede handovers pass false — the new setpoint IS the next
-    // command. The bookkeeping runs in `finally` because a brake send can
-    // throw (dead link): the lock must come free even when the brake never
-    // reached the wire, and each caller owns where that throw lands.
-    function stopStream({ brake = true } = {}) {
+    /**
+     * Empty the stream slot and free its single-owner scope. The one owner of
+     * that bookkeeping: an explicit stop, close, TTL expiry and a retarget
+     * handover all end here, so no path can leave the target locked with
+     * nothing streaming to it.
+     */
+    function clearSlot() {
+      const release = releaseStream;
+      stream = null;
+      releaseStream = null;
+      streamKey = null;
+      release();
+    }
+
+    /**
+     * End control of the active stream: an explicit stop or close, so it
+     * brakes (§ "Move setpoint matrix": the brake marks the end of control).
+     * The slot clears in `finally` because a brake send can throw (dead
+     * link): the lock must come free even when the brake never reached the
+     * wire, and each caller owns where that throw lands.
+     */
+    function stopStream() {
       if (!stream) return null;
       try {
-        return stream.stop({ brake });
+        return stream.stop();
       } finally {
-        stream = null;
-        releaseStream();
-        releaseStream = null;
-        streamKey = null;
+        clearSlot();
       }
     }
 
@@ -68,13 +77,14 @@ module.exports = function registerMavlinkMove(RED) {
     // IN_PROGRESS. settleAck reports it in Command's words: `accepted`,
     // `unconfirmed` on silence, and every other terminal — COMMAND_INT_ONLY
     // (8) and UNSUPPORTED_MAV_FRAME (9) included — by its MAV_RESULT name.
-    async function confirmCommand(label, message, target, identityId, connectionNode, send, done) {
+    async function confirmCommand(label, message, target, identityId, connectionNode, send, done, noAutoRetry) {
       const outcome = await awaitAckWithBadge(node, waiterSlot, connectionNode, message, label, {
         target,
         identityId,
         // The editor owns the defaults and the number rings (RED.mavlink.ackDefaults).
         timeoutMs: Number(config.timeoutMs),
         maxRetries: Number(config.maxRetries),
+        noAutoRetry,
       });
       settleAck(node, send, done, outcome, { label, fields: { message } });
     }
@@ -86,16 +96,18 @@ module.exports = function registerMavlinkMove(RED) {
      * vocabulary across all of them, not one per action.
      *
      * @param {string} label  the action word, used in status and error text
+     * @param {boolean} [noAutoRetry]  a re-send is not the same command, so
+     *   ack silence is not re-sent (see AckWaiter)
      * @returns {boolean} true when the async confirm flow has taken ownership
      *   of `done`; the caller must return without calling it
      */
-    function deliverCommand(label, message, target, identityId, connectionNode, send, done) {
+    function deliverCommand(label, message, target, identityId, connectionNode, send, done, noAutoRetry) {
       switch (delivery) {
         case 'build':
           completeBuild(node, send, message, 'move', { message });
           return false;
         case 'confirm':
-          confirmCommand(label, message, target, identityId, connectionNode, send, done)
+          confirmCommand(label, message, target, identityId, connectionNode, send, done, noAutoRetry)
             .catch((err) => failInput(node, send, err, done));
           return true;
         case 'send':
@@ -166,8 +178,8 @@ module.exports = function registerMavlinkMove(RED) {
               break;
             case 'stream': {
               // msg overrides by presence; the editor owns the defaults and rings.
-              const rateHz = payload.rateHz === undefined ? Number(config.rateHz) : payload.rateHz;
-              const ttlMs = payload.ttlMs === undefined ? Number(config.ttlMs) : payload.ttlMs;
+              const rateHz = valueFrom(payload, config, 'rateHz');
+              const ttlMs = valueFrom(payload, config, 'ttlMs');
               // One stream per (connection, target): a second node
               // streaming to the same vehicle would alternate contradictory
               // setpoints — the vehicle oscillates while both nodes report
@@ -206,12 +218,8 @@ module.exports = function registerMavlinkMove(RED) {
                 // the flow. A replaced stream's timer is already cleared, so
                 // this only ever fires for the stream currently in the slot.
                 onExpire: (stopMessage, brakeError) => {
-                  const sent = next.sent;
-                  stream = null;
-                  releaseStream = null;
-                  streamKey = null;
-                  release();
-                  completeExpiry(node, stopMessage, sent, brakeError);
+                  clearSlot();
+                  completeExpiry(node, stopMessage, next.sent, brakeError);
                 },
                 // A tick send that throws is contained in the stream — it
                 // keeps cadence and retries (§ "Move setpoint matrix"). One
@@ -248,18 +256,14 @@ module.exports = function registerMavlinkMove(RED) {
               // a brake throw must not undo the already-running replacement
               // (warn, like close — the lock still frees via finally).
               if (stream) {
-                const old = stream;
-                stream = null;
                 try {
-                  old.stop({ brake: !sameKey });
+                  stream.stop({ brake: !sameKey });
                 } catch (err) {
                   node.warn(`Move stream brake failed on retarget: ${err.message}`);
                 } finally {
-                  // No truthiness guard: stream and releaseStream are assigned
-                  // and cleared together, so inside `if (stream)` the release
-                  // always exists — and if that invariant ever broke, throwing
-                  // here beats silently stranding the old target's lock.
-                  if (!sameKey) releaseStream();
+                  // A retarget frees the old target's scope; the same target
+                  // keeps the lock the new stream is taking over.
+                  if (!sameKey) clearSlot();
                 }
               }
               stream = next;
@@ -287,12 +291,16 @@ module.exports = function registerMavlinkMove(RED) {
               heading: valueFrom(payload, config, 'heading'),
               rate: valueFrom(payload, config, 'turnRate'),
               direction: valueFrom(payload, config, 'direction'),
-              // Relative changes what the heading number means, so it is a
-              // strict boolean opt-in like changeMode — never a truthy token.
               relative,
               target,
             });
-            if (deliverCommand(action, message, target, identityId, connectionNode, send, done)) return;
+            /**
+             * A relative heading is a delta: a re-send after a lost ack turns
+             * the vehicle again (measured 60.2° for +30°, #303). It gets no
+             * re-send on ack silence and settles `unconfirmed`; the
+             * TEMPORARILY_REJECTED back-off keeps its budget.
+             */
+            if (deliverCommand(action, message, target, identityId, connectionNode, send, done, relative)) return;
             done();
             return;
           }
@@ -331,8 +339,8 @@ module.exports = function registerMavlinkMove(RED) {
                   speed: valueFrom(payload, config, 'speed'),
                   radius: valueFrom(payload, config, 'radius'),
                   yaw: valueFrom(payload, config, 'yaw'),
-                  // CHANGE_MODE flies the vehicle into guided — an explicit boolean
-                  // opt-in (editor checkbox, payload override), never a truthy token.
+                  // CHANGE_MODE flies the vehicle into guided — an explicit opt-in
+                  // (editor checkbox, payload override), read by truthiness.
                   // Measured (§14 2026-08-12): the flag is the gate on both stacks;
                   // without it, outside GUIDED (AP) / Hold (PX4), the answer is
                   // DENIED (2).
@@ -399,17 +407,15 @@ module.exports = function registerMavlinkMove(RED) {
  * The setpoint message for a non-command action — everything Move sends that is
  * not an acked MAV_CMD.
  *
- * Extracted from the input handler rather than inlined: with six actions the
- * handler was measured at cyclomatic complexity 36, and five
- * of those branches were only ever choosing which builder to call. The handler
- * keeps the parts that are genuinely about *this* input — suppression, target
- * resolution, delivery, the stream lock — and this owns the wire shape.
+ * The handler keeps the parts that are genuinely about *this* input —
+ * suppression, target resolution, delivery, the stream lock — and this owns
+ * the wire shape.
  *
  * Attitude and manual are setpoints in every way that matters to delivery
  * (Build/Send/Stream, no ack) so they land here rather than growing a parallel
- * path. Neither speaks a frame or a mode: their mask, or manual's axis-invalid
- * sentinel, derives from which fields carry values — the same presence rule
- * Steer uses.
+ * path. Neither speaks a frame or a mode: attitude's mask derives from which
+ * fields carry values — the same presence rule Steer uses — and manual sends
+ * all four axes as given.
  *
  * @param {string} action  a MOVE_ACTIONS member that is not a command action
  * @param {object} payload  msg.payload (trusted — AGENTS.md input trust)
@@ -468,7 +474,7 @@ function setpointFor(action, payload, config, target, profile) {
       const yaw = valueFrom(payload, config, 'yaw');
       const yawRate = valueFrom(payload, config, 'yawRate');
       return buildMoveMessage({
-        mode: deriveSteerMode({ position, velocity, accel, yaw, yawRate }),
+        mode: deriveSteerMode({ position, velocity, accel }),
         frame: frameForReference(
           valueFrom(payload, config, 'reference'),
           profile
@@ -516,8 +522,9 @@ function completeResult(node, send, result, detail, fields) {
 }
 
 /**
- * A stream reached its TTL: the vehicle already has the stop packet, and this
- * is what tells the flow.
+ * A stream reached its TTL: a position stream has already sent its brake,
+ * an attitude or manual stream has gone quiet, and this is what tells the
+ * flow.
  *
  * **Status port only.** Output 0 is a trigger, not a report (§9): one input
  * fires it at most once, and a consumer never inspects the payload to decide

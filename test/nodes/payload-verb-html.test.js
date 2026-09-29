@@ -11,7 +11,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const { PAYLOAD_RECIPES } = require('../../lib/payload');
 const { assertChangeHandlerContains } = require('./html-assert');
 
 const payloadHtml = fs.readFileSync(
@@ -62,23 +61,18 @@ test('mavlink-fanout has no payload verb editor — it replicates built messages
   assert.doesNotMatch(fanoutHtml, /PAYLOAD_VERBS/, 'no payload verb table reference');
 });
 
-test('editor catalog names every lib/payload recipe verb under its own topic', () => {
+test('every verb the editor catalog offers builds a message (no dead catalog entry)', () => {
   // Catalog lives once in resources/mavlink-editor.js — pin it there, not in
   // each node's HTML (the HTML only calls refreshVerbOptions). Evaluate the
-  // table rather than grep for it: `set` and `operate` repeat across topics,
-  // so a text match on the verb alone cannot tell servo's from relay's.
-  const context = { RED: { mavlink: {} }, $: () => ({}) };
-  vm.runInNewContext(
-    fs.readFileSync(path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'), 'utf8'),
-    context
-  );
-  const catalog = context.RED.mavlink.PAYLOAD_VERBS;
-  for (const key of Object.keys(PAYLOAD_RECIPES)) {
-    const [topic, value] = key.split('|');
-    assert.ok(
-      (catalog[topic] || []).some((verb) => verb.value === value),
-      `editor catalog missing ${topic}/${value}`
-    );
+  // table rather than grep for it: `set` and `operate` repeat across topics.
+  // A topic/verb with no recipe craters in buildPayloadMessage.
+  const { buildPayloadMessage } = require('../../lib/payload');
+  for (const key of reachableRecipeKeys()) {
+    const [topic, verb, p] = key.split('|');
+    const built = buildPayloadMessage({
+      topic, verb, path: p, carrier: 'long', target: { sysid: 1, compid: 1 }, values: {},
+    });
+    assert.ok(built.message, `${key} builds`);
   }
 });
 
@@ -413,41 +407,59 @@ test('the delivery select is pinned to the tiers the driver dispatches', () => {
   }
 });
 
-test('REQUIRED_VALUES is a drift pin, not a second vocabulary (§0 walled garden)', () => {
-  // The driver sends a blank slot as its recipe fallback, so the editor's
-  // `values` validator is the only thing between a blank ROI coordinate and
-  // 0,0 on the wire. It has to be static — `validate` runs at deploy with no
-  // dialog open — so this asserts it still names exactly the recipe slots
-  // marked `required`. A new required slot fails here instead of shipping
-  // unprotected.
-  const { PAYLOAD_RECIPES } = require('../../lib/payload');
-  const expected = {};
-  for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
-    // A recipe's `params` is positional over the seven MAV_CMD slots, so an
-    // unused slot is a hole — 8 of the 57 across the table. `slot &&` is what
-    // steps over them, not a defensive habit.
-    const slots = [...(recipe.params || []), ...(recipe.fields || [])]
-      .filter((slot) => slot?.required)
-      .map((slot) => slot.field);
-    // Recipe keys are `topic|verb|path`; the editor keys on `topic|verb`.
-    if (slots.length) expected[key.split('|').slice(0, 2).join('|')] = slots;
+/**
+ * Every recipe the dialog can reach, as `topic|verb|path` keys: the shared
+ * verb catalog, with gimbal aim fanned out over its paths.
+ *
+ * @returns {string[]}
+ */
+function reachableRecipeKeys() {
+  const context = { RED: { mavlink: {}, settings: { httpAdminRoot: '/' } }, $: () => ({}) };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(__dirname, '..', '..', 'resources', 'mavlink-editor.js'), 'utf8'),
+    context
+  );
+  const keys = [];
+  for (const [topic, verbs] of Object.entries(context.RED.mavlink.PAYLOAD_VERBS)) {
+    for (const { value: verb } of verbs) {
+      const paths = topic === 'gimbal' && verb === 'aim' ? ['legacy', 'manager', 'manager-cmd', 'attitude'] : [''];
+      for (const p of paths) keys.push(`${topic}|${verb}|${p}`);
+    }
   }
+  return keys;
+}
 
-  const table = payloadHtml.slice(
-    payloadHtml.indexOf('const REQUIRED_VALUES = '),
-    payloadHtml.indexOf('const NAN_WHEN_BLANK = ')
-  );
-  for (const [key, slots] of Object.entries(expected)) {
-    assert.ok(
-      table.includes(`'${key}': [${slots.map((s) => `'${s}'`).join(', ')}]`),
-      `the editor must require ${slots.join(', ')} for ${key}`
-    );
+/**
+ * The editor table `name` as data: its object literal evaluated.
+ *
+ * @param {string} name
+ * @returns {object}
+ */
+function editorTable(name) {
+  const start = payloadHtml.indexOf(`const ${name} = `);
+  const body = payloadHtml.slice(start + `const ${name} = `.length, payloadHtml.indexOf('};', start) + 1);
+  return JSON.parse(JSON.stringify(vm.runInNewContext(`(${body})`)));
+}
+
+test('REQUIRED_VALUES and NAN_WHEN_BLANK are drift pins on the recipes (§0 walled garden)', () => {
+  // The driver sends a blank slot unset, so the editor's `values` validator is
+  // the only thing between a blank ROI coordinate and 0,0 on the wire. It has
+  // to be static — `validate` runs at deploy with no dialog open — so this
+  // asserts REQUIRED_VALUES names exactly the slots fieldMetaFromBundle marks
+  // `required`, and NAN_WHEN_BLANK exactly the slots whose default is NaN.
+  const { fieldMetaFromBundle } = require('../../lib/payload');
+  const bundle = require('../../lib/metadata/bundled').loadBundled('ardupilotmega');
+  const expectedRequired = {};
+  const expectedNan = {};
+  for (const key of reachableRecipeKeys()) {
+    const meta = fieldMetaFromBundle(bundle, ...key.split('|'));
+    const required = Object.keys(meta).filter((k) => meta[k].required);
+    if (required.length) expectedRequired[key.split('|').slice(0, 2).join('|')] = required;
+    const nan = Object.keys(meta).filter((k) => Number.isNaN(meta[k].default));
+    if (nan.length) expectedNan[key] = nan;
   }
-  assert.equal(
-    (table.match(/':\s*\[/g) || []).length,
-    Object.keys(expected).length,
-    'the editor table has no entry the recipes do not'
-  );
+  assert.deepEqual(editorTable('REQUIRED_VALUES'), expectedRequired, 'REQUIRED_VALUES matches the required slots');
+  assert.deepEqual(editorTable('NAN_WHEN_BLANK'), expectedNan, 'NAN_WHEN_BLANK matches the NaN defaults');
 });
 
 test('payload values validate normalized tracking fields only for the selected verb', () => {
@@ -520,7 +532,7 @@ test('payload storage booleans validate saved numeric and string MAV_BOOL values
     'a blank value would go out unset'
   );
   assert.equal(
-    validate('storage-format', { format: 0, resetImageLog: 0, pointX: -1 }),
+    validate('storage-format', { storageId: 1, format: 0, resetImageLog: 0, pointX: -1 }),
     true,
     'storage-format ignores fields owned by another verb'
   );
@@ -529,7 +541,7 @@ test('payload storage booleans validate saved numeric and string MAV_BOOL values
 test('payload values validation follows live dialog selection before save and saved selection when closed', () => {
   const { loadNodeDefaults } = require('./html-assert');
   const closed = loadNodeDefaults('mavlink-payload').values;
-  const point = { pointX: -0.1, pointY: 0.5, radius: 0.1 };
+  const point = { pointX: -0.1, pointY: 0.5, radius: 0.1, cameraId: 0, interval: 0, count: 1 };
   assert.equal(
     closed.validate.call({ id: 'p1', topic: 'camera', verb: 'photo' }, point, {}),
     true,
@@ -576,36 +588,18 @@ test('payload topic, verb, path, and target compid carry rings (walled-garden sw
 test('a blank Payload slot reds unless its recipe sends NaN for it', () => {
   const { values } = require('./html-assert').loadNodeDefaults('mavlink-payload');
   const validate = (topic, verb, saved) => values.validate.call({ topic, verb }, saved, {});
-  assert.match(String(validate('servo', 'set', { instance: 1, pwm: '' })),
+  assert.match(String(validate('servo', 'set', { servo: 1, pwm: '' })),
     /pwm is blank — it would be sent unset/, 'a blank PWM is not a value the operator picked');
-  assert.equal(validate('servo', 'set', { instance: 1, pwm: 1500 }), true);
-  assert.equal(validate('gimbal', 'aim', { pitch: -30, yaw: 0, pitchRate: '', yawRate: '', flags: 0 }), true,
-    'a blank aim rate is the dialect\'s NaN "not rate-controlled"');
-});
-
-test('NAN_WHEN_BLANK is a drift pin on the recipes\' NaN defaults', () => {
-  const { PAYLOAD_RECIPES } = require('../../lib/payload');
-  const expected = {};
-  for (const [key, recipe] of Object.entries(PAYLOAD_RECIPES)) {
-    const editorKey = key.split('|').slice(0, 2).join('|');
-    for (const slot of [...(recipe.params || []), ...(recipe.fields || [])]) {
-      if (slot && !slot.pinned && Number.isNaN(slot.default)) {
-        expected[editorKey] = expected[editorKey] || new Set();
-        expected[editorKey].add(slot.field);
-      }
-    }
+  assert.equal(validate('servo', 'set', { servo: 1, pwm: 1500 }), true);
+  const aim = (path, saved) => values.validate.call({ topic: 'gimbal', verb: 'aim', path }, saved, {});
+  for (const path of ['manager', 'manager-cmd']) {
+    assert.equal(aim(path, { pitch: -30, yaw: 0, pitchRate: '', yawRate: '', flags: 0, gimbalDeviceId: 0 }), true,
+      `${path}: a blank aim rate is the dialect's NaN "not rate-controlled"`);
+    assert.equal(aim(path, { pitch: '', yaw: '', pitchRate: 0.1, yawRate: 0.2, flags: 0, gimbalDeviceId: 0 }), true,
+      `${path}: a blank angle pair is rate control (R17)`);
   }
-  const table = payloadHtml.slice(
-    payloadHtml.indexOf('const NAN_WHEN_BLANK = '),
-    payloadHtml.indexOf('const payloadDefaults')
-  );
-  for (const [key, fields] of Object.entries(expected)) {
-    for (const field of fields) {
-      assert.match(table, new RegExp(`'${key}':[^\\]]*'${field}'`), `${key} ${field} sends NaN for a blank`);
-    }
-  }
-  assert.equal((table.match(/':\s*\[/g) || []).length, Object.keys(expected).length,
-    'the editor table has no entry the recipes do not');
+  assert.match(String(aim('legacy', { pitch: '', roll: 0, yaw: 0 })), /pitch is blank/,
+    'DO_MOUNT_CONTROL has no NaN sentinel for its angles');
 });
 
 test('an empty bitmask saves 0, "no flags"', () => {
