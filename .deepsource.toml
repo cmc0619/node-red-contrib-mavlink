@@ -11,7 +11,9 @@ version = 1
 # not hold: the tag relaxes the no-op-stub family but leaves JS-0067
 # (global-scope function) firing on every top-level probe declaration, measured
 # on this PR after the tag landed. `.codacy.yml` excludes the same tree.
-exclude_patterns = ["seed/**", "examples/**", "sitl/**", "**/eslint.config.mjs"]
+# `scripts/` is maintainer tooling (seed generators, the line counter), run by
+# hand and never shipped.
+exclude_patterns = ["seed/**", "examples/**", "sitl/**", "scripts/**", "**/eslint.config.mjs"]
 
 # Tagged as tests so analyzer rules meant for shipped code (no-op stubs,
 # assert-shaped "redundant" literals) stop grading the harness files.
