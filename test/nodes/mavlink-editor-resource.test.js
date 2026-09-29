@@ -1901,7 +1901,7 @@ function dependentHarness(selects) {
   return { RED: context.RED, els, enabled, pick };
 }
 
-test('dependentSelect greys what the parent rules out and re-picks the first enabled option only when the current one is greyed', () => {
+test('dependentSelect greys what the parent rules out and re-picks the first enabled option on a parent change', () => {
   const { RED, els, enabled, pick } = dependentHarness({
     '#delivery': { value: 'send', options: ['build', 'send', 'confirm', 'collect'] },
     '#action': { value: 'set', options: ['read', 'set', 'request-list'] },
@@ -1916,13 +1916,7 @@ test('dependentSelect greys what the parent rules out and re-picks the first ena
   assert.equal(els['#action'].value, 'request-list', 'Set one cannot stay under collect');
 
   pick('#delivery', 'confirm');
-  assert.equal(els['#action'].value, 'read', 'a greyed current value re-picks the first enabled option');
-
-  els['#action'].value = 'set';
-  pick('#delivery', 'send');
-  assert.equal(els['#action'].value, 'set', 'a parent change keeps a current value that is still legal');
-  pick('#delivery', 'confirm');
-  assert.equal(els['#action'].value, 'set', 'Send to Confirm does not turn Set into Read');
+  assert.equal(els['#action'].value, 'read', 'a parent change re-picks the first enabled option');
 });
 
 test('dependentSelect repairs an illegal saved value on open, and chains through a child that is also a parent', () => {

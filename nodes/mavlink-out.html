@@ -54,11 +54,12 @@
     <dd>The message to send, read in this order — the first that applies wins:
       <ol>
         <li>Build-tier envelope from <b>mavlink-build</b>: <code>{ message: { name, fields }, … }</code>.</li>
-        <li>Topic shape: a non-blank <code>msg.topic</code> is the message name and
+        <li>Topic shape: a <code>msg.topic</code> that is present is the message name and
           <code>msg.payload</code> is its fields — what <b>mavlink-in</b> emits, so In → Out
           forwards a message as received.</li>
         <li><code>{ name, fields }</code> — decoded-shape message with wire-ready field values.
-          A stock Inject sends <code>topic: ""</code>, which is blank and so reaches this shape.</li>
+          A stock Inject sends <code>topic: ""</code>, which selects the topic shape; clear or delete
+          <code>msg.topic</code> to use this one.</li>
       </ol>
       Field names are the dialect's own, as <b>mavlink-in</b> delivers them (<code>target_system</code>,
       not <code>targetSystem</code>); a field under any other spelling is not in the message and the

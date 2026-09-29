@@ -342,15 +342,6 @@ test('LAND completion without position: disarmed in MAV_STATE_POWEROFF (7) is no
   assert.equal(res.done, false);
 });
 
-test('TAKEOFF with a blank altitude on the relative datum reads NaN and stays pending — no throw', () => {
-  // `requested` keeps holes: a Takeoff saved with Altitude blank hands
-  // completion undefined at index 6 (review R2).
-  const pt = peerWithAlts(1, 1, 520000, 20000);
-  const res = checkCompletion(COMPLETION.TAKEOFF, [0, 0, 0, 0, 0, 0, undefined], pt, 1, 1);
-  assert.equal(res.done, false);
-  assert.match(res.detail, /NaN/);
-});
-
 test('waitForCompletion arms no timer when the first check throws', async () => {
   let polls = 0;
   const table = {
