@@ -23,14 +23,6 @@ function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/**
- * @param {object} input
- * @returns {{identityId: string, source: string}}
- */
-function resolveIdentity(input) {
-  return { identityId: input.overrideId || input.defaultIdentityId, source: 'test' };
-}
-
 class FakeTransport extends EventEmitter {
   /** @param {Array<string>} events */
   constructor(events) {
@@ -50,6 +42,11 @@ class FakeTransport extends EventEmitter {
   setDscp(dscp, endpoint) {
     this.events.push(`mark:${dscp}:${endpoint ? endpoint.address : 'default'}`);
     return true;
+  }
+
+  /** @returns {null} */
+  broadcastDestination() {
+    return null;
   }
 
   /**
@@ -210,7 +207,6 @@ test('Connection pump marks each dequeued band immediately before transport send
       setInterval: timers.setInterval,
       clearInterval: timers.clearInterval,
       wire: fakeWire(),
-      resolveIdentity,
       transportFactory: () => transport,
     }
   );

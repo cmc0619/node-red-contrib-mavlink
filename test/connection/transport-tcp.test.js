@@ -7,8 +7,10 @@ const { EventEmitter } = require('node:events');
 const {
   TcpTransport,
   TCP_NO_DESTINATION,
-  TCP_PEER_GONE,
 } = require('../../lib/connection/transport/tcp');
+
+/** The loud gone-peer code the runtime's failover reads (not quiet, not transient). */
+const TCP_PEER_GONE = 'TCP_PEER_GONE';
 
 /** @returns {Promise<void>} */
 function tick() {
@@ -178,6 +180,21 @@ test('server listens, receives from a client, and writes back to the matching en
   assert.equal(client.writes[1].toString(), 'single-client');
 });
 
+test('a listen failure rejects open() and emits no transport error (CONN-CORE-14)', async () => {
+  const net = mockNet();
+  const createServer = net.module.createServer;
+  net.module.createServer = (options, listener) => {
+    const server = createServer(options, listener);
+    server.listen = () => setTimeout(() => server.emit('error', new Error('listen EADDRINUSE')), 0);
+    return server;
+  };
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
+  const forwarded = [];
+  transport.on('error', (err) => forwarded.push(err));
+  await assert.rejects(() => transport.open(), /EADDRINUSE/);
+  assert.deepEqual(forwarded, []);
+});
+
 test('client connects and sends on the connected socket', async () => {
   const net = mockNet();
   const transport = new TcpTransport(
@@ -267,6 +284,23 @@ test('server peer disconnect emits endpoint-gone for stream-decoder cleanup', as
     a.emit('close');
   });
   assert.deepEqual(gone, { address: '10.0.0.1', port: 1 });
+});
+
+test('server peer error (ECONNRESET) emits endpoint-gone once, then close stays quiet (R52)', async () => {
+  const net = mockNet();
+  const transport = new TcpTransport({ bindAddress: '0.0.0.0', bindPort: 5760 }, { net: net.module });
+  await transport.open();
+
+  const a = new MockSocket({ address: '10.0.0.1', port: 1 });
+  net.servers[0].accept(a);
+  const events = [];
+  transport.on('endpoint-gone', (ep) => events.push(ep));
+
+  const reset = new Error('read ECONNRESET');
+  reset.code = 'ECONNRESET';
+  a.emit('error', reset);
+  a.emit('close');
+  assert.deepEqual(events, [{ address: '10.0.0.1', port: 1 }], 'the errored client releases its decoder exactly once');
 });
 
 test('client disconnect emits endpoint-gone for stream-decoder cleanup', async () => {
@@ -655,8 +689,8 @@ test('a TCP server reaches every connected vehicle without a broadcast mechanism
 
   return transport.open().then(() => {
     assert.equal(
-      typeof transport.broadcastDestination,
-      'undefined',
+      transport.broadcastDestination(),
+      null,
       'TCP offers no single reaches-everyone address, so the fan-out stays in charge'
     );
 

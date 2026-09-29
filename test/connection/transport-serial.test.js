@@ -65,26 +65,35 @@ function resetFakeSerialPort() {
 function openTransport(config = {}) {
   resetFakeSerialPort();
   const transport = new SerialTransport(
-    { path: '/dev/ttyUSB0', baudRate: 115200, highWaterMark: 32, ...config },
+    { path: '/dev/ttyUSB0', baudRate: 115200, ...config },
     { SerialPort: FakeSerialPort }
   );
   return { transport, opened: transport.open(), port: () => FakeSerialPort.instances[0] };
 }
 
 test('open constructs the port with config', async () => {
-  const { transport, opened, port } = openTransport();
+  const { opened, port } = openTransport();
   await opened;
 
-  assert.equal(transport.mode, 'serial');
-  assert.deepEqual(port().options, { path: '/dev/ttyUSB0', baudRate: 115200, highWaterMark: 32, autoOpen: false });
+  assert.deepEqual(port().options, { path: '/dev/ttyUSB0', baudRate: 115200, highWaterMark: 1024, autoOpen: false });
 });
 
-test('an omitted highWaterMark stays out of the port options', async () => {
-  const { opened, port } = openTransport({ highWaterMark: undefined });
+test('the port stream stops at the shared 1 KiB highWaterMark, not serialport\'s 64 KiB default', async () => {
+  /**
+   * At 57600 baud a 64 KiB stream held an Emergency frame 10.8 s behind bulk
+   * traffic; at 1024 bytes the band queue decides order (R4).
+   */
+  const { opened, port } = openTransport();
 
   await opened;
 
-  assert.equal('highWaterMark' in port().options, false);
+  assert.equal(port().options.highWaterMark, 1024);
+});
+
+test('serial marks nothing and offers no broadcast address — the bus is one endpoint', () => {
+  const transport = new SerialTransport({ path: '/dev/ttyUSB0', baudRate: 115200 }, { SerialPort: FakeSerialPort });
+  assert.equal(transport.setDscp(46, null), false);
+  assert.equal(transport.broadcastDestination(), null);
 });
 
 test('data events become peer-table-compatible message events', async () => {

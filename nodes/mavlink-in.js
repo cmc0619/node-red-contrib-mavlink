@@ -119,11 +119,12 @@ module.exports = function registerMavlinkIn(RED) {
     const fieldName = isBlank(config.fieldName) ? null : config.fieldName;
     const fieldValue = isBlank(config.fieldValue) ? null : String(config.fieldValue).trim();
 
-    // Rate limit: one Hz for everything, or per-message `NAME=Hz` pairs with
-    // an optional bare Hz default for unlisted names. The editor validator is
-    // the loud-failure point for this shape (§2 config trust, AGENTS
-    // "Runtime code MUST NOT duplicate validation already performed by the
-    // editor").
+    /**
+     * Rate limit: one Hz for everything, or per-message `NAME=Hz` pairs with
+     * an optional bare Hz default for unlisted names. The editor validator is
+     * the loud-failure point for this shape; the runtime uses the
+     * editor-validated property directly (AGENTS §6).
+     */
     const rate = parseRateLimit(config.rateLimit);
 
     /** @type {Map<string, string>} key → last JSON of fields */
@@ -203,19 +204,13 @@ module.exports = function registerMavlinkIn(RED) {
         trusted: decoded.trusted,
       });
 
-      // Rate-limit status writes to STATUS_MIN_INTERVAL_MS, unconditionally.
-      //
-      // No "refresh immediately when the name changes" exemption: with a
-      // multi-message filter the arriving name alternates on nearly
-      // every frame, so that exemption fired every time and the throttle never
-      // engaged — two 50 Hz streams wrote the badge 100×/s. Measured at 200 of
-      // 200 deliveries before that came out.
-      //
-      // A suppressed write is simply dropped (owner ruling, 2026-08-18): the
-      // badge names recent traffic, nothing more. The delivered counter and
-      // the latched trailing write went with that ruling — the counter grew
-      // until it was the only thing the 24-character cap kept, and the flush
-      // existed to land the badge on a total nobody needed.
+      /**
+       * Rate-limit status writes to STATUS_MIN_INTERVAL_MS, unconditionally:
+       * with a multi-message filter the arriving name alternates on nearly
+       * every frame, so a refresh-on-name-change exemption would write the
+       * badge on every delivery. A suppressed write is dropped (owner ruling,
+       * 2026-08-18): the badge names recent traffic, nothing more.
+       */
       if (now - lastStatusMs >= STATUS_MIN_INTERVAL_MS) {
         node.status({ fill: 'green', shape: 'dot', text: capBadge(decoded.name) });
         lastStatusMs = now;

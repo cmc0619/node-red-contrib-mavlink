@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { OutboundQueue, QueueOverflowError } = require('../../lib/connection/queue');
+const { OutboundQueue } = require('../../lib/connection/queue');
 const { BAND } = require('../../lib/connection/bands');
 const { fakeClock } = require('./helpers');
 
@@ -89,7 +89,7 @@ test('Bulk overflow rejects the newest with an error', () => {
   q.enqueue({ band: BAND.BULK, message: msg('A'), identityId: 'g' });
   assert.throws(
     () => q.enqueue({ band: BAND.BULK, message: msg('B'), identityId: 'g' }),
-    QueueOverflowError
+    { name: 'QueueOverflowError' }
   );
 });
 
@@ -98,7 +98,7 @@ test('Control overflow raises rather than silently discarding', () => {
   q.enqueue({ band: BAND.CONTROL, message: msg('A'), identityId: 'g' });
   assert.throws(
     () => q.enqueue({ band: BAND.CONTROL, message: msg('B'), identityId: 'g' }),
-    QueueOverflowError
+    { name: 'QueueOverflowError' }
   );
 });
 
@@ -107,7 +107,7 @@ test('Emergency overflow is a fault, not a drop', () => {
   q.enqueue({ band: BAND.EMERGENCY, message: msg('A'), identityId: 'g' });
   assert.throws(
     () => q.enqueue({ band: BAND.EMERGENCY, message: msg('B'), identityId: 'g' }),
-    QueueOverflowError
+    { name: 'QueueOverflowError' }
   );
 });
 

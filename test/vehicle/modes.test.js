@@ -47,13 +47,25 @@ test('a blank-named standard mode resolves through MAV_STANDARD_MODE', () => {
   // the dialect enum names them (MAV_STANDARD_MODE_LAND = 7).
   const ctx = {
     component: componentWith([
-      { name: '', standardMode: 7, customMode: px4CustomMode(4, 2) },
+      { name: '', standardMode: 7, customMode: px4CustomMode(4, 6) },
     ]),
     firmware: 'px4',
     bundle: loadBundled('common'),
   };
-  assert.equal(modeNameFor(px4CustomMode(4, 2), ctx), 'LAND');
-  assert.deepEqual(setModeParams('land', ctx), { 2: 4, 3: 2 });
+  assert.equal(modeNameFor(px4CustomMode(4, 6), ctx), 'LAND');
+  assert.deepEqual(setModeParams('land', ctx), { 2: 4, 3: 6 });
+});
+
+test('PX4 AUTO sub-modes follow px4_custom_mode.h: TAKEOFF 2, LOITER 3, MISSION 4, RTL 5, LAND 6', () => {
+  const ctx = { firmware: 'px4' };
+  assert.deepEqual(setModeParams('Takeoff', ctx), { 2: 4, 3: 2 });
+  assert.deepEqual(setModeParams('Hold', ctx), { 2: 4, 3: 3 });
+  assert.deepEqual(setModeParams('Mission', ctx), { 2: 4, 3: 4 });
+  assert.deepEqual(setModeParams('Return', ctx), { 2: 4, 3: 5 });
+  assert.deepEqual(setModeParams('Land', ctx), { 2: 4, 3: 6 });
+  assert.equal(modeNameFor(0x06040000, ctx), 'Land');
+  assert.equal(modeNameFor(0x02040000, ctx), 'Takeoff');
+  assert.equal(Number.isNaN(setModeParams('Safe Recovery', ctx)[2]), true);
 });
 
 test('ArduPilot dispatches by family: copter and boat read different enums', () => {

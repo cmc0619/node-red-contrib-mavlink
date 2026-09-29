@@ -105,12 +105,14 @@ test('configured 0 is broadcast and survives the chain', () => {
   assert.deepEqual(t, { sysid: 0, compid: 0 });
 });
 
-test('unbound companion throws loud (broken deploy, not a mystery)', () => {
+test('an unbound companion resolves a NaN sysid, which the wire refuses at pack', () => {
   const unbound = {
     derivesSysidFromVehicle: true,
-    getIdentity: () => { throw new Error('companion identity is not bound to a vehicle'); },
+    getIdentity: () => ({ sysid: null, compid: 191 }),
   };
-  assert.throws(() => resolveActionTarget({ identityNode: unbound }), /not bound/);
+  const target = resolveActionTarget({ identityNode: unbound });
+  assert.equal(Number.isNaN(target.sysid), true);
+  assert.equal(target.compid, 1);
 });
 
 test('firmware ladder is payload → profile via firstDefined (no invented ardupilot)', () => {

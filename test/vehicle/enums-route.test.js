@@ -74,6 +74,41 @@ test('/mavlink/enums is registered once with mavlink.read auth', () => {
   assert.equal(permissions.filter((p) => p === 'mavlink.write').length, 2);
 });
 
+test('getDialect rethrows the compile error itself, not a generic "no loaded dialect" (R41)', () => {
+  /**
+   * A missing snapshot must reach the Connection's log by its own message,
+   * not only as a 24-character badge on the profile.
+   */
+  const ctor = require('../../nodes/mavlink-vehicle');
+  const types = {};
+  const statuses = [];
+  const fakeRED = {
+    settings: {},
+    nodes: {
+      createNode(node, config) { node.id = config.id; node.status = (s) => statuses.push(s); },
+      registerType(name, fn) { types[name] = fn; },
+      getNode() { return null; },
+    },
+    httpAdmin: { get() {}, post() {} },
+    auth: { needsPermission() { return () => {}; } },
+  };
+  ctor(fakeRED);
+  const node = {};
+  types['mavlink-vehicle'].call(node, {
+    id: 'veh',
+    name: 'Field Copter',
+    dialect: 'ardupilotmega',
+    dialectRevision: '2026-07-01-abc1234',
+    additionalDialects: '',
+    vehicleFamily: 'copter',
+    firmware: 'ardupilot',
+    defaultTargetSystem: '1',
+    defaultTargetComponent: '1',
+  });
+  assert.throws(() => node.getDialect(), /2026-07-01-abc1234/);
+  assert.equal(statuses.at(-1).fill, 'red');
+});
+
 test('the compiled-dialect cache exposes a rebuild route', () => {
   const { handlers } = captureRoutes({});
 

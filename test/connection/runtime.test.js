@@ -21,18 +21,6 @@ function delay(ms) {
 }
 
 /**
- * A stub identity resolver so the runtime tests do not couple to lib/identity.
- *
- * @param {object} input
- * @returns {{identityId: string, source: string}}
- */
-function resolveIdentity(input) {
-  const override = input.overrideId;
-  if (override) return { identityId: override, source: 'override' };
-  return { identityId: input.defaultIdentityId, source: 'default' };
-}
-
-/**
  * @param {object} [configOverrides]
  * @param {object} [depOverrides]
  * @returns {{connection: Connection, dg: object, timers: object}}
@@ -62,7 +50,6 @@ function build(configOverrides = {}, depOverrides = {}) {
     clearInterval: timers.clearInterval,
     dgram: dg.module,
     wire: fakeWire(),
-    resolveIdentity,
     ...depOverrides,
   });
   return { connection, dg, timers };
@@ -209,6 +196,8 @@ test('a queued outbound envelope keeps its message and route after caller mutati
     transport.mode = 'udp';
     transport.open = async () => {};
     transport.close = (done) => done?.();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, endpoint, done) => {
       writes.push({ buffer, endpoint });
       releases.push(done);
@@ -243,6 +232,7 @@ test('a queued outbound envelope keeps its message and route after caller mutati
   message.fields.target_system = 2;
   message.fields.param1 = 2;
   releases[0]();
+  await Promise.resolve();
 
   assert.equal(writes.length, 2, 'releasing the first write drains the queued send');
   const sent = JSON.parse(writes[1].buffer.toString());
@@ -254,6 +244,48 @@ test('a queued outbound envelope keeps its message and route after caller mutati
     'the queued route keeps its accepted endpoint'
   );
   releases[1]();
+  connection.close();
+});
+
+test('a backlog drained by inline-completing writes does not grow the stack per frame', async () => {
+  /**
+   * A write that completes inline (a stream under its highWaterMark) must not
+   * re-enter _pump from its own completion callback: one level per queued
+   * frame overflows the stack in 'drain' for a full band queue (1472 items).
+   */
+  const { EventEmitter } = require('node:events');
+  const depths = [];
+  let held = null;
+  const transportFactory = () => {
+    const transport = new EventEmitter();
+    transport.open = async () => {};
+    transport.close = (done) => done();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
+    transport.send = (buffer, endpoint, done) => {
+      depths.push(new Error().stack.split('\n').length);
+      if (!held) {
+        held = done;
+        return;
+      }
+      done();
+    };
+    return transport;
+  };
+  const { connection } = build({}, { transportFactory });
+  await connection.start();
+  const limit = Error.stackTraceLimit;
+  Error.stackTraceLimit = Infinity;
+  try {
+    for (let i = 0; i < 200; i += 1) connection.send({ name: `BULK_${i}`, fields: {} }, { band: BAND.BULK });
+    held();
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    Error.stackTraceLimit = limit;
+  }
+  assert.equal(depths.length, 200);
+  const drained = depths.slice(1);
+  assert.equal(Math.max(...drained) - Math.min(...drained), 0, 'every drained write runs at the same stack depth');
   connection.close();
 });
 
@@ -298,8 +330,8 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
     }
   );
   await udp.start();
-  const sweep = udpIntervals.find((t) => t.ms === 5000);
-  assert.ok(sweep, 'stale/sweep interval should be registered');
+  const sweep = udpIntervals.at(-1);
+  assert.equal(sweep.ms, 1000, 'the sweep runs at most 1 s apart, not on the 5 s stale threshold');
   sweep.fn();
   assert.equal(sweeps.length, 1, 'UDP sweep must call evictIdleDecoders');
   assert.equal(sweeps[0][1], 15000, 'idle decoder TTL matches peer-table expire default');
@@ -323,6 +355,8 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
         const transport = new EventEmitter();
         transport.open = async () => {};
         transport.close = (cb) => cb?.();
+        transport.setDscp = () => false;
+        transport.broadcastDestination = () => null;
         transport.send = (_b, _e, cb) => cb?.();
         return transport;
       },
@@ -334,11 +368,28 @@ test('peer-table sweep idle-evicts decoders only on UDP (not TCP)', async () => 
     }
   );
   await tcp.start();
-  const tcpSweep = tcpIntervals.find((t) => t.ms === 5000);
-  assert.ok(tcpSweep, 'TCP still runs peer-table sweep');
+  const tcpSweep = tcpIntervals.at(-1);
+  assert.equal(tcpSweep.ms, 1000, 'TCP still runs peer-table sweep');
   tcpSweep.fn();
   assert.equal(sweeps.length, 0, 'TCP sweep must not age-evict stream decoders');
   tcp.close();
+});
+
+test('a stale threshold under 1 s sweeps at its own period (R46)', async () => {
+  const intervals = [];
+  const { connection } = build(
+    { heartbeat: { staleMs: 400, expireMs: 1200 } },
+    {
+      setInterval: (fn, ms) => {
+        intervals.push(ms);
+        return { unref() {} };
+      },
+      clearInterval() {},
+    }
+  );
+  await connection.start();
+  assert.equal(intervals.at(-1), 400);
+  connection.close();
 });
 
 test('heartbeat scheduler interval is driven by the bound identity snapshot', async () => {
@@ -473,10 +524,13 @@ test('a configured key rejects every unsigned inbound frame', async () => {
   connection.close();
 });
 
-test('an UNKNOWN_<id> frame dispatches but records no endpoint (crcVerified gating)', async () => {
-  // An unknown msgid is CRC-unverifiable by construction, so the frame is
-  // forgeable by anyone; letting it record its sender's endpoint would point
-  // directed sends and broadcast fan-out at a spoofed address.
+test('an UNKNOWN_<id> frame dispatches but teaches the peer table nothing (crcVerified gating)', async () => {
+  /**
+   * An unknown msgid is CRC-unverifiable by construction: line noise decodes
+   * as one, and a forged one could point directed sends and broadcast
+   * fan-out at a spoofed address. It must not create a phantom system either
+   * — Fan-out "all" selects from the table (R21).
+   */
   const { connection, dg } = build();
   await connection.start();
 
@@ -489,6 +543,8 @@ test('an UNKNOWN_<id> frame dispatches but records no endpoint (crcVerified gati
 
   assert.equal(received.length, 1, 'the frame still reaches subscribers');
   assert.equal(received[0].name, 'UNKNOWN_22');
+  assert.equal(connection.peerTable.getComponent(7, 1), undefined, 'no phantom component was created');
+  assert.deepEqual(connection.peerTable.snapshot(), [], 'no phantom system either');
   assert.equal(connection.peerTable.endpointFor(7, 1), null, 'no endpoint was learned');
   assert.deepEqual(connection.peerTable.endpointsForBroadcast(1), [], 'no broadcast destination either');
 
@@ -530,6 +586,28 @@ test('keyless signed traffic stays unverified but settles ACKs and learns its en
     { address: '10.0.0.5', port: 14550 },
     'keyless signed traffic learns endpoints like ordinary unsigned traffic'
   );
+  connection.close();
+});
+
+test('a vehicle that restarts on a new UDP source port is commanded there, not at the dead port (N1)', async () => {
+  /**
+   * Live finding (ArduCopter 4.7.0 SITL, `docker restart nrc-ap-5`): before
+   * the restart the vehicle sent from :53416; after it, from :37532. The table
+   * kept :53416 as primary, UDP gave no send failure to demote it, and every
+   * directed command went to the dead port until a redeploy.
+   */
+  const { connection, dg } = build();
+  await connection.start();
+  const hb = { type: 2, autopilot: 3, base_mode: 0, custom_mode: 0, system_status: 4 };
+
+  dg.sockets[0].receive(frameBuffer({ name: 'HEARTBEAT', sysid: 5, compid: 1, fields: hb }), { address: '172.18.0.9', port: 53416 });
+  dg.sockets[0].receive(frameBuffer({ name: 'HEARTBEAT', sysid: 5, compid: 1, fields: hb }), { address: '172.18.0.9', port: 37532 });
+
+  connection.send({ name: 'COMMAND_LONG', fields: { target_system: 5, target_component: 1 } }, { band: BAND.CONTROL, target: { sysid: 5, compid: 1 } });
+  await delay(30);
+  const directed = dg.sockets[0].sent.filter((s) => JSON.parse(s.buffer.toString()).name === 'COMMAND_LONG');
+  assert.equal(directed.length, 1);
+  assert.equal(directed[0].port, 37532, 'the directed command follows the restarted vehicle');
   connection.close();
 });
 
@@ -694,6 +772,18 @@ test('an open() rejected by a racing close() resolves start() quietly, not as an
   connection.close();
   await starting; // must not reject
   assert.equal(connection.getState(), STATE.CLOSED, 'the race must settle in CLOSED, not CONNECTING');
+});
+
+test('a blank identity override (undefined, null, empty) sends as the default identity', async () => {
+  const { resolveIdentityId } = require('../../lib/connection/runtime');
+  for (const blank of [undefined, null, '']) assert.equal(resolveIdentityId('gcs', blank), 'gcs');
+  assert.equal(resolveIdentityId('gcs', 'other'), 'other', 'a non-blank override rides as given');
+  const { connection } = build();
+  await connection.start();
+  for (const blank of [undefined, null, '']) {
+    assert.deepEqual(connection.resolveSourceIds(blank), { sysid: 255, compid: 190 });
+  }
+  connection.close();
 });
 
 test('an identity override the connection does not carry craters in send(), never falling back', async () => {
@@ -1215,6 +1305,8 @@ function hangingWriteBuild() {
     transport.mode = 'udp';
     transport.open = async () => {};
     transport.close = (cb) => cb?.();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       writeCallbacks.push(cb);
@@ -1244,8 +1336,6 @@ function hangingWriteBuild() {
 test('a stuck transport write faults the link within the documented bound (#244)', async () => {
   const { connection, timeouts, errors } = hangingWriteBuild();
   await connection.start();
-  const transportErrors = [];
-  connection.on('transport-error', (err) => transportErrors.push(err));
 
   connection.send({ name: 'COMMAND_LONG', fields: {} }, { band: BAND.CONTROL });
 
@@ -1259,8 +1349,6 @@ test('a stuck transport write faults the link within the documented bound (#244)
     STATE.RECONNECTING,
     'the wedge faults the link into the recovery loop'
   );
-  assert.equal(transportErrors.length, 1);
-  assert.equal(transportErrors[0].code, 'WRITE_TIMEOUT');
   assert.ok(
     errors.some((m) => /timed out after 5000ms/.test(m)),
     'the log names the timeout and rides the existing transport-error path'
@@ -1359,7 +1447,7 @@ const { timestampFromMs } = require('../../lib/connection/signing');
  *   which always succeeds) reject before one succeeds
  * @param {number} [options.initialOpenFailures]  initial opens that reject
  * @param {boolean} [options.failFirstOpen]  the deploy-time open itself fails,
- *   emitting a transport error first the way a real bind failure does
+ *   as a rejection only, the way a real bind failure reaches the runtime
  * @param {boolean} [options.holdInitialOpen]  the deploy-time open hangs until
  *   the test releases it, for the error-while-opening race
  * @param {boolean} [options.holdRedialOpen]  redial opens hang until the test
@@ -1394,11 +1482,9 @@ function reconnectBuild({
       opens += 1;
       if (opens <= initialOpenFailures) return Promise.reject(new Error('not ready'));
       if (opens === 1 && failFirstOpen) {
-        // A real bind failure (EADDRINUSE, missing device) emits the transport
-        // error event and rejects the open — mimic both.
-        const err = new Error('EADDRINUSE');
-        transport.emit('error', err);
-        return Promise.reject(err);
+        // A real bind failure (EADDRINUSE) rejects the open; the transport
+        // forwards no error event before it is listening.
+        return Promise.reject(new Error('EADDRINUSE'));
       }
       if (opens === 1 && holdInitialOpen) {
         return new Promise((resolve) => heldOpens.push(resolve));
@@ -1413,6 +1499,8 @@ function reconnectBuild({
       }
       return Promise.resolve();
     };
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, endpoint, callback) => {
       transport.sent.push(buffer);
       callback();
@@ -1444,7 +1532,6 @@ function reconnectBuild({
     {
       transportFactory,
       wire,
-      resolveIdentity,
       setInterval: timers.setInterval,
       clearInterval: timers.clearInterval,
       setTimeout: (fn, ms) => {
@@ -1636,9 +1723,12 @@ test('an error while a redial open() settles does not let the stale continuation
 test('a transport that never opened does not enter the redial loop — deploy failures stay loud', async () => {
   const { connection, redials } = reconnectBuild({ failFirstOpen: true });
 
+  const errors = [];
+  connection._logger.error = (m) => errors.push(m);
   await assert.rejects(() => connection.start(), /EADDRINUSE/);
   assert.equal(connection.getState(), STATE.ERROR, 'pre-establishment errors stay terminal (§2)');
   assert.equal(redials().length, 0, 'no redial is ever armed for a config that never worked');
+  assert.deepEqual(errors, [], 'the rejection is the one report — the runtime logs nothing of its own');
 });
 
 test('a TCP listener that never opened does not enter the redial loop', async () => {
@@ -1842,6 +1932,8 @@ function healthBuild() {
     transport.mode = 'udp';
     transport.open = async () => {};
     transport.close = (cb) => cb?.();
+    transport.setDscp = () => false;
+    transport.broadcastDestination = () => null;
     transport.send = (buffer, _endpoint, cb) => {
       sent.push(buffer);
       cb();

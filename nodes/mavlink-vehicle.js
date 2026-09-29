@@ -15,11 +15,11 @@
  */
 
 const { capBadge } = require('../lib/delivery');
-const { setCompiledCacheDir, clearCompiledCache } = require('../lib/metadata/bundled');
+const { setCompiledCacheDir, clearCompiledCache, knownDialects } = require('../lib/metadata/bundled');
 const { XmlCatalog, dialectLibrary } = require('../lib/metadata/xml-catalog');
 const { catalogEnumsFromBundle } = require('../lib/metadata/enums-list');
 const { registerDialectCatalogRoute } = require('../lib/metadata/admin-catalog');
-const { resolveDialect, knownDialects } = require('../lib/vehicle');
+const { resolveDialect } = require('../lib/vehicle');
 
 /** Admin endpoint path for dialect list. */
 const DIALECTS_ROUTE = '/mavlink/dialects';
@@ -157,51 +157,42 @@ module.exports = function registerMavlinkVehicle(RED) {
     node.defaultTargetSystem = Number(config.defaultTargetSystem);
     node.defaultTargetComponent = Number(config.defaultTargetComponent);
 
-    let problem = null;
+    // Family and firmware are editor-guaranteed: both are `required` selects
+    // with member defaults (mavlink-vehicle.html), so the red ring is the
+    // protector and the runtime trusts the saved value (§6). No re-validation
+    // here — a hand-edited token craters where it is actually used, the same
+    // as any runtime-boundary value.
+    node.vehicleFamily = config.vehicleFamily;
+    node.firmware = config.firmware;
 
     /** @type {import('../lib/metadata/compile').DialectBundle|null} */
-    node._bundle = null;
-
+    let bundle = null;
+    /** The compile's own refusal, kept whole so every consumer reports the real cause. */
+    let compileError = null;
     try {
-      // Family and firmware are editor-guaranteed: both are `required` selects
-      // with member defaults (mavlink-vehicle.html), so the red ring is the
-      // protector and the runtime trusts the saved value (§6). No re-validation
-      // here — a hand-edited token craters where it is actually used, the same
-      // as any runtime-boundary value.
-      node.vehicleFamily = config.vehicleFamily;
-      node.firmware = config.firmware;
-      node._bundle = resolveDialect({
+      bundle = resolveDialect({
         name: config.name,
         dialect: node.dialect,
         dialectRevision: node.dialectRevision,
         additionalDialects: node.additionalDialects,
         catalogBaseDir: xmlCatalogBaseDir(RED),
       });
-    } catch (err) {
-      problem = err.message;
-    }
-
-    if (problem !== null) {
-      node.status({ fill: 'red', shape: 'ring', text: capBadge(problem) });
-    } else {
       node.status({ fill: 'grey', shape: 'ring', text: 'idle' });
+    } catch (err) {
+      compileError = err;
+      node.status({ fill: 'red', shape: 'ring', text: capBadge(err.message) });
     }
 
     /**
      * The compiled DialectBundle for this profile.
      *
      * @returns {import('../lib/metadata/compile').DialectBundle}
-     * @throws {Error} when the configured dialect and revision did not compile
+     * @throws {Error} the compile's own error when the configured dialect and
+     *   revision did not compile at deploy
      */
     node.getDialect = () => {
-      if (!node._bundle) {
-        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: the configured dialect failed to compile at deploy
-        throw new Error(
-          `Vehicle Profile '${config.name || node.id}' has no loaded dialect` +
-            ' — check the Dialect and Version picks in the profile.'
-        );
-      }
-      return node._bundle;
+      if (compileError) throw compileError;
+      return bundle;
     };
 
     /**

@@ -67,9 +67,11 @@ module.exports = function registerMavlinkOut(RED) {
         // connectionNode.send, whose serializer throws synchronously on a
         // non-message before anything is enqueued (§0).
         const message = resolveMessage(msg);
-        // msg.band overrides the config default by presence and rides as
-        // given — msg is trusted (§0); a band no queue case answers to
-        // selects no behavior at the switch (§5).
+        /**
+         * msg.band overrides the config default by presence and rides as
+         * given — msg is trusted (§0); a band no queue case answers to
+         * selects no behavior at the switch (§5).
+         */
         const band = msg.band === undefined ? defaultBand : msg.band;
         connectionNode.send(message, {
           band,

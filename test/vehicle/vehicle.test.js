@@ -14,11 +14,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const {
-  resolveDialect,
-  knownDialects,
-} = require('../../lib/vehicle');
-const { seedSources } = require('../../lib/metadata/bundled');
+const { resolveDialect } = require('../../lib/vehicle');
+const { seedSources, knownDialects } = require('../../lib/metadata/bundled');
 
 /* ---------- knownDialects ---------- */
 
@@ -105,7 +102,7 @@ test('component dialects are order-independent for a clean set', () => {
 });
 
 test('a blank additionalDialects field resolves exactly like no field at all', () => {
-  const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
+  const plain = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed' });
   const blank = resolveDialect({ dialect: 'minimal', dialectRevision: 'seed', additionalDialects: '' });
   assert.equal(blank, plain, 'same cached bundle, not a recompile');
 });
