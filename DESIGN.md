@@ -1557,6 +1557,26 @@ classifier for Command, Move and Payload: `accepted` (output 0 carries the recor
 `succeeded` stays where a transfer machine settled a multi-message exchange (Param
 confirm/read/collect, Mission transfers, System backup/restore/FTP/log) and on the
 Fan-out and Formation aggregates.
+The words, one meaning each. Continue is output 0. On Build and Send it carries the
+message itself — built, or put on the wire (#521 aligned Move and Payload Send with
+Command and Param). An ack tier's `accepted` carries the status record.
+
+| Word | Means | Continue (output 0) | Who says it |
+|---|---|---|---|
+| `built` | constructed, nothing on the wire | the message (Mission: the plan; mavlink-build: `{message, messageName, tier}`; Fan-out: one msg per member) | Build tier: Command, Move, Payload, Param, Mission, mavlink-build; Fan-out/Formation members |
+| `sent` | on the wire, nobody asked to answer — "unconfirmed" is implied, never spelled | the sent message (Out, mavlink-build: the input msg) | Send tier: Command, Move, Payload (and its no-ACK messages on confirm), Param; Out; mavlink-build; Fan-out members |
+| `accepted` | the vehicle said yes: COMMAND_ACK 0, or a PARAM echo for a Fan-out member; Command Complete keeps it with `confirmedBy: 'state'` | the status record | ack tiers: Command, Move, Payload; Fan-out members |
+| `unconfirmed` | asked, and nothing answered within the window | none, unless Command's "Continue chain if unconfirmed" | ack tiers; Param confirm (echo never arrived); Fan-out members |
+| MAV_RESULT name (`denied`, `temporarily_rejected`, `unsupported`, `failed`, `cancelled`, `command_int_only`, …) | the vehicle said no, in its own words | none | ack tiers; Fan-out members |
+| `timeout` | the ack was fine; the target state was never seen | none | Command Complete only |
+| `succeeded` | a multi-message exchange finished | the transferred data, or the aggregate | Param confirm/read/collect, Mission, System, State snapshot, Fan-out/Formation aggregate (Build preview included) |
+| `partial` | some sections finished, some did not | the data that finished | System |
+| `streaming` / `stopped` / `expired` | the setpoint stream started / was ended by the flow / hit its TTL | `{result, …}` (`expired`: Status only) | Move |
+| `healthy` / `faulted` / `lease-expired` | the companion's heartbeat lease | the input msg (`lease-expired`: Status only) | Health |
+| `skipped` / `refused` / `empty` | not commanded after stop-on-error / a broadcast a stream lock refuses / a selection with no vehicles | none | Fan-out members / Fan-out / Fan-out aggregate |
+| `failed` | a send threw, or a transfer failed | none | every node |
+| `cancelled` (detail `superseded`) | a newer input replaced the wait | none | ack tiers, Param |
+
 *Check:* `node --test test/command/settle-ack.test.js test/delivery/delivery.test.js test/fanout/` ("completeBuild: yellow preview badge, the message on output 0, a built record on output 1").
 
 **14.164 Mission's no-progress deadline is upload's alone, and as long as the configured step budget.** ✔ (2026-09-27, FakeTimers; #517 91b21eb3)
