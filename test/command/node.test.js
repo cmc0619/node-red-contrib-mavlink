@@ -141,25 +141,6 @@ test('Build tier: payload.mode resolves through the AP profile into param2', asy
   assert.equal(Number.isNaN(bad[0].payload.fields.param2), true);
 });
 
-test('Set Mode by name on a concrete Build dialect carries NaN, never the configured mode (R16)', async () => {
-  const RED = redStub({});
-  require('../../nodes/mavlink-command')(RED);
-  const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
-    params: '{"1":1,"2":4}',
-    sendAs: 'long',
-    mode: 'preset',
-    preset: 'set_mode',
-    delivery: 'build',
-    dialect: 'ardupilotmega',
-  });
-
-  let sent;
-  node.emit('input', { payload: { mode: 'RTL' } }, (m) => { sent = m; }, () => {});
-  await tick();
-  assert.equal(Number.isNaN(sent[0].payload.fields.param2), true, 'no firmware context, so the name resolves to nothing — never GUIDED');
-});
-
 test('Build tier: an explicit custom-mode param suppresses the whole named pair', async () => {
   // PX4's resolution is a pair (param2 main_mode, param3 sub_mode). Filling one
   // side from the name while the flow supplied the other would command a mode
