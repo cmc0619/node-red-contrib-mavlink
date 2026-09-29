@@ -5,76 +5,46 @@
   // Verb pick the recipe; everything below them is painted from the answer.
   (function () {
     /**
-     * The value keys each recipe's dialog renders, keyed `topic|verb|path`
-     * like lib/payload's recipes (path only for gimbal aim). The `values` ring
-     * walks this list, not the saved object's own keys: a dialog that never
-     * painted (field-tips fetch failed, imported flow) saves `{}`, and every
-     * slot would go out unset — NaN float params, and a Build or Send that
-     * reports success. DO_SET_ROI_LOCATION's lat/lon/alt are why this matters
-     * most: a blank one aims at 0,0 with a clean ACCEPTED.
+     * Recipe slots the wire has no sentinel for, keyed `topic|verb`.
      *
-     * Static because `validate` runs at deploy for every node, with no dialog
-     * open and no catalog fetched. A drift test pins it against the recipes
-     * through fieldMetaFromBundle (test/nodes/payload-verb-html.test.js).
+     * DO_SET_ROI_LOCATION's lat/lon/alt name the point the camera aims at.
+     * A blank one is sent as 0 — the Gulf of Guinea, with a clean ACCEPTED —
+     * and the driver sends what it is handed (§0), so this is the layer that
+     * has to say so.
+     *
+     * Static for the same reason mavlink-command.html keeps PRESET_LOCATION
+     * static: `validate` runs at deploy for every node, with no dialog open
+     * and no catalog fetched. A drift test pins it against the recipes
+     * (test/nodes/payload-verb-html.test.js).
      */
-    const SLOT_KEYS = {
-      'camera|photo|': ['cameraId', 'interval', 'count'],
-      'camera|stop-photo|': ['cameraId'],
-      'camera|start-video|': ['streamId', 'statusFrequency'],
-      'camera|stop-video|': ['streamId'],
-      'camera|start-stream|': ['streamId', 'cameraId'],
-      'camera|stop-stream|': ['streamId', 'cameraId'],
-      'camera|track-point|': ['pointX', 'pointY', 'radius', 'cameraId'],
-      'camera|track-rectangle|': ['topLeftX', 'topLeftY', 'bottomRightX', 'bottomRightY', 'cameraId'],
-      'camera|stop-tracking|': ['cameraId'],
-      'camera|storage-format|': ['storageId', 'format', 'resetImageLog'],
-      'camera|set-mode|': ['cameraId', 'mode'],
-      'camera|zoom|': ['zoomType', 'zoom', 'cameraId'],
-      'camera|focus|': ['focusType', 'focus', 'cameraId'],
-      'camera|trigger-distance|': ['distance', 'shutter', 'trigger'],
-      'gimbal|aim|legacy': ['pitch', 'roll', 'yaw'],
-      'gimbal|aim|manager': ['flags', 'gimbalDeviceId', 'pitch', 'yaw', 'pitchRate', 'yawRate'],
-      'gimbal|aim|manager-cmd': ['pitch', 'yaw', 'pitchRate', 'yawRate', 'flags', 'gimbalDeviceId'],
-      'gimbal|aim|attitude': ['flags', 'gimbalDeviceId', 'roll', 'pitch', 'yaw'],
-      'gimbal|set-mode|': ['mode', 'stabilizeRoll', 'stabilizePitch', 'stabilizeYaw'],
-      'gimbal|roi-set|': ['lat', 'lon', 'alt'],
-      'gimbal|roi-clear|': [],
-      'gimbal|configure|': ['primarySysid', 'primaryCompid', 'secondarySysid', 'secondaryCompid', 'gimbalDeviceId'],
-      'gimbal|take|': ['gimbalDeviceId'],
-      'gimbal|release|': ['gimbalDeviceId'],
-      'servo|set|': ['servo', 'pwm'],
-      'servo|repeat|': ['servo', 'pwm', 'count', 'period'],
-      'relay|set|': ['instance', 'setting'],
-      'relay|repeat|': ['instance', 'count', 'period'],
-      'gripper|operate|': ['instance', 'action'],
-      'winch|operate|': ['instance', 'action', 'length', 'rate'],
-      'parachute|operate|': ['action'],
-    };
+    const REQUIRED_VALUES = { 'gimbal|roi-set': ['lat', 'lon', 'alt'] };
     /**
      * The slots whose recipe sends NaN for a blank — the dialect's "unused"
      * value, keyed `topic|verb|path` like the recipes. The two manager aim
-     * paths choose angle or rate control by leaving the other pair blank.
-     * Every other blank slot would go out unset.
+     * paths choose angle or rate control by leaving the other pair blank; the
+     * attitude path's rates are unused when blank. Every other blank slot
+     * would go out unset.
      */
     const NAN_WHEN_BLANK = {
       'gimbal|aim|manager': ['pitch', 'yaw', 'pitchRate', 'yawRate'],
       'gimbal|aim|manager-cmd': ['pitch', 'yaw', 'pitchRate', 'yawRate'],
+      'gimbal|aim|attitude': ['rollRate', 'pitchRate', 'yawRate'],
     };
     const MAV_BOOL_VALUES = [0, 1, '0', '1'];
     const validateMavBool = RED.mavlink.oneOf(MAV_BOOL_VALUES);
     const VALUE_VALIDATORS = {
-      'camera|track-point|': {
+      'camera|track-point': {
         pointX: RED.mavlink.validateRange(0, 1),
         pointY: RED.mavlink.validateRange(0, 1),
         radius: RED.mavlink.validateRange(0, 1),
       },
-      'camera|track-rectangle|': {
+      'camera|track-rectangle': {
         topLeftX: RED.mavlink.validateRange(0, 1),
         topLeftY: RED.mavlink.validateRange(0, 1),
         bottomRightX: RED.mavlink.validateRange(0, 1),
         bottomRightY: RED.mavlink.validateRange(0, 1),
       },
-      'camera|storage-format|': {
+      'camera|storage-format': {
         format: (v, opt) => RED.mavlink.isBlank(v) ? true : validateMavBool(v, opt),
         resetImageLog: (v, opt) => RED.mavlink.isBlank(v) ? true : validateMavBool(v, opt),
       },
@@ -123,12 +93,20 @@
           validate(v, _opt) {
             const topic = RED.mavlink.liveOr(this, '#node-input-topic', this.topic, 'camera');
             const verb = RED.mavlink.liveOr(this, '#node-input-verb', this.verb, '');
-            const path = topic === 'gimbal' && verb === 'aim'
-              ? RED.mavlink.liveOr(this, '#node-input-path', this.path, 'legacy') : '';
-            const key = `${topic}|${verb}|${path}`;
+            const key = `${topic}|${verb}`;
+            const needed = REQUIRED_VALUES[key];
             const values = v || {};
-            const nanWhenBlank = NAN_WHEN_BLANK[key] || [];
-            for (const field of SLOT_KEYS[key] || []) {
+            if (needed) {
+              for (let i = 0; i < needed.length; i++) {
+                if (RED.mavlink.isBlank(values[needed[i]])) {
+                  return `needs ${needed.join(', ')} — the command has no sentinel for `
+                    + `an unset one, so a blank field is sent as 0`;
+                }
+              }
+            }
+            const path = key === 'gimbal|aim' ? RED.mavlink.liveOr(this, '#node-input-path', this.path, 'legacy') : '';
+            const nanWhenBlank = NAN_WHEN_BLANK[`${key}|${path}`] || [];
+            for (const field of Object.keys(values)) {
               if (RED.mavlink.isBlank(values[field]) && nanWhenBlank.indexOf(field) === -1) {
                 return `${field} is blank — it would be sent unset; enter a value`;
               }
@@ -550,5 +528,5 @@
   <p>The <b>Send as</b> field appears only when the choice is observable — a command the dialect marks as carrying a location, i.e. gimbal ROI-set. Elsewhere <code>COMMAND_INT</code> and <code>COMMAND_LONG</code> pass params 1–4 identically, so the node sends <code>COMMAND_INT</code>. Positional values — e.g. ROI latitude / longitude — are entered in decimal degrees regardless of the Send as choice, except on <code>COMMAND_INT</code> with the Local NED frame, where they are metres north / east. <code>msg.payload.sendAs</code> and <code>msg.payload.mavFrame</code> override per message. Message-kind verbs (gimbal manager aiming) never ride a MAV_CMD.</p>
   <p>On <b>Build</b> delivery the Dialect picker supplies editor catalogs. Choose <i>from Vehicle Profile…</i> to use a profile dialect and target defaults; a concrete dialect has no profile target rung. On <b>Send</b> or <b>Send &amp; confirm</b> delivery a Connection is required. The Identity drives target addressing: a companion identity derives the target sysid from its airframe; the target compid remains visible and config-resolved because it addresses a payload device (camera or gimbal), not the autopilot.</p>
   <p>On the <b>Send &amp; confirm</b> tier a command-backed verb waits for its <code>COMMAND_ACK</code>: output 0 (continue) fires only on <code>ACCEPTED</code>, and a <code>DENIED</code>, <code>TEMPORARILY_REJECTED</code>, or timeout halts the chain and reports on output 1. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use <b>Send</b> or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
-  <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed. When the aim should confirm, pick the <code>DO_GIMBAL_MANAGER_PITCHYAW</code> path — the same four fields, and the command form acks where the message form cannot. <b>The units differ by path</b>, and the dialog shows each path's own: the message takes pitch and yaw in radians and the rates in rad/s, the command takes degrees and deg/s (measured — the same number aims 57× apart), and <code>DO_MOUNT_CONTROL</code> takes degrees. On both manager paths a blank field is sent as NaN, the dialect's "unused": leave pitch and yaw blank to aim by rate, or the rates blank to aim by angle. Filling both pairs is not an aim ArduPilot follows — it drops the message, and on the command path it takes the angle and ignores the rates. The <code>GIMBAL_MANAGER_SET_ATTITUDE</code> path adds roll to pitch and yaw: enter roll/pitch/yaw in degrees and the node builds the quaternion the wire carries; it carries no rates. It is a message, so it is always unconfirmed.</p>
+  <p>Gimbal manager aiming uses GIMBAL_MANAGER_SET_PITCHYAW and has no MAVLink acknowledgement, so it is always sent unconfirmed. When the aim should confirm, pick the <code>DO_GIMBAL_MANAGER_PITCHYAW</code> path — the same four fields, and the command form acks where the message form cannot. <b>The units differ by path</b>, and the dialog shows each path's own: the message takes pitch and yaw in radians and the rates in rad/s, the command takes degrees and deg/s (measured — the same number aims 57× apart), and <code>DO_MOUNT_CONTROL</code> takes degrees. On both manager paths a blank field is sent as NaN, the dialect's "unused": leave pitch and yaw blank to aim by rate, or the rates blank to aim by angle. Filling both pairs is not an aim ArduPilot follows — it drops the message, and on the command path it takes the angle and ignores the rates. The <code>GIMBAL_MANAGER_SET_ATTITUDE</code> path adds roll to pitch and yaw: enter roll/pitch/yaw in degrees and the node builds the quaternion the wire carries. It is a message, so it is always unconfirmed.</p>
 </script>

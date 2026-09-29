@@ -19,7 +19,7 @@ test('Out help documents the topic shape, its precedence, and dialect field spel
   const plain = help.indexOf('<code>{ name, fields }</code> — decoded-shape');
   assert.ok(envelope !== -1 && topic !== -1 && plain !== -1, 'all three shapes are listed');
   assert.ok(envelope < topic && topic < plain, 'listed in the order the runtime reads them');
-  assert.match(help, /non-blank <code>msg\.topic<\/code>/);
+  assert.match(help, /a <code>msg\.topic<\/code> that is present/);
   assert.match(help, /<dt class="optional">topic /, 'msg.topic is a listed input');
   assert.match(help, /<code>target_system<\/code>,\s*not <code>targetSystem<\/code>/, 'snake_case field names (N3)');
 });

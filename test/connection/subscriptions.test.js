@@ -62,11 +62,9 @@ test('filter narrows by message, sysid, and compid', () => {
 });
 
 test('addressed-to filters read the target fields: own id and broadcast pass, others and unaddressed do not', () => {
-  /**
-   * The companion role's inbox: a message names its recipient in its own
-   * target_system / target_component fields. 0 is broadcast and passes; a
-   * message with no target_system is addressed to no system and does not.
-   */
+  // The companion role's inbox: a message names its recipient in its own
+  // target_system / target_component fields. 0 is broadcast and passes; a
+  // message with no target field at all is addressed to no one and does not.
   const reg = new SubscriptionRegistry({ logger: { error() {} } });
   const hits = [];
   reg.subscribe({ toSysid: 1, toCompid: 191 }, (m) => hits.push(m.name));
@@ -77,17 +75,14 @@ test('addressed-to filters read the target fields: own id and broadcast pass, ot
   reg.dispatch(decoded({ name: 'OTHER_COMPONENT', fields: { target_system: 1, target_component: 1 } }));
   reg.dispatch(decoded({ name: 'OTHER_SYSTEM', fields: { target_system: 2, target_component: 191 } }));
   reg.dispatch(decoded({ name: 'HEARTBEAT', fields: { type: 6 } }));
-  /**
-   * A message naming a system but no component reaches every component of
-   * that system, as ArduPilot's router delivers it (measured: a GCS's
-   * SET_MODE{target_system 20} reached the companion's link, and "To compid
-   * 191" dropped it). Another system's is still filtered by the system rung.
-   */
+  // A message naming a system but no component (CAMERA_FEEDBACK, SET_MODE)
+  // names no component, so a component filter keeps it out: ArduPilot sends
+  // CAMERA_FEEDBACK to system 0 on every trigger, and a companion inbox is
+  // not where the autopilot's camera events or a GCS's SET_MODE belong.
   reg.dispatch(decoded({ name: 'CAMERA_FEEDBACK', fields: { target_system: 0, img_idx: 1 } }));
   reg.dispatch(decoded({ name: 'SET_MODE', fields: { target_system: 1, base_mode: 1 } }));
-  reg.dispatch(decoded({ name: 'SET_MODE_OTHER', fields: { target_system: 2, base_mode: 1 } }));
 
-  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS', 'CAMERA_FEEDBACK', 'SET_MODE']);
+  assert.deepEqual(hits, ['MINE', 'BROADCAST', 'ALL_COMPONENTS']);
 });
 
 test('trustedOnly excludes only the explicit untrusted mark (§7 trust ruling #264)', () => {

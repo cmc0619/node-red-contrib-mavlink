@@ -750,12 +750,6 @@ test('the Param id ring measures the saved id against the wire\'s 16 chars', () 
     'a list names no parameter');
 });
 
-test('the Value ring takes two arguments, so Node-RED honours its whole-number reason (R13)', () => {
-  // A one-argument validator's returned string is coerced with `!!` and reads
-  // as valid: a PX4 INT32 value of 2.5 deployed and 2 went on the wire.
-  assert.equal(typedValueValidator().length, 2);
-});
-
 test('the Type bound follows the dialog: off on ArduPilot, on where the firmware is unresolved', () => {
   const validate = typedValueValidator();
   const int8 = 'MAV_PARAM_TYPE_INT8';

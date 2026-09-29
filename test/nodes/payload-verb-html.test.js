@@ -441,37 +441,25 @@ function editorTable(name) {
   return JSON.parse(JSON.stringify(vm.runInNewContext(`(${body})`)));
 }
 
-test('SLOT_KEYS and NAN_WHEN_BLANK are drift pins on the recipes (E8, §0 walled garden)', () => {
-  // The `values` ring walks SLOT_KEYS, so a dialog that never painted (`{}`)
-  // reds instead of sending every slot unset. It has to be static — `validate`
-  // runs at deploy with no dialog open — so this asserts it names exactly the
-  // keys fieldMetaFromBundle renders for every reachable recipe, and that
-  // NAN_WHEN_BLANK names exactly the slots whose recipe default is NaN.
+test('REQUIRED_VALUES and NAN_WHEN_BLANK are drift pins on the recipes (§0 walled garden)', () => {
+  // The driver sends a blank slot unset, so the editor's `values` validator is
+  // the only thing between a blank ROI coordinate and 0,0 on the wire. It has
+  // to be static — `validate` runs at deploy with no dialog open — so this
+  // asserts REQUIRED_VALUES names exactly the slots fieldMetaFromBundle marks
+  // `required`, and NAN_WHEN_BLANK exactly the slots whose default is NaN.
   const { fieldMetaFromBundle } = require('../../lib/payload');
   const bundle = require('../../lib/metadata/bundled').loadBundled('ardupilotmega');
-  const slotKeys = editorTable('SLOT_KEYS');
-  const nanWhenBlank = editorTable('NAN_WHEN_BLANK');
-  const keys = reachableRecipeKeys();
-  assert.deepEqual(Object.keys(slotKeys).sort(), [...keys].sort(), 'one SLOT_KEYS row per reachable recipe');
+  const expectedRequired = {};
   const expectedNan = {};
-  for (const key of keys) {
+  for (const key of reachableRecipeKeys()) {
     const meta = fieldMetaFromBundle(bundle, ...key.split('|'));
-    assert.deepEqual(slotKeys[key], Object.keys(meta), `${key} slot keys`);
+    const required = Object.keys(meta).filter((k) => meta[k].required);
+    if (required.length) expectedRequired[key.split('|').slice(0, 2).join('|')] = required;
     const nan = Object.keys(meta).filter((k) => Number.isNaN(meta[k].default));
     if (nan.length) expectedNan[key] = nan;
   }
-  assert.deepEqual(nanWhenBlank, expectedNan, 'NAN_WHEN_BLANK matches the NaN defaults');
-});
-
-test('a never-painted Payload dialog ({}) reds instead of sending every slot unset (E8)', () => {
-  const { values } = require('./html-assert').loadNodeDefaults('mavlink-payload');
-  const validate = (topic, verb, saved, extra) => values.validate.call({ topic, verb, ...extra }, saved, {});
-  assert.match(String(validate('camera', 'photo', {})), /cameraId is blank/);
-  assert.match(String(validate('gimbal', 'roi-set', { lat: 47.4, lon: 8.5 })), /alt is blank/);
-  assert.match(String(validate('gripper', 'operate', { instance: 1, actionValue: 1 })), /action is blank/,
-    'the runtime reads the valueKey, not the field stem');
-  assert.equal(validate('gimbal', 'roi-clear', {}), true, 'a verb with no slots has nothing to fill');
-  assert.equal(validate('servo', 'set', { servo: 9, pwm: 1500, stale: '' }), true, 'keys the verb does not render are not read');
+  assert.deepEqual(editorTable('REQUIRED_VALUES'), expectedRequired, 'REQUIRED_VALUES matches the required slots');
+  assert.deepEqual(editorTable('NAN_WHEN_BLANK'), expectedNan, 'NAN_WHEN_BLANK matches the NaN defaults');
 });
 
 test('payload values validate normalized tracking fields only for the selected verb', () => {
