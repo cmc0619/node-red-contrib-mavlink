@@ -72,7 +72,7 @@ module.exports = function registerMavlinkOut(RED) {
         /**
          * msg.band overrides the config default by presence and rides as
          * given — msg is trusted (§0); a band no queue case answers to
-         * queues nothing, and send() throws rather than let `sent` report it.
+         * selects no behavior at the switch (§5).
          */
         const band = msg.band === undefined ? defaultBand : msg.band;
         connectionNode.send(message, {
