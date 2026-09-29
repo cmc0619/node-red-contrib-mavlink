@@ -236,9 +236,10 @@ full suite is the end-to-end confirmation of the vehicle-judges refactor.
   `timed-out` (crossed bytewise on AP); matching-only would not prove the override rung.
 - Example **32**: `known set status` succeeded (LOIT_SPEED_MS) **then** `unknown set status`
   `timed-out` / `echo timeout` on missing `WPNAV_SPEED` (dead peer alone must not PASS).
-- Examples **33–35**: Payload on **sysid 31 / 14570** (`nrc-ap-payload-31`). **33** needs
-  `aim`/`mode`/`roi set`/`roi clear` all succeeded; **34** photo succeeded **and** video
-  start/stop denied|failed; **35** `manager status` succeeded with `unconfirmed` detail.
+- Examples **16–18**: Payload on **sysid 31 / 14570** (`nrc-ap-payload-31`). Vocabulary is
+  DESIGN §14.163: **16** needs `aim`/`mode`/`roi set`/`roi clear` all `accepted`; **17**
+  photo `accepted` **and** video start/stop `denied`|`failed` (§14.128); **18**
+  `manager status` `sent` — "unconfirmed" is implied and must not appear on the badge.
 
 ## Port / sysid map (quick)
 

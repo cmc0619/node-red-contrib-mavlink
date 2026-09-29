@@ -369,7 +369,8 @@ const PROFILE = {
   '18-payload-gimbal-manager': {
     restart: 'none',
     waitMs: 15000,
-    expect: 'AP-31 gimbal manager aim sent unconfirmed',
+    // §14.163: Send is `sent` — "unconfirmed" is implied, never spelled.
+    expect: 'AP-31 gimbal manager aim sent',
     notes: 'delivery=send; no COMMAND_ACK / no manager telemetry on Copter-4.7.0 --gimbal',
   },
   '26-peer-table-inflight': {
@@ -1105,11 +1106,23 @@ function verdictFrom(profile, summary, log) {
     }
     return { status: 'FAIL', reason: 'paramEncoding override path not observed' };
   }
+  // Payload ack/send vocabulary — DESIGN §14.163 (and Cliff's language/output-0
+  // matrix). ACK success is `accepted`; Send is `sent` (unconfirmed implied,
+  // never spelled); `succeeded` is banned here (it belongs to multi-message
+  // exchanges / aggregates only).
   if (/AP-31 legacy gimbal|legacy gimbal aim mode ROI/i.test(expect)) {
-    const aim = summary.debug.some((d) => /aim status/i.test(d.tag) && d.result === 'succeeded');
-    const mode = summary.debug.some((d) => /mode status/i.test(d.tag) && d.result === 'succeeded');
-    const roiSet = summary.debug.some((d) => /roi set status/i.test(d.tag) && d.result === 'succeeded');
-    const roiClear = summary.debug.some((d) => /roi clear status/i.test(d.tag) && d.result === 'succeeded');
+    const payloadStatus = (d) =>
+      /aim status|mode status|roi set status|roi clear status/i.test(d.tag);
+    if (summary.debug.some((d) => payloadStatus(d) && d.result === 'succeeded')) {
+      return {
+        status: 'FAIL',
+        reason: "legacy gimbal status speaks banned 'succeeded' — want accepted (§14.163)",
+      };
+    }
+    const aim = summary.debug.some((d) => /aim status/i.test(d.tag) && d.result === 'accepted');
+    const mode = summary.debug.some((d) => /mode status/i.test(d.tag) && d.result === 'accepted');
+    const roiSet = summary.debug.some((d) => /roi set status/i.test(d.tag) && d.result === 'accepted');
+    const roiClear = summary.debug.some((d) => /roi clear status/i.test(d.tag) && d.result === 'accepted');
     if (aim && mode && roiSet && roiClear) {
       return { status: 'PASS', reason: 'legacy gimbal aim/mode/ROI all accepted on AP-31' };
     }
@@ -1119,7 +1132,16 @@ function verdictFrom(profile, summary, log) {
     };
   }
   if (/AP-31 camera photo|camera photo accepted video denied/i.test(expect)) {
-    const photo = summary.debug.some((d) => /photo status/i.test(d.tag) && d.result === 'succeeded');
+    if (summary.debug.some((d) => /photo status/i.test(d.tag) && d.result === 'succeeded')) {
+      return {
+        status: 'FAIL',
+        reason: "camera photo status speaks banned 'succeeded' — want accepted (§14.163)",
+      };
+    }
+    const photo = summary.debug.some((d) => /photo status/i.test(d.tag) && d.result === 'accepted');
+    // Video DENIED is measured firmware behaviour on this SITL (§14.128), not a
+    // harness failure. MAV_RESULT names (`denied`) and the ack classifier's
+    // `failed` both count — the vehicle said no either way.
     const vStartDenied = summary.debug.some(
       (d) => /video start status/i.test(d.tag) && /denied|failed/i.test(d.result || '')
     );
@@ -1138,23 +1160,32 @@ function verdictFrom(profile, summary, log) {
     };
   }
   if (/AP-31 gimbal manager|gimbal manager aim sent/i.test(expect)) {
-    const mgr = summary.debug.some(
-      (d) =>
-        /manager status/i.test(d.tag) &&
-        d.result === 'succeeded' &&
-        /unconfirmed/i.test(d.detail || d.excerpt || '')
-    );
-    if (mgr) {
-      return { status: 'PASS', reason: 'gimbal manager aim sent (unconfirmed) on AP-31' };
+    const mgrBlocks = summary.debug.filter((d) => /manager status/i.test(d.tag));
+    if (mgrBlocks.some((d) => d.result === 'succeeded')) {
+      return {
+        status: 'FAIL',
+        reason: "manager status speaks banned 'succeeded' — want sent (§14.163)",
+      };
     }
-    return { status: 'FAIL', reason: 'manager send/unconfirmed status not observed' };
+    // "unconfirmed" is implied by `sent` and must not appear on the badge/detail.
+    if (mgrBlocks.some((d) => /unconfirmed/i.test(`${d.detail || ''} ${d.excerpt || ''}`))) {
+      return {
+        status: 'FAIL',
+        reason: "manager status spells 'unconfirmed' — banned by §14.163 (sent implies it)",
+      };
+    }
+    if (mgrBlocks.some((d) => d.result === 'sent')) {
+      return { status: 'PASS', reason: 'gimbal manager aim sent on AP-31' };
+    }
+    return { status: 'FAIL', reason: 'manager sent status not observed' };
   }
   if (/peer-table snapshot|peer table enrichment/i.test(expect)) {
     // Node-RED console debug prints util.inspect objects (armed: true), not JSON.
     const takeoffOk = summary.debug.some(
       (d) =>
         /takeoff/i.test(d.tag) &&
-        (d.result === 'succeeded' || d.result === 'accepted')
+        // Takeoff is Command Complete → `accepted` (§14.163).
+        d.result === 'accepted'
     );
     const snapTag = summary.debug.some((d) => /peer-table snapshot/i.test(d.tag));
     const armed = /\barmed:\s*true\b/.test(log);
@@ -1304,8 +1335,11 @@ function verdictFrom(profile, summary, log) {
   const bad = results.filter((r) =>
     /fail|timed-out|unconfirmed|error|denied/i.test(r)
   );
+  // §14.163 good words: ack `accepted`, Send `sent`, Build `built`, multi-message
+  // / aggregate `succeeded`. `sent` used to be missing here, so a Send-only fall-
+  // through could not PASS on its own vocabulary.
   const good = results.filter((r) =>
-    /accepted|succeeded|success|built|ok/i.test(r)
+    /accepted|sent|succeeded|success|built|ok/i.test(r)
   );
 
   if (good.length && !bad.length && !summary.errors.length) {
