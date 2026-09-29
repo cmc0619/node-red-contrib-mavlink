@@ -434,7 +434,7 @@ test('a Firmware select offers blank, and says nothing in it', () => {
     .map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8')])
     .filter(([, src]) => /id="node-input-firmware"/.test(src));
 
-  assert.ok(withFirmware.length >= 2, 'more than one node offers a Firmware field');
+  assert.ok(withFirmware.length >= 1, 'a node offers a Firmware field');
   for (const [name, src] of withFirmware) {
     const select = /<select id="node-input-firmware">([\s\S]*?)<\/select>/.exec(src);
     assert.ok(select, `${name}: Firmware is a select`);
@@ -646,9 +646,8 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_UINT8', {}), true);
   assert.match(String(defaults.paramType.validate.call({}, 'MAV_PARAM_TYPE_STRING', {})), /must be one of/);
 
-  // Timeout and Max retries are the shared ack definition. Timeout rings on
-  // the wire tiers (where its row shows) and never on Build; Max retries
-  // rings only on the echo-confirmed set, the one mode that re-sends.
+  // Timeout and Max retries are the shared ack definition. Both ring on the
+  // tiers that wait (where their rows show) and never on Build or Send.
   const wire = { delivery: 'confirm', action: 'set' };
   assert.match(String(defaults.timeoutMs.validate.call(wire, '', {})), />= 1/, 'blank reds: the editor default owns absence');
   assert.match(String(defaults.timeoutMs.validate.call(wire, '0', {})), />= 1/, 'a 0 ms window times out before the echo can arrive');
@@ -657,7 +656,12 @@ test('param lookup, type, timeout, and target compid carry rings (walled-garden 
   assert.equal(defaults.timeoutMs.validate.call({ delivery: 'build' }, '', {}), true, 'hidden on Build, never reds');
   assert.equal(defaults.maxRetries.validate.call(wire, '3', {}), true);
   assert.match(String(defaults.maxRetries.validate.call(wire, '1.5', {})), /whole number/);
-  assert.equal(defaults.maxRetries.validate.call({ delivery: 'confirm', action: 'read' }, '1.5', {}), true, 'a read waits once; the hidden retries row never reds');
+  assert.match(String(defaults.maxRetries.validate.call({ delivery: 'confirm', action: 'read' }, '1.5', {})), /whole number/,
+    'a read re-sends on silence too');
+  assert.match(String(defaults.maxRetries.validate.call({ delivery: 'collect', action: 'request-list' }, '1.5', {})), /whole number/);
+  assert.equal(defaults.maxRetries.validate.call({ delivery: 'send', action: 'set' }, '1.5', {}), true,
+    'Send waits for nothing; its hidden row never reds');
+  assert.equal(defaults.timeoutMs.validate.call({ delivery: 'send', action: 'set' }, '', {}), true);
 
   assert.equal(defaults.targetComponent.validate.call({}, '', {}), true, 'blank inherits');
   assert.match(String(defaults.targetComponent.validate.call({}, '300', {})), /between 1 and 255/);
@@ -693,10 +697,10 @@ test('param id search uses the stock autoComplete widget, not a hand-rolled resu
   assert.doesNotMatch(html, /mav-param-results/);
 });
 
-test('mavlink-param keeps a 10 s window: one deadline over the whole PARAM_VALUE stream', () => {
-  // A read and a list are bounded once, never re-armed, so the 2 s command
-  // ack default the waiting nodes share is not this node's number. The
-  // rings are the shared ones.
+test('mavlink-param keeps a 10 s step window', () => {
+  // Room for a vehicle to start answering a list over a radio, which the 2 s
+  // command-ack default the waiting nodes share is not. The rings are the
+  // shared ones.
   const { loadNodeDefaults } = require('./html-assert');
   const defaults = loadNodeDefaults('mavlink-param');
   assert.equal(defaults.timeoutMs.value, 10000);
@@ -733,6 +737,17 @@ test('an integer Type refuses a fraction; its range is Buffer\'s to refuse at se
   passes('MAV_PARAM_TYPE_REAL32', '2.9');
   assert.equal(validate.call(px4Set('MAV_PARAM_TYPE_REAL32'), 'abc', {}), false, 'REAL32 keeps the finite check');
   passes('MAV_PARAM_TYPE_UINT8', '');
+});
+
+test('the Param id ring measures the saved id against the wire\'s 16 chars', () => {
+  const { paramId } = loadNodeDefaults('mavlink-param');
+  const set = { delivery: 'send', action: 'set' };
+  assert.equal(paramId.validate.call(set, 'FLTMODE1', {}), true);
+  assert.equal(paramId.validate.call(set, 'fltmode1', {}), true, 'PARAM_ID is char[16]; case is the vehicle\'s business');
+  assert.match(String(paramId.validate.call(set, 'A'.repeat(17), {})), /length of 16/);
+  assert.match(String(paramId.validate.call(set, ` ${'A'.repeat(16)}`, {})), /length of 16/, 'the id rides as saved, untrimmed');
+  assert.equal(paramId.validate.call({ delivery: 'send', action: 'request-list' }, 'A'.repeat(17), {}), true,
+    'a list names no parameter');
 });
 
 test('the Type bound follows the dialog: off on ArduPilot, on where the firmware is unresolved', () => {

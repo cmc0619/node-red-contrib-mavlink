@@ -53,7 +53,7 @@
           }
           // char[16] on the wire. The input carries maxlength, so this catches
           // a hand-edited flow rather than typing.
-          if (String(v).trim().length > 16) return 'exceeds the wire\'s PARAM_ID length of 16';
+          if (String(v).length > 16) return 'exceeds the wire\'s PARAM_ID length of 16';
           return true;
         },
       },
@@ -137,16 +137,16 @@
       },
       // The wait window; a negative one expires before the vehicle can answer
       // and reads as vehicle silence.
-      // Timeout and Max retries: the shared ack rings (the echo is the
-      // acknowledgement here), Timeout with its own value — for a read and a
-      // list it is one deadline over the whole PARAM_VALUE stream, never
-      // re-armed, and a 1000-parameter table over a radio needs the 10 s the
-      // 2 s command-ack window does not. Timeout hides with its row on
-      // Build; Max retries belongs to the echo-confirmed set alone — the one
-      // mode that re-sends on silence — so its row and its ring follow that
-      // mode.
-      timeoutMs: { ...RED.mavlink.ackDefaults(RED.mavlink.ackRowsOnWire).timeoutMs, value: 10000 },
-      maxRetries: RED.mavlink.ackDefaults(confirmSetShown).maxRetries,
+      /**
+       * Timeout and Max retries: the shared ack rings (the echo is the
+       * acknowledgement here), Timeout with its own value. It is one step's
+       * window — a set's echo, a read's reply, the silence between two list
+       * frames — and each wait re-sends on silence up to Max retries; 10 s
+       * leaves a vehicle time to start answering a list over a radio. Both
+       * rows, and their rings, belong to the tiers that wait.
+       */
+      timeoutMs: { ...RED.mavlink.ackDefaults(waitShown).timeoutMs, value: 10000 },
+      maxRetries: RED.mavlink.ackDefaults(waitShown).maxRetries,
     ...RED.mavlink.buildTierDialectDefaults({ withFirmware: true })
   };
 
@@ -228,21 +228,20 @@
    * @returns {string}
    */
   function editedParamId(node) {
-    return RED.mavlink.liveOr(node, '#node-input-paramId', node?.paramId)
-      .toUpperCase().trim();
+    return RED.mavlink.liveOr(node, '#node-input-paramId', node?.paramId);
   }
 
   /**
-   * Whether the Max retries row is on screen: the echo-confirmed set, the one
-   * mode that re-sends on silence. Read live from the dialog when it is open,
-   * from the saved node otherwise.
+   * Whether the Timeout and Max retries rows are on screen: the tiers that
+   * wait for an answer, confirm and collect. Read live from the dialog when
+   * it is open, from the saved node otherwise.
    *
    * @param {object} node
    * @returns {boolean}
    */
-  function confirmSetShown(node) {
-    return RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) === 'confirm'
-      && RED.mavlink.liveOr(node, '#node-input-action', node.action) === 'set';
+  function waitShown(node) {
+    const delivery = RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery);
+    return delivery === 'confirm' || delivery === 'collect';
   }
 
   RED.nodes.registerType('mavlink-param', {
@@ -322,8 +321,7 @@
         $('#row-identity').toggle(
           !isBuild && RED.mavlink.hasIdentityChoice($('#node-input-connection').val() || '')
         );
-        $('#row-timeoutMs').toggle(!isBuild);
-        $('#row-maxRetries').toggle(confirmSetShown(node));
+        $('#row-timeoutMs, #row-maxRetries').toggle(waitShown(node));
 
         /* role-driven rows: companion hides both target rows */
         RED.mavlink.applyCompanionTargetVisibility({
@@ -557,7 +555,7 @@
       let _infoDef;
 
       function refreshParamInfo() {
-        const id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        const id = $('#node-input-paramId').val();
         const def = _paramDefs[id];
         _infoDef = def;
 
@@ -587,8 +585,8 @@
         // Three states, in order of how much the firmware knows.
         //
         // On a bytewise firmware the type decides the bit pattern, so picking
-        // it wrong mis-stores the value: §14 measured a REAL32-typed set of an
-        // integer parameter arriving as the denormal 1.401298464324817e-45.
+        // it wrong mis-stores the value: a REAL32-typed set of a PX4 integer
+        // parameter stores the float's bits as the integer (§14.80, §14.84).
         // PX4 publishes a type for every parameter, so the answer is stated and
         // the operator is never offered a way to contradict it.
         //
@@ -826,7 +824,7 @@
         // Same read refreshParamInfo opens with; equal definition = equal
         // render, so only a keystroke that lands on (or leaves) a definition
         // rebuilds the selects. The results panel below still updates.
-        const id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        const id = $('#node-input-paramId').val();
         if (_paramDefs[id] === _infoDef) return;
         refreshParamInfo();
       });
@@ -838,7 +836,6 @@
       // exist at all — not just how the Value field is shaped.
       $('#node-input-action').on('change', () => {
         applyActionRows();
-        // Max retries belongs to the confirm-tier set, so the action moves it.
         refreshVisibility();
         refreshParamInfo();
       });
@@ -986,14 +983,27 @@
   <p>Reads one parameter, sets one parameter, or requests a full list. Set confirmation is by matching the PARAM_VALUE echo, not COMMAND_ACK.</p>
   <p><b>Delivery.</b> <i>Build</i> emits the message on output 0 without sending — pick a bundled <b>Dialect</b> plus <b>Firmware</b>, or choose <i>from Vehicle Profile…</i> to inherit dialect, firmware, and target defaults from a Vehicle Profile. Wire tiers (Send, confirm, collect) send over the selected <b>Connection</b>; the <b>Identity</b> stamps the source address, and appears only when the Connection binds more than one identity to choose between.</p>
   <p><b>Confirm and collect.</b> On a set, <i>Send and echo-confirm</i> waits for
-  the vehicle's <code>PARAM_VALUE</code> echo and re-sends the
-  <code>PARAM_SET</code> on silence up to <b>Max retries</b> times (3 by
-  default), each attempt waiting the configured timeout; the attempts made are
-  reported in the terminal status record. On a read it waits for the <code>PARAM_VALUE</code> reply and emits
-  it. <i>Request list and collect</i> sends one <code>PARAM_REQUEST_LIST</code> and
-  collects <code>PARAM_VALUE</code> frames until every advertised index arrives
-  within the configured timeout; a missing index ends in a list timeout. A
-  vehicle advertising zero parameters completes as an empty list.</p>
+  the vehicle's <code>PARAM_VALUE</code> echo; on a read, for the
+  <code>PARAM_VALUE</code> reply. <i>Request list and collect</i> sends
+  <code>PARAM_REQUEST_LIST</code> and collects <code>PARAM_VALUE</code> frames
+  until every advertised index arrives; every frame restarts the timeout. Each
+  wait re-sends its request on silence up to <b>Max retries</b> times (3 by
+  default), each attempt waiting <b>Timeout</b>; a list is asked for again
+  from the start, keeping what already arrived. A vehicle advertising zero
+  parameters completes as an empty list.</p>
+  <p><b>Outputs.</b> Output 0 carries the built or sent message on Build and
+  Send; on a set, the request the echo confirmed as
+  <code>{paramId, paramType, value}</code>; on a read, the parameter as
+  <code>{paramId, paramType, value, index}</code> with the vehicle's numeric
+  <code>MAV_PARAM_TYPE</code> and table position; on a collect, the list as an
+  array of those, in index order.
+  Read and collect values are decoded with the resolved encoding, so a PX4
+  integer parameter reads as the integer, ready to set back. Output 1 carries progress records and the terminal record:
+  <code>succeeded</code>, <code>unconfirmed</code> when a set's echo never
+  arrives, or <code>failed</code> with its <code>reason</code>
+  (a list failure also counts the parameters <code>received</code>). A
+  wait that a later input replaces ends with <code>cancelled</code>, detail
+  <code>superseded</code>, because its request is already on the wire.</p>
   <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). For GCS/custom identities, fill target sysid/compid or leave blank to inherit the profile default.</p>
   <p>PX4 integer parameter types use the MAVLink int/float union so integer bits are reinterpreted in the float slot rather than numerically cast. 64-bit and real64 types do not fit that slot and are not offered; a vehicle that answers a set with one of them fails the set rather than timing out &mdash; those parameters travel via <code>PARAM_EXT</code>, which this node does not speak.</p>
   <p><b>Param id</b> searches shipped parameter definitions — type any part of a
@@ -1041,5 +1051,5 @@
   definitions overrides the shipped ones, since that download came from the
   firmware you are actually flying. When nothing can be offered, the field says
   why, under the input.</p>
-  <p>Three source formats are read, sniffed from the document itself rather than from its <code>Content-Type</code>: ArduPilot's <code>apm.pdef.json</code> (objects keyed by param id), PX4's <code>parameters.json</code> (a <code>parameters</code> array carrying <code>name</code> inside each entry), and PX4's <code>parameters.xml</code> (<code>&lt;parameter&gt;</code> elements inside <code>&lt;group&gt;</code>). For PX4 use <code>https://artifacts.px4.io/Firmware/_general/parameters.xml</code> — the <code>.json</code> is published only as an <code>.xz</code> archive, which is refused by name rather than parsed.</p>
+  <p>Three source formats are read, sniffed from the document itself rather than from its <code>Content-Type</code>: ArduPilot's <code>apm.pdef.json</code> (objects keyed by param id), PX4's <code>parameters.json</code> (a <code>parameters</code> array carrying <code>name</code> inside each entry), and PX4's <code>parameters.xml</code> (<code>&lt;parameter&gt;</code> elements inside <code>&lt;group&gt;</code>). For PX4 use <code>https://artifacts.px4.io/Firmware/_general/parameters.xml</code> — the <code>.json</code> is published only as an <code>.xz</code> archive, which is not a parameter document this node can read, and fails the update at the parse.</p>
 </script>

@@ -49,6 +49,8 @@ test('mavlink-system conditionally validates log id, FTP path, and parameter enc
   assert.equal(defaults.path.validate.call({ service: 'files' }, '', {}), true);
   assert.equal(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(239), {}), true);
   assert.match(String(defaults.path.validate.call({ service: 'files' }, 'a'.repeat(240), {})), /239/);
+  assert.match(String(defaults.path.validate.call({ service: 'files' }, '\u00e9'.repeat(120), {})), /239/,
+    'the bound is UTF-8 bytes, not characters');
   assert.match(String(defaults.path.validate.call({ service: 'files' }, 'a\u0000b', {})), /NUL/);
   assert.equal(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(239), {}), true);
   assert.match(String(defaults.path.validate.call({ service: 'backup' }, 'a'.repeat(240), {})), /239/);

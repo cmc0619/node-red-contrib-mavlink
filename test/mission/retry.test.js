@@ -3,7 +3,7 @@
 /**
  * Per-item retry ceiling and abort (DESIGN.md §9 "Retry per item, with a
  * ceiling, then abort the whole transfer with the sequence number that
- * stalled", §13), plus the transfer-level deadline the per-step ceiling cannot
+ * stalled", §13), plus the upload deadline the per-step ceiling cannot
  * defeat. Uses a fake clock so the timeouts fire deterministically.
  */
 
@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 
 const { MissionDownload } = require('../../lib/mission/download');
 const { MissionUpload } = require('../../lib/mission/upload');
-const { MISSION_TYPE, DEFAULT_TRANSFER_DEADLINE_MS } = require('../../lib/mission/types');
+const { missionTypeValue } = require('../../lib/mission/types');
 const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
@@ -36,7 +36,7 @@ test('download retries a stalled item to the ceiling then aborts naming the sequ
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     maxRetries: 3,
     timeoutMs: 1000,
     ...fakeDeps(clock),
@@ -68,7 +68,7 @@ test('upload retries a stalled count then aborts', async () => {
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
     maxRetries: 2,
     timeoutMs: 500,
@@ -94,7 +94,8 @@ test('a livelocked upload — same-seq re-requests forever — terminates at the
   // timeout. Every re-request opens a fresh step, so the per-item retry
   // ceiling never accumulates — without the deadline this ping-pong runs
   // forever. Re-entering the *same* step is not progress, so it never resets
-  // the deadline either: the livelock stays bounded at 60 s.
+  // the deadline either: the livelock stays bounded by the step budget,
+  // 1000 ms × (2 retries + 1).
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_COUNT') {
       deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
@@ -111,7 +112,7 @@ test('a livelocked upload — same-seq re-requests forever — terminates at the
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
     maxRetries: 2,
     timeoutMs: 1000,
@@ -125,9 +126,9 @@ test('a livelocked upload — same-seq re-requests forever — terminates at the
   assert.equal(outcome.result, 'failed');
   assert.equal(outcome.phase, 'aborted');
   assert.match(outcome.reason, /no progress .* \(transfer deadline\)/);
-  assert.equal(outcome.elapsed, DEFAULT_TRANSFER_DEADLINE_MS);
+  assert.equal(outcome.elapsed, 3000);
   // The livelock really was live: the same item kept being re-answered.
-  assert.ok(stub.sent.filter((s) => s.message.name === 'MISSION_ITEM_INT').length > 10);
+  assert.ok(stub.sent.filter((s) => s.message.name === 'MISSION_ITEM_INT').length >= 5);
   assert.equal(clock.pending(), 0, 'no timer left armed after the deadline abort');
 });
 
@@ -156,7 +157,7 @@ test('a livelocked upload — alternating re-requests of two answered items — 
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     items: [
       { frame: 3, command: 16, x: 1, y: 2, z: 3 },
       { frame: 3, command: 16, x: 4, y: 5, z: 6 },
@@ -174,40 +175,41 @@ test('a livelocked upload — alternating re-requests of two answered items — 
   assert.equal(outcome.phase, 'aborted');
   assert.match(outcome.reason, /no progress .* \(transfer deadline\)/);
   // Item 1 was the last frontier: its first answer re-armed the deadline once.
-  assert.equal(outcome.elapsed, DEFAULT_TRANSFER_DEADLINE_MS + 500);
-  assert.ok(stub.sent.filter((s) => s.message.name === 'MISSION_ITEM_INT').length > 10);
+  assert.equal(outcome.elapsed, 3000 + 500);
+  assert.ok(stub.sent.filter((s) => s.message.name === 'MISSION_ITEM_INT').length >= 5);
   assert.equal(clock.pending(), 0, 'no timer left armed after the deadline abort');
 });
 
-test('a download advancing distinct items past the deadline is not aborted (#249)', async () => {
+test('an upload advancing distinct items past the deadline is not aborted (#249)', async () => {
   const stub = new StubConnection();
   const clock = new FakeTimers();
 
-  // A large mission over a slow link: every item answers, but each takes 20 s.
-  // The walk runs well past the 60 s deadline — and must finish, because the
+  // A large mission over a slow link: the vehicle requests every item, but
+  // each request comes 20 s after the last answer. The walk runs well past
+  // the 50 s deadline (25 s × 2 attempts) — and must finish, because the
   // deadline bounds a transfer making *no* progress, not a slow one (§9).
-  const count = 6;
+  const items = Array.from({ length: 6 }, (_, i) => ({ frame: 3, command: 16, x: i, y: i, z: 10 }));
   stub.onSend((message, deliver) => {
-    if (message.name === 'MISSION_REQUEST_LIST') {
-      deliver({ name: 'MISSION_COUNT', fields: { count, mission_type: 0 } });
+    if (message.name === 'MISSION_COUNT') {
+      deliver({ name: 'MISSION_REQUEST_INT', fields: { seq: 0, mission_type: 0 } });
       return;
     }
-    if (message.name !== 'MISSION_REQUEST_INT') return;
-    const seq = Number(message.fields.seq);
-    clock.setTimeout(
-      () => deliver({ name: 'MISSION_ITEM_INT', fields: { seq, frame: 3, command: 16, mission_type: 0 } }),
-      20000
-    );
+    if (message.name !== 'MISSION_ITEM_INT') return;
+    const next = Number(message.fields.seq) + 1;
+    clock.setTimeout(() => deliver(next < items.length
+      ? { name: 'MISSION_REQUEST_INT', fields: { seq: next, mission_type: 0 } }
+      : { name: 'MISSION_ACK', fields: { type: 0, mission_type: 0 } }), 20000);
   });
 
-  const machine = new MissionDownload({
+  const machine = new MissionUpload({
     send: (m) => stub.send(m),
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
-    maxRetries: 3,
-    timeoutMs: 30000,
+    missionType: missionTypeValue('mission'),
+    items,
+    maxRetries: 1,
+    timeoutMs: 25000,
     ...fakeDeps(clock),
   });
 
@@ -216,11 +218,39 @@ test('a download advancing distinct items past the deadline is not aborted (#249
   const outcome = await done;
 
   assert.equal(outcome.result, 'succeeded');
-  assert.equal(outcome.count, count);
+  assert.equal(outcome.count, items.length);
   assert.ok(
-    outcome.elapsed > DEFAULT_TRANSFER_DEADLINE_MS,
+    outcome.elapsed > 50000,
     `the transfer ran past the deadline (${outcome.elapsed} ms) and still completed`
   );
   assert.equal(clock.pending(), 0, 'no timer left armed after the transfer');
 });
 
+test('the deadline is the configured step budget, so it never cuts a retry short (R31)', async () => {
+  // A silent vehicle, 20 s × (5 retries + 1): every configured attempt goes
+  // out before the transfer fails. A fixed 60 s deadline stopped it after 3.
+  const stub = new StubConnection();
+  const clock = new FakeTimers();
+  stub.onSend(() => {});
+
+  const machine = new MissionUpload({
+    send: (m) => stub.send(m),
+    subscribe: (f, h) => stub.subscribe(f, h),
+    onProgress: () => {},
+    target: TARGET,
+    missionType: missionTypeValue('mission'),
+    items: [{ frame: 3, command: 16, x: 1, y: 2, z: 3 }],
+    maxRetries: 5,
+    timeoutMs: 20000,
+    ...fakeDeps(clock),
+  });
+
+  const done = machine.start();
+  clock.flush();
+  const outcome = await done;
+
+  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.elapsed, 120000);
+  assert.equal(stub.sent.filter((s) => s.message.name === 'MISSION_COUNT').length, 6);
+  assert.equal(clock.pending(), 0);
+});

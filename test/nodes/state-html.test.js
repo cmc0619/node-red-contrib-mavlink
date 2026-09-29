@@ -87,7 +87,12 @@ test('events red-rings blank and a token the peer table never emits', () => {
   const feed = { id: 's1', mode: 'feed' };
   // Blank picks nothing: the feed would subscribe to no event, so it reds.
   assert.match(String(events.validate.call(feed, '', {})), /no event/);
-  assert.match(String(events.validate.call(feed, ' , ', {})), /no event/, 'separators alone pick nothing');
+  // The runtime splits on ',' and nothing else, so a padded or empty token
+  // subscribes to a name no event carries: 'stale, statustext' emitted no
+  // STATUSTEXT at all (SPS-10).
+  assert.match(String(events.validate.call(feed, ' , ', {})), /does not emit/, 'separators alone name nothing');
+  assert.match(String(events.validate.call(feed, 'stale, statustext', {})), /does not emit/);
+  assert.match(String(events.validate.call(feed, 'stale,,expired', {})), /does not emit/);
   assert.equal(events.validate.call(feed, 'stale,expired,statustext', {}), true);
   assert.equal(events.validate.call(feed, STATE_EVENTS.join(','), {}), true, 'the full set passes');
   assert.match(String(events.validate.call(feed, 'stale,exipred', {})), /does not emit/);
@@ -101,12 +106,27 @@ test('events red-rings blank and a token the peer table never emits', () => {
   assert.match(String(events.validate.call(feed, ['stale'], {})), /comma-joined/);
 });
 
+test('the Filter rows are the snapshot\'s: hidden in feed mode, and never red there (R43)', () => {
+  // The feed takes no filter: a Filter sysid of 2 on a feed still emitted
+  // vehicle 7's STATUSTEXT, a saved setting silently ignored.
+  assert.match(html, /\$\('#row-state-filter-sysid, #row-state-filter-compid'\)\.toggle\(!feed\)/);
+  assert.match(html, /\$\('#node-input-mode'\)\.on\('change', refreshRows\)/);
+  assert.match(html, /snapshot mode only/);
+  const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-state');
+  assert.equal(targetSystem.validate.call({ mode: 'feed' }, 0, {}), true);
+  assert.equal(targetComponent.validate.call({ mode: 'feed' }, 0, {}), true);
+  assert.match(String(targetSystem.validate.call({ mode: 'snapshot' }, 0, {})), /between 1 and 255/);
+});
+
 test('target filters carry the uint8 range ring, compid included', () => {
   const { targetSystem, targetComponent } = loadNodeDefaults('mavlink-state');
   assert.equal(targetComponent.validate.call({}, '', {}), true, 'blank = any');
-  assert.equal(targetComponent.validate.call({}, 0, {}), true, 'compid 0 is a real source component filter');
+  // MAV_COMP_ID_ALL reads as "all", but no peer registers component 0
+  // (§14.144), so the filter silently returned 0 peers (E9).
+  assert.match(String(targetComponent.validate.call({}, 0, {})), /between 1 and 255/);
+  assert.equal(targetComponent.validate.call({}, 1, {}), true);
   assert.equal(targetComponent.validate.call({}, 255, {}), true);
-  assert.match(String(targetComponent.validate.call({}, 256, {})), /between 0 and 255/);
+  assert.match(String(targetComponent.validate.call({}, 256, {})), /between 1 and 255/);
 
   // Sysid 0 never reaches State — the Connection drops sysid-0 sources
   // (DESIGN.md §14.138) — so a 0 filter would match nothing.
@@ -133,7 +153,7 @@ function openStateDialog(node) {
   const hidden = { value: undefined };
   function chain() {
     const c = {};
-    for (const k of ['empty', 'append', 'on', 'val', 'each', 'hide', 'show', 'prop', 'attr']) c[k] = () => c;
+    for (const k of ['empty', 'append', 'on', 'val', 'each', 'hide', 'show', 'prop', 'attr', 'toggle']) c[k] = () => c;
     c.length = 0;
     return c;
   }

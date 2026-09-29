@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { MissionSetCurrent } = require('../../lib/mission/set-current');
-const { MISSION_TYPE } = require('../../lib/mission/types');
+const { missionTypeValue } = require('../../lib/mission/types');
 const { StubConnection, FakeTimers, fakeDeps } = require('./stubs/connection');
 
 const TARGET = { sysid: 42, compid: 1 };
@@ -21,7 +21,7 @@ function machine(stub, clock, options = {}) {
     subscribe: (filter, handler) => stub.subscribe(filter, handler),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.MISSION,
+    missionType: missionTypeValue('mission'),
     seq: 0,
     timeoutMs: 10,
     maxRetries: 2,

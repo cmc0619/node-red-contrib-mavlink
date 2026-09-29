@@ -15,7 +15,7 @@ function machineOptions(stub, clock, extra = {}) {
     send: (message) => stub.send(message),
     subscribe: (filter, handler) => stub.subscribe(filter, handler),
     target: TARGET,
-    source: SOURCE,
+    sourceIds: SOURCE,
     onProgress: () => {
       // Fixture ignores progress unless a test overrides it.
     },
@@ -146,10 +146,15 @@ test('download reads sequential chunks, accepts EOF, and terminates the session'
     }
   });
 
-  const outcome = await new FtpMachine('download', machineOptions(stub, clock, { path: '/log.bin' })).start();
+  const phases = [];
+  const outcome = await new FtpMachine('download', machineOptions(stub, clock, {
+    path: '/log.bin',
+    onProgress: (update) => phases.push(update.phase),
+  })).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.data, Buffer.from('abcde'));
+  assert.deepEqual(phases, ['open', 'opened'], 'phases, not one record per chunk (R48)');
   assert.deepEqual(stub.sentNames(), [
     'FILE_TRANSFER_PROTOCOL',
     'FILE_TRANSFER_PROTOCOL',
@@ -368,13 +373,16 @@ test('upload writes bounded chunks and reports bytes after cleanup', async () =>
     }
   });
 
+  const phases = [];
   const outcome = await new FtpMachine('upload', machineOptions(stub, clock, {
     path: '/upload.bin',
     data,
+    onProgress: (update) => phases.push(update.phase),
   })).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.equal(outcome.bytes, data.length);
+  assert.deepEqual(phases, ['open', 'opened'], 'phases, not one record per chunk (R48)');
   const requests = stub.sent.map(({ message }) => decodePayload(message.fields.payload));
   assert.deepEqual(requests.map((request) => request.opcode), [6, 7, 7, 1]);
   assert.deepEqual(requests.filter((request) => request.opcode === 7).map((request) => request.size), [239, 113]);
@@ -729,7 +737,7 @@ test('cancelling after a child settles does not start the next restore file', as
       files: [{ path: 'first.bin', data: 'YQ==' }, { path: 'second.bin', data: 'Yg==' }],
     },
     onProgress: (update) => {
-      if (!cancellationQueued && update.phase === 'data' && update.offset === 1) {
+      if (!cancellationQueued && update.phase === 'opened' && update.session === 31) {
         cancellationQueued = true;
         queueMicrotask(() => machine.cancel());
       }

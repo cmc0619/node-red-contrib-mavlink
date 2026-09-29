@@ -198,6 +198,7 @@ function loadNodeType(nodeName, nodeLookup = {}, opts = {}) {
     $,
     console,
     setTimeout,
+    TextEncoder,
   };
   context.window = context;
 

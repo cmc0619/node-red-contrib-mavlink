@@ -4,6 +4,9 @@ const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+/** One macrotask: a settled machine's outcome reaches the node's outputs. */
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
 test('mavlink-param node builds PARAM_SET from msg payload values', () => {
   const RED = redStub({});
   require('../../nodes/mavlink-param')(RED);
@@ -133,7 +136,7 @@ test('a broadcast target still sends — the editor is what reds it', () => {
   assert.equal(conn.sent[0].message.fields.target_system, 0);
 });
 
-test('mavlink-param confirm set with compid 0 (editor-refused, §14.149) rides its natural reading: an unscoped echo wait', () => {
+test('mavlink-param confirm set with compid 0 (editor-refused, §14.149) rides its natural reading: an unscoped echo wait', async () => {
   const conn = connStubFull();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-param')(RED);
@@ -145,6 +148,8 @@ test('mavlink-param confirm set with compid 0 (editor-refused, §14.149) rides i
     connection: 'conn',
     targetSystem: 6,
     targetComponent: 0,
+    timeoutMs: 1000,
+    maxRetries: 0,
   });
 
   let out;
@@ -155,12 +160,12 @@ test('mavlink-param confirm set with compid 0 (editor-refused, §14.149) rides i
   assert.equal(conn.subs[0].filter.compid, undefined, 'compid 0 leaves the subscription unscoped by component');
 
   conn.inject({ name: 'PARAM_VALUE', sysid: 6, compid: 3, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 9 } });
+  await tick();
 
-  assert.ok(out, 'the echo from any component at sysid 6 confirmed the set');
-  assert.equal(out[1].result, 'succeeded');
+  assert.equal(out[1].result, 'succeeded', 'the echo from any component at sysid 6 confirmed the set');
 });
 
-test('mavlink-param confirm set emits a timed-out record and releases the subscription', () => {
+test('mavlink-param confirm set fails loud when its echo never comes, and releases the subscription', () => {
   const conn = connStub();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-param')(RED);
@@ -173,21 +178,20 @@ test('mavlink-param confirm set emits a timed-out record and releases the subscr
     targetSystem: 6,
     targetComponent: 1,
     timeoutMs: 5, // ms — fire quickly for the test
+    maxRetries: 0,
   });
 
   return new Promise((resolve) => {
     let out;
-    // Wait for the node's own done() rather than a wall clock. timeoutResult
-    // calls done() immediately after the terminal emit.
     node.emit(
       'input',
       { payload: { paramId: 'FOO', value: 1 } },
       (m) => { out = m; },
       () => {
-        assert.ok(out, 'a terminal record was emitted on timeout');
-        assert.equal(out[0], null, 'output 0 must not fire on timeout');
-        assert.equal(out[1].result, 'timed-out');
-        assert.equal(conn.activeCount(), 0, 'the subscription is torn down on timeout');
+        assert.equal(out[0], null, 'output 0 must not fire on a failure');
+        assert.equal(out[1].result, 'unconfirmed');
+        assert.match(out[1].reason, /stalled at param FOO/);
+        assert.equal(conn.activeCount(), 0, 'the subscription is torn down');
         resolve();
       }
     );
@@ -268,7 +272,7 @@ test('mavlink-param explicit config value wins over Vehicle Profile', () => {
   assert.equal(sent[0].payload.fields.target_component, 100);
 });
 
-test('mavlink-param cancels a prior in-flight subscription when a second op starts', () => {
+test('a second input supersedes the wait in flight and says so on output 1 (Q2)', async () => {
   const conn = connStub();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-param')(RED);
@@ -280,18 +284,28 @@ test('mavlink-param cancels a prior in-flight subscription when a second op star
     connection: 'conn',
     targetSystem: 6,
     targetComponent: 1,
+    timeoutMs: 1000,
+    maxRetries: 0,
   });
 
-  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, () => {}, () => {});
+  const first = [];
+  let firstDone = 0;
+  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, (m) => first.push(m), () => { firstDone += 1; });
   node.emit('input', { payload: { paramId: 'BAR', value: 2 } }, () => {}, () => {});
+  await tick();
 
-  // Two subscriptions were created, but the first must have been cancelled so
-  // exactly one remains active (no leak).
   assert.equal(conn.subs.length, 2);
   assert.equal(conn.activeCount(), 1, 'only the latest subscription remains active');
+  // FOO's PARAM_SET is already on the wire, so its input does not finish
+  // without a word: the record says a later input took over.
+  const terminal = first.at(-1)[1];
+  assert.equal(terminal.result, 'cancelled');
+  assert.equal(terminal.detail, 'superseded');
+  assert.equal(firstDone, 1);
+  node.emit('close', () => {});
 });
 
-test('mavlink-param companion identity derives sysid; echo from sysid 42 confirms, sysid 1 ignored', () => {
+test('mavlink-param companion identity derives sysid; echo from sysid 42 confirms, sysid 1 ignored', async () => {
   // Companion identity: sysid derived from airframe (42), compid pinned to 1.
   const conn = connStubFull({
     vehicle: { targetSystem: 1, targetComponent: 1, firmware: 'ardupilot' },
@@ -308,10 +322,12 @@ test('mavlink-param companion identity derives sysid; echo from sysid 42 confirm
     identity: 'identity',
     targetSystem: '',
     targetComponent: '',
+    timeoutMs: 1000,
+    maxRetries: 0,
   });
 
-  let result;
-  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, (m) => { result = m; }, () => {});
+  const outs = [];
+  node.emit('input', { payload: { paramId: 'FOO', value: 1 } }, (m) => { outs.push(m); }, () => {});
 
   // Subscription must be scoped to the companion-derived sysid (42) and compid 1 (autopilot).
   assert.equal(conn.subs.length, 1);
@@ -320,12 +336,13 @@ test('mavlink-param companion identity derives sysid; echo from sysid 42 confirm
 
   // Echo from sysid 1 — filter blocks it, transaction stays open.
   conn.inject({ name: 'PARAM_VALUE', sysid: 1, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 9 } });
-  assert.equal(result, undefined, 'echo from sysid 1 does not confirm');
+  await tick();
+  assert.equal(outs.some((m) => m[1].result === 'succeeded'), false, 'echo from sysid 1 does not confirm');
 
   // Echo from sysid 42 — passes filter and matchesParamEcho, confirms the set.
   conn.inject({ name: 'PARAM_VALUE', sysid: 42, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 9 } });
-  assert.ok(result, 'echo from derived sysid 42 confirms the set');
-  assert.equal(result[1].result, 'succeeded');
+  await tick();
+  assert.equal(outs.at(-1)[1].result, 'succeeded', 'echo from derived sysid 42 confirms the set');
 });
 
 test('mavlink-param payload.target overrides companion derivation', () => {
@@ -507,7 +524,7 @@ test('mavlink-param msg.payload.paramEncoding overrides peer capabilities', () =
   assert.equal(conn.sent[0].message.fields.param_value, 3, 'explicit c-cast wins');
 });
 
-test('mavlink-param firmware follows profile not stale config (profile px4 → firmware px4)', () => {
+test('mavlink-param firmware follows profile not stale config (profile px4 → firmware px4)', async () => {
   // PX4 uses a float-reinterpret encoding for integer params. This test
   // verifies that the request firmware comes from the profile, not config.firmware.
   const conn = connStubFull({ vehicle: { targetSystem: 1, targetComponent: 1, firmware: 'px4' } });
@@ -520,6 +537,8 @@ test('mavlink-param firmware follows profile not stale config (profile px4 → f
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
+    timeoutMs: 1000,
+    maxRetries: 0,
     // no firmware in config — it is gone from the UI
   });
 
@@ -531,12 +550,9 @@ test('mavlink-param firmware follows profile not stale config (profile px4 → f
     () => {}
   );
 
-  // PX4 encoding: paramValueToWire(3, INT32) produces a float-bit-reinterpretation.
-  // The subscription fires with the same value so confirmation succeeds.
+  // paramValueToWire(3, INT32) reinterprets int32(3) as float32 → 4.2e-45,
+  // so the firmware affected the encoded value (not raw Number(3)).
   const sentFields = conn.sent[0].message.fields;
-  // For PX4 INT32, the wire value is the IEEE 754 reinterpretation of integer bits.
-  // We just verify that the firmware affected the encoded value (not raw Number(3)).
-  // paramValueToWire(3, 6) → reinterpret int32(3) as float32 → 4.203895e-45
   assert.ok(sentFields.param_value !== 3, 'PX4 firmware encodes integer params via float reinterpret');
 
   // Confirm with the same encoded value coming back from sysid 1.
@@ -552,8 +568,9 @@ test('mavlink-param firmware follows profile not stale config (profile px4 → f
       param_index: 0,
     },
   });
-  assert.ok(result, 'echo with PX4 encoded value confirms');
-  assert.equal(result[1].result, 'succeeded');
+  await tick();
+  assert.equal(result[1].result, 'succeeded', 'echo with PX4 encoded value confirms');
+  assert.deepEqual(result[0].payload, { paramId: 'BAT_N_CELLS', paramType: 'MAV_PARAM_TYPE_INT32', value: 3 });
 });
 
 test('mavlink-param wire tier inherits from connection vehicle profile', () => {
@@ -616,7 +633,7 @@ test('a Delivery token the editor cannot save performs no tier at all (§5)', ()
   }
 });
 
-/* ---------- confirm-tier PARAM_SET re-send (#242) ---------- */
+/* ---------- the waits run on lib/param's transfer machines ---------- */
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -650,13 +667,12 @@ test('confirm set re-sends PARAM_SET when its echo times out', { timeout: 1000 }
 
   assert.equal(conn.sent.length, 4, 'the initial send is followed by the editor\'s three re-sends');
   assert.ok(conn.sent.every((s) => s.message.name === 'PARAM_SET'));
-  const progress = outs.filter((m) => m[1] && m[1].result === 'progress');
-  assert.deepEqual(progress.map((m) => m[1].detail), ['resend 1/3', 'resend 2/3', 'resend 3/3']);
-  const terminal = outs[outs.length - 1];
+  const retries = outs.filter((m) => m[1].result === 'progress' && m[1].phase === 'retry');
+  assert.deepEqual(retries.map((m) => m[1].retry), [1, 2, 3]);
+  const terminal = outs.at(-1);
   assert.equal(terminal[0], null);
-  assert.equal(terminal[1].result, 'timed-out');
-  assert.equal(terminal[1].detail, 'echo timeout');
-  assert.equal(terminal[1].attempts, 4, 'the terminal result reports every attempt');
+  assert.equal(terminal[1].result, 'unconfirmed');
+  assert.match(terminal[1].reason, /stalled at param FOO after 3 retries/);
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   assert.equal(conn.activeCount(), 0, 'subscription torn down');
 });
@@ -678,16 +694,15 @@ test('a PARAM_VALUE echo typed 64-bit settles the set as failed, not as an echo 
   conn.inject({ name: 'PARAM_VALUE', sysid: 1, compid: 1, fields: { param_id: 'FOO', param_value: 1, param_count: 1, param_index: 0, param_type: 10 } });
   await finished;
 
-  const records = outs.filter((m) => m[1]?.result).map((m) => m[1]);
+  const records = outs.map((m) => m[1]);
   const failed = records.find((r) => r.result === 'failed');
   assert.ok(failed, 'the set settles as failed');
-  assert.match(failed.detail, /kind/, 'the union\'s own missing-row failure, not an echo timeout');
-  assert.equal(records.some((r) => r.result === 'timed-out' || r.result === 'succeeded'), false,
-    'neither an echo timeout nor a confirmation follows');
+  assert.match(failed.reason, /kind/, 'the union\'s own missing-row failure, not an echo timeout');
+  assert.equal(records.some((r) => r.result === 'succeeded'), false, 'no confirmation follows');
   assert.equal(conn.sent.length, 1, 'no re-send: the vehicle answered, it just cannot be decoded');
 });
 
-test('closing the node mid-set stops the re-send timer and releases done', async () => {
+test('closing the node mid-set stops the re-send timer and releases done quietly', async () => {
   const conn = connStubFull();
   const node = confirmSetNode(redStub({ conn }), conn, 15);
 
@@ -699,12 +714,11 @@ test('closing the node mid-set stops the re-send timer and releases done', async
   await sleep(60);
 
   assert.equal(conn.sent.length, 1, 'the initial send stays on the wire');
-  assert.equal(outs.length, 0, 'nothing emitted from a torn-down node');
+  assert.equal(outs.filter((m) => m[1].result !== 'progress').length, 0,
+    'no terminal record from a torn-down node (§14.47)');
   assert.equal(doneCalls, 1, 'the in-flight done was released');
   assert.equal(conn.activeCount(), 0);
 });
-
-/* ---------- confirm-tier read waits for the reply (#242) ---------- */
 
 function confirmReadNode(RED, config) {
   require('../../nodes/mavlink-param')(RED);
@@ -715,11 +729,13 @@ function confirmReadNode(RED, config) {
     connection: 'conn',
     targetSystem: 1,
     targetComponent: 1,
+    timeoutMs: 1000,
+    maxRetries: 0,
     ...config,
   });
 }
 
-test('read+confirm awaits the PARAM_VALUE reply and reports it', () => {
+test('read+confirm awaits the PARAM_VALUE reply and reports the parameter', async () => {
   const conn = connStubFull();
   const node = confirmReadNode(redStub({ conn }), { paramId: 'RC1_MIN' });
 
@@ -734,20 +750,21 @@ test('read+confirm awaits the PARAM_VALUE reply and reports it', () => {
     name: 'PARAM_VALUE',
     fields: { param_id: 'RC2_MIN', param_value: 1200, param_type: 9, param_count: 100, param_index: 8 },
   });
+  await tick();
   assert.equal(result, undefined);
 
-  const reply = {
+  conn.inject({
     name: 'PARAM_VALUE',
     fields: { param_id: 'RC1_MIN', param_value: 1100, param_type: 9, param_count: 100, param_index: 7 },
-  };
-  conn.inject(reply);
+  });
+  await tick();
   assert.equal(result[1].result, 'succeeded');
   assert.equal(result[1].detail, 'value-received');
-  assert.equal(result[0].payload.fields.param_value, 1100, 'the reply is the result');
+  assert.deepEqual(result[0].payload, { paramId: 'RC1_MIN', paramType: 9, value: 1100, index: 7 });
   assert.equal(conn.activeCount(), 0, 'subscription torn down on settle');
 });
 
-test('read+confirm by index matches the reply on param_index', () => {
+test('read+confirm by index matches the reply on param_index', async () => {
   const conn = connStubFull();
   const node = confirmReadNode(redStub({ conn }), { lookup: 'index', paramIndex: 7 });
 
@@ -759,27 +776,58 @@ test('read+confirm by index matches the reply on param_index', () => {
     name: 'PARAM_VALUE',
     fields: { param_id: 'RC1_MIN', param_value: 1100, param_type: 9, param_count: 100, param_index: 6 },
   });
+  await tick();
   assert.equal(result, undefined, 'a neighbouring index does not answer');
   conn.inject({
     name: 'PARAM_VALUE',
     fields: { param_id: 'RC1_MIN', param_value: 1100, param_type: 9, param_count: 100, param_index: 7 },
   });
+  await tick();
   assert.equal(result[1].result, 'succeeded');
 });
 
-test('read+confirm times out honestly when no reply arrives', async () => {
+test('read+confirm re-sends on silence, then fails loud', async () => {
   const conn = connStubFull();
-  const node = confirmReadNode(redStub({ conn }), { paramId: 'RC1_MIN', timeoutMs: 5 });
+  const node = confirmReadNode(redStub({ conn }), { paramId: 'RC1_MIN', timeoutMs: 5, maxRetries: 2 });
 
   let result;
   let doneErr;
-  node.emit('input', { payload: {} }, (m) => { result = m; }, (err) => { doneErr = err; });
-  await sleep(30);
+  await new Promise((resolve) => {
+    node.emit('input', { payload: {} }, (m) => { result = m; }, (err) => { doneErr = err; resolve(); });
+  });
 
+  assert.equal(conn.sent.filter((s) => s.message.name === 'PARAM_REQUEST_READ').length, 3);
   assert.equal(result[0], null);
-  assert.equal(result[1].result, 'timed-out');
-  assert.equal(result[1].detail, 'read timeout');
+  assert.equal(result[1].result, 'failed');
+  assert.match(result[1].reason, /stalled at read after 2 retries/);
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
+});
+
+test('read and collect decode a PX4 integer through the union, not as its raw float bits (R28)', async () => {
+  const { paramValueToWire } = require('../../lib/codec/param-union');
+  const px4 = { vehicle: { targetSystem: 1, targetComponent: 1, firmware: 'px4' } };
+
+  const readConn = connStubFull(px4);
+  const reader = confirmReadNode(redStub({ conn: readConn }), { paramId: 'BAT_N_CELLS' });
+  let read;
+  reader.emit('input', { payload: {} }, (m) => { read = m; }, () => {});
+  readConn.inject({
+    name: 'PARAM_VALUE',
+    fields: { param_id: 'BAT_N_CELLS', param_value: paramValueToWire(4, 6), param_type: 6, param_count: 1, param_index: 0 },
+  });
+  await tick();
+  assert.equal(read[0].payload.value, 4, 'not 5.6e-45: a read-then-set round trip writes 4 back');
+
+  const listConn = connStubFull(px4);
+  const collector = collectNode(redStub({ conn: listConn }), 1000);
+  let list;
+  collector.emit('input', { payload: {} }, (m) => { list = m; }, () => {});
+  listConn.inject({
+    name: 'PARAM_VALUE',
+    fields: { param_id: 'BAT_N_CELLS', param_value: paramValueToWire(4, 6), param_type: 6, param_count: 1, param_index: 0 },
+  });
+  await tick();
+  assert.deepEqual(list[0].payload, [{ paramId: 'BAT_N_CELLS', paramType: 6, value: 4, index: 0 }]);
 });
 
 /* ---------- collect-tier loss recovery (#242) ---------- */
@@ -794,6 +842,7 @@ function collectNode(RED, timeout) {
     targetSystem: 1,
     targetComponent: 1,
     timeoutMs: timeout,
+    maxRetries: 0,
   });
 }
 
@@ -805,7 +854,7 @@ function listValue(index, count) {
   };
 }
 
-test('collect completes count 0 as an empty list', () => {
+test('collect completes count 0 as an empty list', async () => {
   const conn = connStubFull();
   const node = collectNode(redStub({ conn }), 100);
 
@@ -815,13 +864,14 @@ test('collect completes count 0 as an empty list', () => {
     name: 'PARAM_VALUE',
     fields: { param_id: '', param_index: 65535, param_count: 0, param_value: 0, param_type: 9 },
   });
+  await tick();
 
   assert.equal(result[1].result, 'succeeded');
   assert.equal(result[1].detail, 'list-complete');
   assert.deepEqual(result[0].payload, []);
 });
 
-test('collect waits for a dropped index without re-requesting it', async () => {
+test('collect waits for a dropped index without re-requesting it by index', async () => {
   const conn = connStubFull();
   const node = collectNode(redStub({ conn }), 200);
 
@@ -832,15 +882,35 @@ test('collect waits for a dropped index without re-requesting it', async () => {
   await sleep(90);
 
   const reads = conn.sent.filter((s) => s.message.name === 'PARAM_REQUEST_READ');
-  assert.equal(reads.length, 0, 'a missing list member does not cause a re-request');
+  assert.equal(reads.length, 0, 'a missing list member does not cause a by-index request');
 
   conn.inject(listValue(1, 3));
-  const terminal = outs[outs.length - 1];
+  await tick();
+  const terminal = outs.at(-1);
   assert.equal(terminal[1].detail, 'list-complete');
-  assert.deepEqual(terminal[0].payload.map((p) => p.index), [0, 1, 2]);
+  assert.deepEqual(terminal[0].payload.map((p) => p.paramId), ['P0', 'P1', 'P2']);
 });
 
-test('an out-of-range PARAM_VALUE warns once and cannot complete the collect', () => {
+test('collect re-arms its window on every frame, and a failure reports what arrived (R32)', async () => {
+  // One un-rearmed 100 ms deadline ended this steadily progressing stream at
+  // 101 ms as a "list timeout" that dropped every frame received.
+  const conn = connStubFull();
+  const node = collectNode(redStub({ conn }), 100);
+
+  const outs = [];
+  node.emit('input', { payload: {} }, (m) => outs.push(m), () => {});
+  for (let index = 0; index < 20; index += 1) {
+    conn.inject(listValue(index, 21));
+    await sleep(10);
+  }
+  await sleep(150);
+
+  const terminal = outs.at(-1)[1];
+  assert.equal(terminal.result, 'failed', 'index 20 never came');
+  assert.equal(terminal.received, 20, 'the record says how much of the table arrived');
+});
+
+test('an out-of-range PARAM_VALUE warns once and cannot complete the collect', async () => {
   const conn = connStubFull();
   const RED = redStub({ conn });
   const node = collectNode(RED, 100);
@@ -852,13 +922,15 @@ test('an out-of-range PARAM_VALUE warns once and cannot complete the collect', (
   conn.inject(listValue(0, 2));
   conn.inject(listValue(9, 2));
   conn.inject(listValue(9, 2));
+  await tick();
 
-  assert.equal(result, undefined, 'a bogus index must not satisfy the completion check');
+  assert.equal(result[1].result, 'progress', 'a bogus index must not satisfy the completion check');
   assert.equal(warns.length, 1, 'warned once, deduped');
   assert.match(warns[0], /index 9/);
 
   conn.inject(listValue(1, 2));
-  assert.deepEqual(result[0].payload.map((p) => p.index), [0, 1]);
+  await tick();
+  assert.deepEqual(result[0].payload.map((p) => p.paramId), ['P0', 'P1']);
 });
 
 /**

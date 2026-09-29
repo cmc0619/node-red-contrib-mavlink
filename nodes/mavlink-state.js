@@ -30,7 +30,7 @@ module.exports = function registerMavlinkState(RED) {
     let feed = null;
     switch (config.mode) {
       case 'feed': {
-        const events = config.events.split(',').filter(Boolean);
+        const events = config.events.split(',');
         feed = createStateFeed(connectionNode.peerTable, { events, modes }, (record) => {
           node.send([{ payload: record }]);
         });

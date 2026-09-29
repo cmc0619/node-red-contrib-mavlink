@@ -140,18 +140,35 @@ test('download confirm emits a Buffer carrying the selected log id and closes th
     }
   });
   const Node = loadNode(conn);
-  const node = new Node({ ...BASE, operation: 'download', logId: 7 });
+  // The editor saves the number input as a string (SPS-11).
+  const node = new Node({ ...BASE, operation: 'download', logId: '7' });
   const { outputs, err } = await runInput(node, { payload: {}, filename: 'log.bin', topic: 'download' });
 
   assert.equal(err, undefined);
   const result = outputs.at(-1);
   assert.ok(Buffer.isBuffer(result[0].payload));
   assert.deepEqual(result[0].payload, Buffer.from('log'));
-  assert.equal(result[0].logId, 7);
+  assert.strictEqual(result[0].logId, 7, 'a number, as msg.payload.id gives one');
   assert.equal(result[0].filename, 'log.bin');
   assert.equal(result[0].topic, 'download');
   assert.equal(result[1].result, 'succeeded');
   assert.deepEqual(conn.sentNames(), ['LOG_REQUEST_DATA', 'LOG_REQUEST_END']);
+});
+
+test('a blank Log id with no msg.payload.id is not read as log 0', async () => {
+  const conn = new StubConnection();
+  conn.send = function send(message) {
+    this.sent.push({ message });
+    if (message.name === 'LOG_REQUEST_DATA' && !Number.isInteger(message.fields.id)) {
+      throw new Error('invalid packet');
+    }
+  };
+  const Node = loadNode(conn);
+  const node = new Node({ ...BASE, operation: 'download', logId: '' });
+  const { outputs } = await runInput(node, { payload: {} });
+
+  assert.equal(outputs.at(-1)[1].result, 'failed', 'the wire refuses the absent id (§14.56)');
+  assert.ok(Number.isNaN(conn.sent[0].message.fields.id), 'no id was invented');
 });
 
 test('payload id overrides the configured log id without changing target addressing', async () => {
@@ -384,7 +401,7 @@ test('a payload paramEncoding of auto resolves the encoding as the configured au
   const Node = loadNode(conn);
   const node = new Node({ ...BASE, service: 'backup', operation: 'backup', path: '/', paramEncoding: 'bytewise' });
   const result = await runInput(node, { payload: { paramEncoding: 'auto' } });
-  assert.deepEqual(result.outputs.at(-1)[0].payload.parameters, [{ paramId: 'A', paramType: 6, value: 7 }],
+  assert.deepEqual(result.outputs.at(-1)[0].payload.parameters, [{ paramId: 'A', paramType: 6, value: 7, index: 0 }],
     'ArduPilot c-cast from the firmware rung, not a NaN from an unmatched token');
 });
 
@@ -418,6 +435,23 @@ test('a restore of one section runs that section alone, on its own band', async 
   assert.equal(result.outputs.at(-1)[0].topic, 'restore');
   assert.deepEqual([...bands], [4], 'a restore is a transfer, so it rides the bulk band');
   assert.equal(conn.sentNames().filter((name) => name === 'MISSION_COUNT').length, 0, 'no plan section runs');
+});
+
+test('a restore reads msg.payload.paramEncoding, as a backup does (SPS-17)', async () => {
+  // On the restore step the section payload is the parameters array, which
+  // carries no paramEncoding, so the override was silently ignored.
+  const conn = new StubConnection();
+  conn.vehicle = { firmware: 'ardupilot', targetSystem: 42, targetComponent: 1 };
+  conn.onSend(() => {});
+  const Node = loadNode(conn);
+  const node = new Node({
+    ...BASE, service: 'backup', operation: 'restore', paramEncoding: 'auto', sections: ['parameters'], maxRetries: 0,
+  });
+  await runInput(node, {
+    payload: { paramEncoding: 'bytewise', parameters: [{ paramId: 'I', paramType: 6, value: 3 }] },
+  });
+  const set = conn.sent.find((s) => s.message.name === 'PARAM_SET');
+  assert.equal(set.message.fields.param_value, paramValueToWire(3, 6), 'bytewise, not the firmware\'s c-cast');
 });
 
 test('a segmented restore uses the plan type its section names', async () => {

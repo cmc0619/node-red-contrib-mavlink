@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { MissionClear } = require('../../lib/mission/clear');
-const { MISSION_TYPE, MAV_MISSION_RESULT } = require('../../lib/mission/types');
+const { missionTypeValue, MAV_MISSION_RESULT } = require('../../lib/mission/types');
 const { StubConnection } = require('./stubs/connection');
 
 const TARGET = { sysid: 1, compid: 1 };
@@ -20,7 +20,7 @@ function clearOpts(stub, extra) {
     subscribe: (f, h) => stub.subscribe(f, h),
     onProgress: () => {},
     target: TARGET,
-    missionType: MISSION_TYPE.FENCE,
+    missionType: missionTypeValue('fence'),
     ...extra,
   };
 }
@@ -29,7 +29,7 @@ test('clear sends MISSION_CLEAR_ALL and succeeds on an accepted ack', async () =
   const stub = new StubConnection();
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_CLEAR_ALL') {
-      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE } });
+      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: missionTypeValue('fence') } });
     }
   });
 
@@ -39,14 +39,14 @@ test('clear sends MISSION_CLEAR_ALL and succeeds on an accepted ack', async () =
   assert.equal(outcome.phase, 'done');
   assert.deepEqual(stub.sentNames(), ['MISSION_CLEAR_ALL']);
   // The clear was typed to the fence plan.
-  assert.equal(stub.sent[0].message.fields.mission_type, MISSION_TYPE.FENCE);
+  assert.equal(stub.sent[0].message.fields.mission_type, missionTypeValue('fence'));
 });
 
 test('clear reports a non-zero ack as a failure', async () => {
   const stub = new StubConnection();
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_CLEAR_ALL') {
-      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ERROR, mission_type: MISSION_TYPE.FENCE } });
+      deliver({ name: 'MISSION_ACK', fields: { type: MAV_MISSION_RESULT.ERROR, mission_type: missionTypeValue('fence') } });
     }
   });
 
@@ -61,9 +61,9 @@ test('clear ignores an ack for a different mission_type', async () => {
   stub.onSend((message, deliver) => {
     if (message.name === 'MISSION_CLEAR_ALL') {
       // A mission-typed ack must not close a fence clear.
-      deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: MISSION_TYPE.MISSION } });
+      deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: missionTypeValue('mission') } });
       // The correctly-typed ack does.
-      deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: MISSION_TYPE.FENCE } });
+      deliver({ name: 'MISSION_ACK', fields: { type: 0, mission_type: missionTypeValue('fence') } });
     }
   });
 
@@ -82,7 +82,7 @@ test('clear ignores an ack explicitly addressed to a different GCS on a shared l
       // different ground station on the link.
       deliver({
         name: 'MISSION_ACK',
-        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE, target_system: 254, target_component: 190 },
+        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: missionTypeValue('fence'), target_system: 254, target_component: 190 },
       });
     }
   });
@@ -107,7 +107,7 @@ test('clear accepts an unaddressed ack (target 0/0) when the attribution gate is
     if (message.name === 'MISSION_CLEAR_ALL') {
       deliver({
         name: 'MISSION_ACK',
-        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE, target_system: 0, target_component: 0 },
+        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: missionTypeValue('fence'), target_system: 0, target_component: 0 },
       });
     }
   });
@@ -123,7 +123,7 @@ test('clear accepts an ack addressed to this station', async () => {
     if (message.name === 'MISSION_CLEAR_ALL') {
       deliver({
         name: 'MISSION_ACK',
-        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE, target_system: 255, target_component: 190 },
+        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: missionTypeValue('fence'), target_system: 255, target_component: 190 },
       });
     }
   });
@@ -140,7 +140,7 @@ test('a broadcast clear (target sysid 0) still matches a real vehicle\'s reply',
     if (message.name === 'MISSION_CLEAR_ALL') {
       deliver({
         name: 'MISSION_ACK',
-        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE },
+        fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: missionTypeValue('fence') },
         sysid: 1,
         compid: 1,
       });
@@ -163,7 +163,7 @@ test('a clear addressed to every system but one component (sysid 0, compid N) fi
 
   const wrongComponent = stub.inject({
     name: 'MISSION_ACK',
-    fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE },
+    fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: missionTypeValue('fence') },
     sysid: 7,
     compid: 191,
   });
@@ -171,7 +171,7 @@ test('a clear addressed to every system but one component (sysid 0, compid N) fi
 
   const rightComponent = stub.inject({
     name: 'MISSION_ACK',
-    fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: MISSION_TYPE.FENCE },
+    fields: { type: MAV_MISSION_RESULT.ACCEPTED, mission_type: missionTypeValue('fence') },
     sysid: 7,
     compid: 190,
   });

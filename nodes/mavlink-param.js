@@ -6,28 +6,23 @@
  * Param confirmation is echo-based, not COMMAND_ACK: a set is confirmed by the
  * PARAM_VALUE the vehicle broadcasts back, and a list by collecting every
  * PARAM_VALUE up to the advertised count (§9 "Three kinds of confirmation").
+ * The waiting exchanges are lib/param's transfer machines — ParamRestore for
+ * one set, ParamRead, ParamBackup for the list — the same engines the System
+ * node's bundle runs, so every wait re-sends on silence up to Max retries and
+ * every value is decoded with the resolved encoding.
  *
  * Chain model (§9):
- *   output 0 — continue: fires only on success (built message / echo / list)
- *   output 1 — status:   a status record on every terminal outcome
- *
- * Single-flight: at most one PARAM_VALUE transaction runs per node. A second
- * input supersedes any in-flight one — the prior subscription and timers are
- * torn down and a generation token guards against a late echo settling the node
- * after it was cancelled. Every waiting transaction carries a timeout so a lost
- * echo or dropped list message cannot leave the flow open forever.
- *
- * A confirm-tier set waits for its PARAM_VALUE echo, a confirm-tier read waits
- * for its reply, and a collect waits for the complete list.
+ *   output 0 — continue: fires only on success (built message / sent message /
+ *              confirmed parameter / read parameter / list)
+ *   output 1 — status:   progress, and a record on every terminal outcome
  */
 
 const {
   buildParamMessage,
-  createParamListCollector,
-  matchesParamEcho,
-  matchesParamReadReply,
+  resolveParamEncoding,
   capabilitiesFromPeer,
 } = require('../lib/param');
+const { ParamBackup, ParamRestore, ParamRead } = require('../lib/param/backup');
 const {
   readParamDefs,
   updateParamDefs,
@@ -39,6 +34,7 @@ const {
 } = require('../lib/param/seed');
 const { BAND } = require('../lib/connection/bands');
 const { valueFrom } = require('../lib/addressing/resolve');
+const { cancelSlot } = require('../lib/command/ack');
 const {
   makeStatusRecord,
   shouldSuppress,
@@ -157,47 +153,20 @@ module.exports = function registerMavlinkParam(RED) {
     const connAtDeploy = RED.nodes.getNode(config.connection);
 
     /**
-     * In-flight transaction, or null. `gen` is the single-flight token: a
-     * callback or timeout only settles the node when its captured generation
-     * still matches, so a superseded operation's late echo is ignored. `timer`
-     * is the deadline.
-     * @type {{unsubscribe: ()=>void, timer: any, done: Function,
-     *         gen: number}|null}
+     * Single-flight: at most one read, set or list waits per node, and a new
+     * input cancels the one in flight (lib/command/ack cancelSlot).
      */
-    let pending = null;
-    let generation = 0;
+    const slot = cancelSlot();
+    let closing = false;
 
-    /**
-     * Tear down the in-flight transaction. When `releaseDone` is true the
-     * abandoned op's `done` callback is invoked so Node-RED does not consider
-     * its message perpetually unfinished.
-     *
-     * @param {boolean} releaseDone
-     */
-    function clearPending(releaseDone) {
-      if (!pending) return;
-      const { unsubscribe, timer, done } = pending;
-      pending = null;
-      unsubscribe();
-      clearTimeout(timer);
-      if (releaseDone) done();
-    }
-
-    node.on('input', (msg, send, done) => {
+    node.on('input', async (msg, send, done) => {
       try {
         if (shouldSuppress(msg)) {
           done();
           return;
         }
 
-        // The editor owns both defaults and the number rings
-        // (RED.mavlink.ackDefaults). A confirm-tier PARAM_SET re-sends on
-        // silence up to `maxRetries` times: common.xml message 23 says a
-        // sender that times out waiting for PARAM_VALUE should re-send.
-        const timeoutMs = Number(config.timeoutMs);
-        const maxRetries = Number(config.maxRetries);
         const payload = msg.payload;
-
         // Concrete Build dialects carry firmware from the editor (no target rung).
         const {
           connectionNode: connNode,
@@ -212,214 +181,128 @@ module.exports = function registerMavlinkParam(RED) {
           buildFirmwareProfile: true,
         });
 
-        // Affirmative dispatch on the tier (§5): a token the editor's delivery
-        // ring cannot save (mavlink-param.html) matches no case, so nothing
-        // reaches the wire and the input completes as a no-op. Each arm builds
-        // its own request: Build has no peer table to ask, so the firmware
-        // rung decides its encoding; the wire tiers read AUTOPILOT_VERSION.
-        switch (delivery) {
-          case 'build':
-            completeBuild(node, send, buildParamMessage(
-              requestFrom(config, payload, { target, profile, capabilities: null })
-            ));
+        const action = valueFrom(payload, config, 'action');
+
+        /**
+         * The request, its encoding resolved from the msg override, then the
+         * peer's AUTOPILOT_VERSION capabilities, then the named firmware
+         * (DESIGN.md §11). Build has no peer table to ask.
+         *
+         * @param {number|string|undefined} capabilities
+         * @returns {object}
+         */
+        const requestWith = (capabilities) => requestFrom(config, payload, target, resolveParamEncoding({
+          encoding: payload.paramEncoding,
+          capabilities,
+          firmware: valueFrom(payload, profile, 'firmware'),
+        }));
+        const wireRequest = () => requestWith(capabilitiesFromPeer(connNode, target));
+
+        /**
+         * Affirmative dispatch on the tier and action (§5): a pair the
+         * editor's rings cannot save matches no case, so nothing reaches the
+         * wire and the input completes as a no-op.
+         */
+        switch (`${delivery}|${action}`) {
+          case 'build|read':
+          case 'build|set':
+          case 'build|request-list':
+            completeBuild(node, send, buildParamMessage(requestWith()));
             break;
-          case 'send':
-          case 'confirm':
-          case 'collect':
-            wireTier();
+          case 'send|read':
+          case 'send|set':
+          case 'send|request-list': {
+            const message = buildParamMessage(wireRequest());
+            connNode.send(message, { band: bandFor(action), target, identityId });
+            applyActionStatus(node, 'ok', 'sent');
+            send([{ payload: message }, makeStatusRecord(node.type, { result: 'succeeded', detail: 'sent', payload: message })]);
+            break;
+          }
+          case 'confirm|set': {
+            const request = wireRequest();
+            const param = { paramId: request.paramId, paramType: request.paramType, value: request.value };
+            await wait(new ParamRestore({ ...transferOptions(request), params: [param] }), 'echo-confirmed', () => param);
+            return;
+          }
+          case 'confirm|read': {
+            const request = wireRequest();
+            await wait(new ParamRead({ ...transferOptions(request), request }), 'value-received', (outcome) => outcome.param);
+            return;
+          }
+          case 'collect|request-list':
+            await wait(
+              new ParamBackup({ ...transferOptions(wireRequest()), warn: (text) => node.warn(`mavlink-param: ${text}`) }),
+              'list-complete',
+              (outcome) => outcome.params
+            );
             return;
           default: break; // This space intentionally left blank (§5)
         }
-        // Build has emitted by here; an unmatched tier has done nothing at all
-        // — no send, no output, no status record. Either way the input is
-        // completed, because a message left hanging is worse than one that did
-        // nothing (mavlink-mission precedent).
         done();
         return;
 
-        /** Send the message and, on a waiting tier, arm its transaction. */
-        function wireTier() {
-          const request = requestFrom(config, payload, {
+        /**
+         * The transfer skeleton's options for this input (lib/delivery/transfer.js).
+         *
+         * @param {object} request  carries the resolved encoding
+         * @returns {object}
+         */
+        function transferOptions(request) {
+          return {
+            send: (message) => connNode.send(message, { band: bandFor(action), target, identityId }),
+            subscribe: (filter, handler) => connNode.subscribe(filter, handler),
             target,
-            profile,
-            capabilities: capabilitiesFromPeer(connNode, target),
-          });
-          const message = buildParamMessage(request);
-          // Queue band per action (§5, §7): the full-table stream rides Bulk,
-          // the single-param conversations ride Control. A stray action
-          // selects no band here — and built no message either
-          // (buildParamMessage's own §5 default), so the send throws at the
-          // Connection's serialize choke before anything is queued.
-          let band;
-          switch (request.action) {
-            case 'request-list':
-              band = BAND.BULK;
-              break;
-            case 'read':
-            case 'set':
-              band = BAND.CONTROL;
-              break;
-            default: break; // This space intentionally left blank (§5)
-          }
-          connNode.send(message, {
-            band,
-            target: request.target,
-            identityId,
-          });
+            /** The editor owns both numbers and their rings (RED.mavlink.ackDefaults). */
+            timeoutMs: Number(config.timeoutMs),
+            maxRetries: Number(config.maxRetries),
+            encoding: request.encoding,
+            onProgress: (update) => send([null, makeStatusRecord(node.type, { result: 'progress', ...update })]),
+          };
+        }
 
-          // Scope the PARAM_VALUE subscription to the addressed vehicle so a
-          // reply from another system on a shared connection cannot confirm this
-          // operation or interleave into a list from a different vehicle.
-          // trustedOnly: an explicitly untrusted PARAM_VALUE must never confirm
-          // a set or feed a collect (§7 trust ruling); plain unsigned
-          // links carry no mark and pass.
-          const echoFilter = { message: 'PARAM_VALUE', sysid: request.target.sysid, trustedOnly: true };
-          if (request.target.compid) echoFilter.compid = request.target.compid;
-
-          // The wait this delivery×action combination arms (§5, §9): a confirm
-          // set waits for its echo, a confirm read for its reply, a collect
-          // for the full list. The subscribe callback and deadline dispatch on it.
-          let mode = '';
-          switch (delivery) {
-            case 'confirm':
-              switch (request.action) {
-                case 'set': mode = 'confirm-set'; break;
-                case 'read': mode = 'confirm-read'; break;
-                default: break; // This space intentionally left blank (§5)
-              }
+        /**
+         * Run one waiting exchange in the slot and report its outcome. Output
+         * 0 fires on success only; output 1 carries the terminal record. A
+         * close cancels quietly (§14.47); a later input superseding this one
+         * says so on output 1, because this one's frame is already on the wire.
+         *
+         * @param {object} machine
+         * @param {string} detail  the success word
+         * @param {function(object): *} continued  output 0's payload
+         */
+        async function wait(machine, detail, continued) {
+          applyActionStatus(node, 'sending', `${action}\u2026`);
+          const outcome = await slot.run(machine);
+          const { params: _params, param: _param, ...fields } = outcome;
+          switch (outcome.result) {
+            case 'succeeded':
+              applyActionStatus(node, 'ok', detail);
+              send([{ payload: continued(outcome) }, makeStatusRecord(node.type, { ...fields, detail })]);
               break;
-            case 'collect':
-              switch (request.action) {
-                case 'request-list': mode = 'collect-list'; break;
-                default: break; // This space intentionally left blank (§5)
-              }
+            case 'cancelled':
+              if (!closing) send([null, makeStatusRecord(node.type, { ...fields, detail: 'superseded' })]);
+              break;
+            case 'failed':
+            case 'unconfirmed':
+              applyActionStatus(node, 'error', outcome.reason);
+              send([null, makeStatusRecord(node.type, fields)]);
               break;
             default: break; // This space intentionally left blank (§5)
           }
-
-          // No case armed a wait: the send above was the whole job, so the
-          // input completes as sent — fire-and-forget is the general path
-          // here, the three waits above are the special cases. The composed
-          // token's vocabulary is closed by construction, so its no-wait
-          // member dispatches affirmatively like the rest (§5).
-          switch (mode) {
-            case '':
-              completeResult(node, send, 'succeeded', 'sent', message);
-              done();
-              return;
-            default: break; // This space intentionally left blank (§5)
-          }
-
-          // Supersede any prior in-flight transaction, releasing its done().
-          clearPending(true);
-          const myGen = ++generation;
-
-          /** Settle the current transaction if it has not been superseded. */
-          function settle(fn) {
-            if (!pending || pending.gen !== myGen) return;
-            const finishDone = pending.done;
-            clearPending(false);
-            fn(finishDone);
-          }
-
-          let attempt = 1;
-          let collector = null;
-          switch (mode) {
-            case 'collect-list':
-              collector = createParamListCollector({ warn: (text) => node.warn(`mavlink-param: ${text}`) });
-              break;
-            default: break; // This space intentionally left blank (§5)
-          }
-
-          const unsubscribe = connNode.subscribe(echoFilter, (decoded) => {
-            if (!pending || pending.gen !== myGen) return;
-            switch (mode) {
-              case 'confirm-set': {
-                // The echo decodes with the vehicle's own param_type (§14.80).
-                // A type the 4-byte slot cannot hold is the vehicle refusing the
-                // shape of this transaction, so it settles now (§9).
-                try {
-                  if (!matchesParamEcho(request, decoded)) return;
-                } catch (err) {
-                  settle((finishDone) => failInput(node, send, err, finishDone));
-                  return;
-                }
-                settle((finishDone) => {
-                  completeResult(node, send, 'succeeded', 'echo-confirmed', decoded, { attempts: attempt });
-                  finishDone();
-                });
-                break;
-              }
-              case 'confirm-read':
-                if (!matchesParamReadReply(request, decoded)) return;
-                settle((finishDone) => {
-                  completeResult(node, send, 'succeeded', 'value-received', decoded);
-                  finishDone();
-                });
-                break;
-              case 'collect-list': {
-                const params = collector.accept(decoded);
-                if (params === null) return;
-                if (params === true) return;
-                settle((finishDone) => {
-                  completeResult(node, send, 'succeeded', 'list-complete', params);
-                  finishDone();
-                });
-                break;
-              }
-              default: break; // This space intentionally left blank (§5)
-            }
-          });
-
-          // Display mapping, not dispatch (§5 last paragraph).
-          const timeoutDetail = mode === 'confirm-set' ? 'echo timeout'
-            : mode === 'confirm-read' ? 'read timeout' : 'list timeout';
-
-          /** Arm the transaction deadline. */
-          function armDeadline() {
-            return setTimeout(() => {
-              if (!pending || pending.gen !== myGen) return;
-              let extra;
-              switch (mode) {
-                case 'confirm-set':
-                  if (attempt <= maxRetries) {
-                    attempt += 1;
-                    applyActionStatus(node, 'sending', `resend ${attempt - 1}/${maxRetries} ${request.paramId}\u2026`);
-                    send([null, makeStatusRecord(node.type, {
-                      result: 'progress',
-                      detail: `resend ${attempt - 1}/${maxRetries}`,
-                    })]);
-                    try {
-                      connNode.send(message, { band: BAND.CONTROL, target: request.target, identityId });
-                    } catch (err) {
-                      settle((finishDone) => failInput(node, send, err, finishDone));
-                      return;
-                    }
-                    pending.timer = armDeadline();
-                    return;
-                  }
-                  extra = { attempts: attempt };
-                  break;
-                default: break; // This space intentionally left blank (§5)
-              }
-              settle((finishDone) => timeoutResult(node, send, timeoutDetail, finishDone, extra));
-            }, timeoutMs);
-          }
-
-          pending = { unsubscribe, timer: null, done, gen: myGen };
-          pending.timer = armDeadline();
+          done();
         }
       } catch (err) {
         failInput(node, send, err, done);
       }
     });
 
+    /**
+     * A redeploy mid-request settles the wait as cancelled, which releases
+     * that message's own done() quietly.
+     */
     node.on('close', (done) => {
-      // Release the in-flight transaction's own done() — a redeploy mid-request
-      // otherwise leaves that message forever unfinished for Node-RED's
-      // onComplete hook / any wired Complete node. Matches the supersede path
-      // above and the close handlers in mavlink-command / mavlink-mission.
-      clearPending(true);
+      closing = true;
+      slot.cancel();
       done();
     });
   }
@@ -428,54 +311,55 @@ module.exports = function registerMavlinkParam(RED) {
 };
 
 /**
- * Build a normalized param request from payload, node config, identity node,
- * and profile (per the role × tier matrix, DESIGN.md §6).
- *
- * Resolution order per field (sysid/compid): msg.payload.target →
- * companion derivation → config → profile default.
- * Firmware: payload → active profile. On Build, a concrete dialect supplies
- * `{ firmware: config.firmware }`; the Vehicle Profile escape supplies the
- * vehicle profile. Encoding: override → capabilities → named firmware.
+ * Build a normalized param request from payload and node config (per the
+ * role × tier matrix, DESIGN.md §6). The target is already resolved; the
+ * encoding is the resolved token.
  *
  * @param {object} config
  * @param {object} payload
- * @param {{target: object, profile: object|null, capabilities: number|null}} ctx
+ * @param {{sysid: number, compid: number}} target
+ * @param {string|undefined} encoding
  * @returns {object} normalized param request
  */
-function requestFrom(config, payload, { target, profile, capabilities }) {
-  const firmware = valueFrom(payload, profile, 'firmware');
-  // `paramEncoding` is the one override key for the encoding.
-  const encoding = payload.paramEncoding;
+function requestFrom(config, payload, target, encoding) {
   return {
     action: valueFrom(payload, config, 'action'),
     target,
     paramId: valueFrom(payload, config, 'paramId'),
-    // The editor's -1 default is the name-addressed sentinel. A supplied 0 is a
-    // valid index; an absent value remains undefined and reaches
-    // buildParamMessage as NaN so the serializer reports the malformed request.
+    /**
+     * The editor's -1 default is the name-addressed sentinel. A supplied 0 is
+     * a valid index; an absent value remains undefined and reaches
+     * buildParamMessage as NaN so the serializer reports the malformed request.
+     */
     paramIndex: valueFrom(payload, config, 'paramIndex'),
     value: valueFrom(payload, config, 'value'),
-    // No REAL32 fallback: an absent type resolves to nothing, never to a
-    // guess — guessing the type silently mis-encodes the value.
+    /**
+     * No REAL32 fallback: an absent type resolves to nothing, never to a
+     * guess — guessing the type silently mis-encodes the value.
+     */
     paramType: valueFrom(payload, config, 'paramType'),
-    firmware,
     encoding,
-    capabilities,
   };
+}
+
+/**
+ * Queue band per action (§7): the full-table stream rides Bulk, the
+ * single-parameter conversations ride Control.
+ *
+ * @param {string} action
+ * @returns {number|undefined}
+ */
+function bandFor(action) {
+  switch (action) {
+    case 'request-list': return BAND.BULK;
+    case 'read':
+    case 'set': return BAND.CONTROL;
+    default: break; // This space intentionally left blank (§5)
+  }
+  return undefined;
 }
 
 function completeBuild(node, send, message) {
   applyActionStatus(node, 'ok', 'built param');
   send([{ payload: message }, makeStatusRecord(node.type, { result: 'succeeded', detail: 'built', message })]);
-}
-
-function completeResult(node, send, result, detail, payload, extra) {
-  applyActionStatus(node, 'ok', detail);
-  send([{ payload }, makeStatusRecord(node.type, { result, detail, payload, ...extra })]);
-}
-
-function timeoutResult(node, send, detail, done, extra) {
-  applyActionStatus(node, 'error', detail);
-  send([null, makeStatusRecord(node.type, { result: 'timed-out', detail, ...extra })]);
-  done();
 }

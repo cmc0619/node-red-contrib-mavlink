@@ -7,7 +7,6 @@ const {
   ParamBackup,
   ParamRestore,
   locks,
-  OPERATION,
 } = require('../../lib/param/backup');
 const { paramValueToWire } = require('../../lib/codec/param-union');
 const { createWire } = require('../../lib/connection/wire');
@@ -87,8 +86,7 @@ function serializeSetAndEcho(wire, message) {
   return { sent, echoed };
 }
 
-test('parameter backup exports operations and a per-target lock registry', () => {
-  assert.deepEqual(OPERATION, { BACKUP: 'backup', RESTORE: 'restore' });
+test('parameter backup exports a per-target lock registry', () => {
   const release = locks.acquire('conn', TARGET);
   assert.notEqual(release, null);
   assert.equal(locks.acquire('conn', TARGET), null);
@@ -104,13 +102,17 @@ test('backup decodes bytewise integer values and returns them in wire-index orde
     deliver(valueFrame({ index: 0, count: 2, paramId: 'A', paramType: 5, value: paramValueToWire(4000000000, 5) }));
   });
 
-  const outcome = await new ParamBackup(machineOptions(stub, clock)).start();
+  const phases = [];
+  const outcome = await new ParamBackup(machineOptions(stub, clock, {
+    onProgress: (update) => phases.push(update.phase),
+  })).start();
 
   assert.equal(outcome.result, 'succeeded');
   assert.deepEqual(outcome.params, [
-    { paramId: 'A', paramType: 5, value: 4000000000 },
-    { paramId: 'B', paramType: 6, value: -7 },
+    { paramId: 'A', paramType: 5, value: 4000000000, index: 0 },
+    { paramId: 'B', paramType: 6, value: -7, index: 1 },
   ]);
+  assert.deepEqual(phases, ['request-list'], 'no progress record per PARAM_VALUE (R48)');
   assert.deepEqual(stub.sentNames(), ['PARAM_REQUEST_LIST']);
   assert.equal(stub.subscriberCount(), 0);
   assert.equal(clock.pending(), 0);
@@ -190,7 +192,7 @@ test('backup ignores wrong source and completes only from the addressed vehicle'
   const outcome = await new ParamBackup(machineOptions(stub, clock)).start();
 
   assert.equal(outcome.result, 'succeeded');
-  assert.deepEqual(outcome.params, [{ paramId: 'GOOD', paramType: 6, value: 7 }]);
+  assert.deepEqual(outcome.params, [{ paramId: 'GOOD', paramType: 6, value: 7, index: 0 }]);
 });
 
 test('backup decode errors settle and tear down the subscription and timer', async () => {
@@ -296,7 +298,7 @@ test('restore round-trips bytewise and c-cast saved values sequentially', async 
   }
 });
 
-test('restore waits for a matching echo and preserves confirmed prefix on failure', async () => {
+test('restore waits for a matching echo and preserves confirmed prefix when unconfirmed', async () => {
   const params = [
     { paramId: 'A', paramType: 6, value: 1 },
     { paramId: 'B', paramType: 6, value: 2 },
@@ -312,7 +314,7 @@ test('restore waits for a matching echo and preserves confirmed prefix on failur
   clock.flush();
   const outcome = await done;
 
-  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.result, 'unconfirmed');
   assert.equal(outcome.phase, 'aborted');
   assert.equal(outcome.restored, 1);
   assert.equal(outcome.paramId, 'B');
@@ -347,7 +349,7 @@ test('restore retries only the current parameter with a bounded ceiling', async 
   clock.flush();
   const outcome = await done;
 
-  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.result, 'unconfirmed');
   assert.equal(stub.sentNames().filter((name) => name === 'PARAM_SET').length, 3);
   assert.equal(outcome.restored, 0);
   assert.equal(outcome.paramId, 'A');
