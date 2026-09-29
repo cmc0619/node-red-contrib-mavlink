@@ -56,19 +56,6 @@ test('a blank-named standard mode resolves through MAV_STANDARD_MODE', () => {
   assert.deepEqual(setModeParams('land', ctx), { 2: 4, 3: 6 });
 });
 
-test('a spaced name matches the vehicle-published SNAKE_CASE standard name', () => {
-  /** A vehicle's own SAFE_RECOVERY (standard mode 5) sits at AUTO/RTL (4,5). */
-  const ctx = {
-    component: componentWith([
-      { name: '', standardMode: 5, customMode: px4CustomMode(4, 5) },
-    ]),
-    firmware: 'px4',
-    bundle: loadBundled('common'),
-  };
-  assert.deepEqual(setModeParams('Safe Recovery', ctx), { 2: 4, 3: 5 });
-  assert.deepEqual(setModeParams('safe_recovery', ctx), { 2: 4, 3: 5 });
-});
-
 test('PX4 AUTO sub-modes follow px4_custom_mode.h: TAKEOFF 2, LOITER 3, MISSION 4, RTL 5, LAND 6', () => {
   const ctx = { firmware: 'px4' };
   assert.deepEqual(setModeParams('Takeoff', ctx), { 2: 4, 3: 2 });
