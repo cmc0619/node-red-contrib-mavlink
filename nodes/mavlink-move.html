@@ -1301,7 +1301,7 @@
   </dl>
   <h3>Outputs</h3>
   <ol class="node-ports">
-    <li>Continue — fires only on success, once per input, and the result word IS the outcome, one meaning per word: <code>built</code> (Build: the message, not sent), <code>sent</code> (on the wire, nobody answers), <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only).</li>
+    <li>Continue — fires only on success, once per input. On <b>Build</b> and <b>Send</b> it carries the message itself (built, or put on the wire); otherwise <code>{result, …}</code>, where the result word IS the outcome, one meaning per word: <code>streaming</code> (setpoints flowing at rate), <code>stopped</code> (stream ended by the flow), <code>accepted</code> (the vehicle agreed — confirm tier only). Status reports <code>built</code> and <code>sent</code> (on the wire, nobody answers) for the first two.</li>
     <li>Status — the status record for every outcome.</li>
   </ol>
   <h3>Details</h3>

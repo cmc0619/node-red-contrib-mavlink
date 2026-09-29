@@ -82,12 +82,12 @@ function drive(node, payload) {
   });
 }
 
-test('setpoint send emits result "sent" — shared word, shared meaning with mavlink-command\'s send tier', async () => {
+test('setpoint send emits result "sent" and the sent message on Continue — as mavlink-command\'s send tier', async () => {
   const c = conn();
   const node = makeNode({ ...setpointCfg, delivery: 'send', connection: 'conn' }, { conn: c });
   const { out, err } = await drive(node, { position: { north: 1, east: 2, up: 3 } });
   assert.equal(err, undefined);
   assert.equal(c.sends.length, 1);
-  assert.equal(out[0][0].payload.result, 'sent');
+  assert.equal(out[0][0].payload, c.sends[0].message);
   assert.equal(out[0][1].result, 'sent');
 });
