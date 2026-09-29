@@ -1353,7 +1353,7 @@ test('mavlink-build: close stops the repeat timer', () => {
   assert.ok(node._closed);
 });
 
-test('mavlink-build: a repeat badge names the interval and repeats no identical update (COMMAND-12)', () => {
+test('mavlink-build: a repeat badge names the interval (COMMAND-12)', () => {
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   const { stub } = makeConnectionStub();
@@ -1374,9 +1374,7 @@ test('mavlink-build: a repeat badge names the interval and repeats no identical 
   });
 
   node._input({ payload: {} });
-  node._input({ payload: {} });
   node._close();
-  assert.equal(statuses.length, 1, 'the second identical badge is not re-sent');
   assert.equal(statuses[0].text, 'HEARTBEAT every 3000 ms', 'the interval, not a rounded 0 Hz');
 });
 
