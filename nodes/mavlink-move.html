@@ -493,28 +493,19 @@
       },
       // Go to's one frame choice: altitude above home, absolute MSL, or above
       // terrain. A stray token is a frame the builder never selects (§5's
-      // editor half). Two withholdings, and a node that already holds either
-      // keeps it and reds here (§9 ruling 6: withhold, never rewrite). No
-      // profile gates nothing: hiding requires knowledge.
-      //
-      // - Terrain is ArduPilot's in practice — PX4's support is patchy.
-      // - Above home on PX4's command tiers: PX4's COMMAND_INT handler copies
-      //   z into param7 and never reads the frame, and navigator treats it as
-      //   AMSL — alt 20 over a 489 m home flew into the ground on SITL. The
-      //   Stream tier's setpoint does convert frame 6, so only it keeps Above home.
+      // editor half). Terrain is ArduPilot's in practice — PX4's support is
+      // patchy — so the dropdown withholds it on a named non-ArduPilot
+      // firmware, and a node that already holds it keeps it and reds here
+      // (§9 ruling 6: withhold, never rewrite). No profile gates nothing:
+      // hiding requires knowledge.
       altRef: {
         value: 'home',
         validate: RED.mavlink.oneOf(['home', 'msl', 'terrain'], function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-altRef', v, 'home') !== 'terrain') return true;
           if (RED.mavlink.liveOr(this, '#node-input-action', this.action, 'goto') !== 'goto') return true;
-          const ref = RED.mavlink.liveOr(this, '#node-input-altRef', v, 'home');
           const firmware = RED.mavlink.resolveCatalogTarget({ source: this }).firmware;
-          if (ref === 'terrain' && firmware && firmware !== 'ardupilot') {
+          if (firmware && firmware !== 'ardupilot') {
             return `Above terrain is an ArduPilot frame (GLOBAL_TERRAIN_ALT) and this profile is ${firmware} — use Above home or Absolute (MSL)`;
-          }
-          if (ref === 'home' && firmware === 'px4'
-            && RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery, 'build') !== 'stream') {
-            return 'PX4 reads a DO_REPOSITION altitude as MSL whatever the frame, so Above home '
-              + 'would fly to that height above sea level — use Absolute (MSL), or Stream';
           }
           return true;
         }),
@@ -796,8 +787,10 @@
         ['offset', 'Offset from here (relative)']
       ];
 
-      // Go to's altitude-reference list, rebuilt per firmware and tier the
-      // same way the reference list is; a saved value survives and the altRef
+      // Go to's altitude-reference list, rebuilt per firmware the same way the
+      // reference list is. Terrain (GLOBAL_TERRAIN_ALT) is ArduPilot's in
+      // practice — PX4's support is patchy — so it is withheld on a named
+      // non-ArduPilot firmware; a saved value survives and the altRef
       // validator supplies the reason (§9 ruling 6).
       const ALTREF_OPTIONS = [
         ['home', 'Above home'],
@@ -860,25 +853,19 @@
 
       /**
        * Rebuild Go to's altitude-reference list: terrain is withheld on a
-       * named non-ArduPilot firmware, and Above home on PX4's command tiers
-       * (the altRef validator carries both reasons). No profile withholds
-       * nothing — hiding requires knowledge.
+       * named non-ArduPilot firmware. No profile withholds nothing — hiding
+       * requires knowledge — and a saved terrain survives and reds instead.
        *
-       * @param {string} delivery
        * @returns {string} the reference now selected
        */
-      function refreshAltRefOptions(delivery) {
+      function refreshAltRefOptions() {
         const firmware = RED.mavlink.resolveCatalogTarget().firmware;
         return RED.mavlink.refreshOptionSelect({
           select: '#node-input-altRef',
           options: ALTREF_OPTIONS,
           saved: node.altRef,
           withhold(value) {
-            switch (value) {
-              case 'terrain': return Boolean(firmware) && firmware !== 'ardupilot';
-              case 'home': return firmware === 'px4' && delivery !== 'stream';
-              default: return false;
-            }
+            return value === 'terrain' && Boolean(firmware) && firmware !== 'ardupilot';
           }
         });
       }
@@ -1115,7 +1102,7 @@
         const isCommandPath = isGoto && !isStream;
         const isBody = !isGoto && reference === 'body';
         const isOffset = !isGoto && reference === 'offset';
-        const altRef = refreshAltRefOptions(delivery) || 'home';
+        const altRef = refreshAltRefOptions() || 'home';
         RED.mavlink.applyCompanionTargetVisibility({
           isBuild,
           identityId: isWire ? $('#node-input-identity').val() : '',
@@ -1308,7 +1295,7 @@
 
 <script type="text/html" data-help-name="mavlink-move">
   <p>Builds or sends vehicle movement commands. The operator picks an intent — <b>Action</b> × <b>Delivery</b> — and the wire message, frame number, and type_mask follow as code; you never enter a bitmask. Vertical inputs — altitude, climb, vertical acceleration — are entered up-positive everywhere; the node flips them once to MAVLink NED down-positive values. Yaw and yaw rate are entered in degrees (deg, deg/s) and converted exactly once to the radians on the wire.</p>
-  <p><b>Go to</b> is the one-shot GCS-style guided goto. On Build, Send, and Send &amp; confirm it rides <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the acked command path; on Stream it rides <code>SET_POSITION_TARGET_GLOBAL_INT</code> at rate, the same intent streamed. The <b>Altitude reference</b> is the only frame choice: <i>Above home</i> (frame 3), <i>Absolute (MSL)</i> (frame 0), or <i>Above terrain</i> (frame 10). On a PX4 profile <i>Above home</i> is offered on Stream only: PX4's <code>COMMAND_INT</code> handler ignores the frame and flies the altitude as MSL, so on Build, Send and Send &amp; confirm use <i>Absolute (MSL)</i>. Above terrain means height above the ground at the target, resolved by the vehicle from its own terrain data; it is ArduPilot only, and a vehicle without terrain data refuses the command. Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored, planes), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). Ground speed, Loiter radius, and Change mode are command-path params — they hide on Stream delivery, and their payload overrides are not read on a streamed setpoint, which has no field to carry them.</p>
+  <p><b>Go to</b> is the one-shot GCS-style guided goto. On Build, Send, and Send &amp; confirm it rides <code>MAV_CMD_DO_REPOSITION</code> as <code>COMMAND_INT</code> — the acked command path; on Stream it rides <code>SET_POSITION_TARGET_GLOBAL_INT</code> at rate, the same intent streamed. The <b>Altitude reference</b> is the only frame choice: <i>Above home</i> (frame 3), <i>Absolute (MSL)</i> (frame 0), or <i>Above terrain</i> (frame 10). Above terrain means height above the ground at the target, resolved by the vehicle from its own terrain data; it is ArduPilot only, and a vehicle without terrain data refuses the command. Latitude/longitude are entered in degrees; yaw is entered in degrees and converted once to the radians the dialect declares for DO_REPOSITION. Blank optional params send the spec's no-change sentinels, matching what QGC and MAVSDK transmit: blank <b>Ground speed</b> → −1 (vehicle default), blank <b>Loiter radius</b> → 0 (ignored, planes), blank <b>Yaw</b> → NaN (keep the current heading mode; an explicit 0 commands north). Ground speed, Loiter radius, and Change mode are command-path params — they hide on Stream delivery, and their payload overrides are not read on a streamed setpoint, which has no field to carry them.</p>
   <p><b>Change mode</b> (Advanced) sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE, and the flag is the gate on both stacks (measured): the goto is accepted iff the flag is set or the vehicle is already in GUIDED (ArduPilot) / Hold (PX4), else it answers denied (2). It flies the vehicle into guided mode — a mode change, and therefore an explicit opt-in (checkbox, or <code>msg.payload.changeMode</code>; any truthy value — the string <code>"false"</code> included — sets the flag, so send a boolean).</p>
   <p>On <b>Send &amp; confirm</b> delivery (Go to, Turn and Speed — setpoints carry no acknowledgement) the node waits for the terminal COMMAND_ACK and reports it in the same vocabulary as <b>mavlink-command</b>: output 0 fires on <code>ACCEPTED</code> with an <code>accepted</code> record carrying <code>resultCode</code> 0; every other terminal result fails on output 1 with its MAV_RESULT name as the result — <code>denied</code>, <code>command_int_only</code>, <code>command_unsupported_mav_frame</code>, … — and its code, and a missing ack reports <code>unconfirmed</code> (a missing ack is not a failure). The result IS the discriminator — branch on it with a switch. <code>TEMPORARILY_REJECTED</code> re-sends up to <b>Max retries</b> times (3 by default) with back-off before failing; silence re-sends from the same budget, with the confirmation byte bumped, before a missing ack is classified — except a <b>Relative</b> Turn, which is a delta: a second copy would turn the vehicle again, so it is sent once and a lost ack settles <code>unconfirmed</code>. <b>ACK timeout</b> (2 s by default) bounds each send. Every ack-confirmed record also carries the ack's <code>resultParam2</code> (command-specific detail, often the reason for a denial), and while the vehicle answers <code>IN_PROGRESS</code> the status badge shows the progress it reports. A broadcast target (sysid 0) is refused on this tier — one ack cannot answer for a fleet; use Send or <b>mavlink-fanout</b> broadcast for per-vehicle acknowledgements.</p>
   <p><b>Steer</b> sends <code>SET_POSITION_TARGET_LOCAL_NED</code> setpoints — the streaming/offboard path, fire-and-forget. The <b>Reference</b> picks the axes: <i>World (Local NED)</i> works on every firmware; <i>Body</i> adapts to the bound Vehicle Profile's firmware, because the two stacks read different body frames (measured): ArduPilot reads BODY_OFFSET_NED (9) as the body-axis offset, while PX4 ignores 9 and reads BODY_NED (8) — and PX4 discards position in body frames, so body setpoints on PX4 carry velocity only. Without a firmware the body reference refuses rather than guess — a wrong frame number is silently dropped by the vehicle. Body labels read forward/right.</p>
