@@ -1002,7 +1002,8 @@
   array of those, in index order.
   Read and collect values are decoded with the resolved encoding, so a PX4
   integer parameter reads as the integer, ready to set back. Output 1 carries progress records and the terminal record:
-  <code>succeeded</code>, or <code>failed</code> with its <code>reason</code>
+  <code>succeeded</code>, <code>unconfirmed</code> when a set's echo never
+  arrives, or <code>failed</code> with its <code>reason</code>
   (a list failure also counts the parameters <code>received</code>). A
   wait that a later input replaces ends with <code>cancelled</code>, detail
   <code>superseded</code>, because its request is already on the wire.</p>

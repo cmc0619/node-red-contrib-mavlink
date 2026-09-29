@@ -274,14 +274,20 @@ module.exports = function registerMavlinkParam(RED) {
           applyActionStatus(node, 'sending', `${action}\u2026`);
           const outcome = await slot.run(machine);
           const { params: _params, param: _param, ...fields } = outcome;
-          if (outcome.result === 'succeeded') {
-            applyActionStatus(node, 'ok', detail);
-            send([{ payload: continued(outcome) }, makeStatusRecord(node.type, { ...fields, detail })]);
-          } else if (outcome.result === 'cancelled') {
-            if (!closing) send([null, makeStatusRecord(node.type, { ...fields, detail: 'superseded' })]);
-          } else {
-            applyActionStatus(node, 'error', outcome.reason);
-            send([null, makeStatusRecord(node.type, fields)]);
+          switch (outcome.result) {
+            case 'succeeded':
+              applyActionStatus(node, 'ok', detail);
+              send([{ payload: continued(outcome) }, makeStatusRecord(node.type, { ...fields, detail })]);
+              break;
+            case 'cancelled':
+              if (!closing) send([null, makeStatusRecord(node.type, { ...fields, detail: 'superseded' })]);
+              break;
+            case 'failed':
+            case 'unconfirmed':
+              applyActionStatus(node, 'error', outcome.reason);
+              send([null, makeStatusRecord(node.type, fields)]);
+              break;
+            default: break; // This space intentionally left blank (§5)
           }
           done();
         }

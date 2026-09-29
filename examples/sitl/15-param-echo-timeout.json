@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl32-tab",
     "name": "Known confirm then unknown id → echo timeout",
-    "info": "1. Set LOIT_SPEED_MS=10 REAL32 with echo-confirm — proves AP-1 answers PARAM_VALUE.\n2. Set WPNAV_SPEED (absent on Copter 4.7.0 §14) with confirm — must finish as failed, stalled at param WPNAV_SPEED after its echo retries.\nA dead peer would also timeout; the known-param step is what makes the negative path meaningful.\n\nConnection: AP bind 0.0.0.0:14550 → 127.0.0.1:14551 sysid 1.",
+    "info": "1. Set LOIT_SPEED_MS=10 REAL32 with echo-confirm — proves AP-1 answers PARAM_VALUE.\n2. Set WPNAV_SPEED (absent on Copter 4.7.0 §14) with confirm — must finish as unconfirmed, stalled at param WPNAV_SPEED after its echo retries.\nA dead peer would also timeout; the known-param step is what makes the negative path meaningful.\n\nConnection: AP bind 0.0.0.0:14550 → 127.0.0.1:14551 sysid 1.",
     "x": 300,
     "y": 40,
     "wires": []
