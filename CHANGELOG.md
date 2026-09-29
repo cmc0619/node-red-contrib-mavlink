@@ -4,6 +4,160 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning is [SemVer](https://semver.org/spec/v2.0.0.html). Pre-1.0 means the
 config-node shapes and message contracts may still change without a major bump.
 
+## [Unreleased]
+
+From the review of 0.7.3, re-run on the SITL lab and in Node-RED 5.0.5 (PRs
+#513–#518). The measurements and rulings are in `DESIGN.md` §14.151–§14.169.
+**Breaking** marks a result word or an output shape a flow may switch on; no
+aliases are kept (re-pick, never migrate).
+
+### Security
+
+- **Param definitions route: path traversal (R7a).** The holding file was named
+  from the raw profile id, so a `mavlink.write` user could POST
+  `vehicle: "../../flows"` with a URL they controlled and replace `flows.json`,
+  which loaded on the next restart. The file name is now the id's basename
+  (§14.20). See `SECURITY.md`.
+- **XML catalog update: path traversal (R7b).** `<include>` names from the
+  downloaded XML went into both the fetch URL and the file write. An update now
+  fetches exactly the upstream directory listing, which is already closed under
+  `<include>`.
+
+### Changed
+
+- **Breaking — one result vocabulary (§14.163).** Build reports `built` with the
+  yellow preview badge on every node that has a Build tier (Param, Payload and
+  Mission said `succeeded`); Send reports `sent` (Param included); an ack tier reports
+  `accepted`, `unconfirmed` for a silent window (Payload said `timeout`), or the
+  vehicle's `MAV_RESULT` name. On Move and Payload, output 0 of an `accepted`
+  carries the status record, as on Command. Fan-out members use the same
+  words: a silent sequential ack is `unconfirmed`, a broadcast denial `denied`
+  (was `result_2`).
+- **Breaking — Param runs on the transfer machines (R38, §14.161).** Confirm,
+  read and collect re-send on silence up to **Max retries** (default 3, 0
+  disables; the rows show on Confirm and Collect only). A set whose echo never
+  arrives reports `unconfirmed` ("stalled at param … after N retries"); a read or
+  collect that gives up reports `failed` with the machine's reason, not
+  `timed-out`. Output 0 is `{paramId, paramType, value}` (plus `index` on a
+  read; an array on a collect). A PX4 integer no longer reads as its raw float
+  bits (R28), and collect keeps its window open while frames arrive (R32).
+- **Breaking — PX4 mode table follows `px4_custom_mode.h` (R1, §14.151).**
+  Takeoff (4,2), Hold (4,3), Mission (4,4), Return (4,5), Land (4,6). "Land" used
+  to enter Takeoff and "Mission" used to enter Land. "Safe Recovery" and "Return
+  Home" are gone; use "Return".
+- **Breaking — cancelled and superseded waits are reported (R9, Q2, §14.159).**
+  A vehicle's `MAV_RESULT_CANCELLED` is a terminal answer (`cancelled`,
+  resultCode 6) on output 1. A Confirm or Complete wait superseded by a newer
+  input reports `{result: 'cancelled', detail: 'superseded'}` on output 1
+  (Command, Move, Payload, Param). A close stays quiet.
+- **Breaking — Formation Build previews like Fan-out (R36).** Yellow preview
+  badge, and output 0 carries one message per member for `mavlink-out`. The wire
+  tiers' badge reads `N succeeded`, not `N positioned`.
+- **Relative Turn is not re-sent on ack silence (R29, §14.154).** With one ack
+  lost ArduCopter turned 60° for +30°; now one frame goes out and silence
+  reports `unconfirmed`. A TEMPORARILY_REJECTED back-off still retries.
+- **Fan-out.**
+  - A member whose offsets have no metre reading in the message's frame is
+    recorded `failed`, naming the frame, and nothing is sent to it; offsets now
+    also apply on `LOCAL_OFFSET_NED` (R20).
+  - An empty explicit list or empty `all` reports a red badge and output 1 (R37).
+  - A sequential PARAM_SET echo wait is sent once; Max retries re-sends only
+    `COMMAND_*`, and the row shows only on sequential Send & confirm.
+  - Build does not pause between members; Interval hides on Build. On Build a
+    list is always the directory, even with a saved Connection (R19).
+  - `command` is no longer a reserved patch key. A payload firmware filter of
+    `''` or `null` matches no vehicle.
+- **Formation.** On a leader anchor the leader holds slot 0 and is never
+  commanded; the lowest follower used to be sent onto the leader (R5). Followers
+  of a leader anchor ride frame 0 at the leader's AMSL altitude, which PX4 flies
+  correctly (§14.153); fixed and payload anchors ride frame 3 as before.
+- **Connection.**
+  - A verified frame from a new endpoint of a known component becomes its
+    route, so a vehicle that restarts on a new UDP port is commanded there (N1,
+    §14.158).
+  - Only CRC-verified frames update the peer table; line noise no longer
+    creates phantom peers. Unknown-message frames still reach `mavlink-in` (R21,
+    §14.160).
+  - Serial and TCP share one 1 KiB high-water mark, so band priority holds on
+    serial (R4).
+  - Each identity heartbeats at its own interval; 1500 ms used to emit every
+    2000 ms (R45). The stale sweep runs at most 1 s apart (R46). A bind or listen
+    failure is reported once.
+  - Health resolves its identity by the same rule as every other node; an
+    omitted key reported `faulted` (R24, §14.43).
+- **Command.** Set Home sends yaw NaN, the spec's default heading (on PX4 that
+  stores a NaN home yaw; send `param1 = 1` to record the current heading), and a
+  blank Orbit radius sends NaN, not 0 (R40, §14.157). The Complete badge says
+  `completing…`. Send shows and rings no ack rows. `Compid` reads `Target
+  compid`.
+- **Move.** A running stream flies a snapshot of its setpoint, so a downstream
+  edit of the emitted message no longer changes what the vehicle flies (R8).
+  Stream TTL expires on its own timer (R30). Advanced opens only when the ack
+  pair is off its defaults or a target component is set. The help gives 0.5 as
+  the thrust neutral on Copter, Sub and PX4.
+- **Payload.** On the gimbal manager paths a blank pitch or yaw rides NaN, so a
+  rate aim is expressible (R17). The help gives the units per path (radians on
+  the message, degrees on the commands) and says count 0 with interval 0 takes
+  one photo on ArduPilot (R47).
+- **Mission.** The no-progress deadline is upload's alone and equals the
+  configured budget, not a hidden 60 s (R31). Every record carries the configured
+  `missionType` (R65). Build no longer asks for a Firmware.
+- **System.** Transfers report phases, not one progress record per packet (R48).
+  A log hole is re-requested as soon as the peer finishes the request, not after
+  a step timeout (R33). A payload `paramEncoding: 'auto'` means auto (R15), and a
+  restore honours `msg.payload.paramEncoding`. `msg.logId` is a number either
+  way. A parameter backup survives a frame lost late on a paced link (R14).
+- **Build.** The repeat badge reads `<message> every <n> ms`.
+- **Out.** The help lists the three payload shapes in order: a present
+  `msg.topic` — a stock Inject's `topic: ""` included — selects the topic shape,
+  and `{name, fields}` takes the wire's snake_case field names.
+- **Editor.**
+  - Admin calls are relative URLs, so dropdowns fill under `adminAuth` or a
+    non-root `httpAdminRoot` (R6, §14.31).
+  - Command: Takeoff needs an altitude (E1).
+  - Param: the whole-number Value ring fires (every palette validator takes
+    `(v, opt)`); the Param id ring is the wire's 16 characters, and the
+    definition lookup is exact.
+  - State: the Filter rows hide in feed mode (R43); Filter compid 0 reds (E9);
+    the Events ring judges the tokens the runtime splits.
+  - Connection: a TCP client needs no bind port (E10); the serial baud list
+    offers ArduPilot's full table (R49).
+  - In: rate-limit entries must name messages (E7).
+  - Vehicle Profile: changing Firmware runs the dialect change handler;
+    `additionalDialects` tokens ride as saved; a dialect-compile error is logged
+    as itself (R41).
+  - Liveness (band 1) is no longer offered to Out and Build (R27).
+  - The System FTP path ring stays at the wire's 239 UTF-8 bytes, now measured
+    with `TextEncoder`; both firmwares keep 238 (`MAVLINK.md`).
+- **Help.** Fan-out, Mission, Move, Param, Payload and System use Node-RED's
+  Inputs / Outputs / Details structure.
+- **Metadata.** `/mavlink/enums` serves exactly the tables named in the request.
+- **Package.** The root-only `overrides` are gone, so this repository's audit
+  shows what a consumer installs (`SECURITY.md`).
+
+### Fixed
+
+- **A full queue drained by inline-completing writes overflowed the stack and
+  exited Node-RED (R3).**
+- **A blank Takeoff altitude on the Complete tier crashed Node-RED** when
+  ArduPilot accepted the takeoff; the completion poll runs once before its
+  interval is armed, so the failure reaches the input once (R2).
+- **Fan-out `concurrency` 0 hung a Sequential run and every redeploy** (R18).
+- **A `Uint8Array` or `Float32Array` field went on the wire as zeros** (R22).
+- **A TCP server client that errored leaked its decoder** (R52).
+- **A Command re-send that threw finished with no error**; it reaches Catch like
+  a first send (R39).
+- **Examples.** `18-servo-release` saved a key the runtime never reads;
+  `17-camera-gimbal` aimed in degrees on a radian path; `sitl/29` and `sitl/30`
+  used Above home on PX4 command tiers and flew into the ground.
+
+### Removed
+
+- The formation-only `reposition` Command preset row; Formation builds
+  `DO_REPOSITION` through Move's builder (R54).
+- Local Identity's permanent "idle" badge, dead code across the connection
+  layer (R58), and exports only tests used (R57).
+
 ## [0.7.3] "Opus 5.5 to the rescue" - 2026-09-26
 
 ### Added
@@ -404,10 +558,11 @@ config-node shapes and message contracts may still change without a major bump.
   via the command node's `request_message` preset, never speculatively — is
   the authority; beneath it the shipped hypothesis is the dialect's per-family
   mode enum for ArduPilot and a baked main/sub table for PX4 (measured
-  2026-08-18 against PX4 1.18 SIH — the wire renumbered AUTO sub-modes vs the
-  historical `px4_custom_mode.h`); an unresolved name is NaN (loud at the wire
-  choke, never a silent mode 0) and an unresolved number simply stays a
-  number. Outputs: State snapshots gain `modeName` beside `flightMode`, and
+  2026-08-18 against PX4 1.18 SIH; the sub-mode numbers were in fact
+  `px4_custom_mode.h`'s, mislabelled — corrected in [Unreleased], §14.151); an
+  unresolved name is NaN (loud at the wire choke, never a silent mode 0) and
+  an unresolved number simply stays a number. Outputs: State snapshots gain
+  `modeName` beside `flightMode`, and
   `mode-changed` feed records gain `fromName`/`toName`, each only when the
   ladder resolves. Input: `msg.payload.mode = 'GUIDED'` on a Set Mode command
   resolves into the custom-mode params — decomposed main/sub for PX4, the

@@ -67,7 +67,7 @@ editor/runtime contract alignment.
 Shipped dialects come from `seed/mavlink-*.seed.gz` (pointer in `seed/active.json`;
 current stamp `2026-07-29-de1e078`). There is no free-text XML path/upload control and
 nothing that resolves one; private XML becomes a profile through the userDir catalog.
-*Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`.
+*Check:* `node -e "const {knownDialects,readManifest}=require('./lib/metadata/bundled'); console.log(readManifest().stamp, knownDialects().slice(0,3))"`.
 
 **14.7 Message-field `enum=` comes from the compiled seed/catalog XML.** ✔
 The old `.d.ts` recovery pipeline is deleted and nothing references it.
@@ -153,11 +153,16 @@ field.
 *Check:* `params-active.json` lists every source URL and count; change
 firmware/vehicle in the editor and watch the URL field update (or clear).
 
-**14.20 The pdef URL is an update source, not a read path or cache key.** ✔
-Ordinary reads are local-only from a holding file keyed by Vehicle Profile ID. Only the
+**14.20 The pdef URL is an update source, not a read path or cache key.** ✔ (holding-file name confined 2026-09-27, #516 9f43926e)
+Ordinary reads are local-only from a holding file keyed by Vehicle Profile ID. The file
+name is the id's `path.basename`: the id arrives in an admin route's query or body, and
+`../../flows` addressed `flows.json` (R7a, measured — see `SECURITY.md`). Only the
 explicit authenticated Update action fetches; it validates before atomic replacement and
-keeps the last good file on failure. Corrupt local JSON never becomes a network fallback.
-*Check:* `node --test test/param/defs.test.js test/param/defs-route.test.js`.
+keeps the last good file on failure. A fetched document with zero parameter definitions
+is still written and reported as count 0 (ff6baf40, #427); once the name is confined it
+can replace only its own profile's holding file. Corrupt local JSON never becomes a
+network fallback.
+*Check:* `node --test test/param/defs.test.js test/param/defs-route.test.js` ("a profile id carrying path segments cannot address a file outside the holding directory", "a document with no definitions is written as zero definitions").
 
 **14.21 ArduPilot's canonical pdef JSON is PascalCase and inline.** ✔
 Vehicle/group namespaces expose `Description`, `DisplayName`, `Units`,
@@ -230,11 +235,17 @@ Seed the select synchronously and end `fillEnumSelect` with `trigger('change')` 
 display-only.
 *Check:* `node --test test/nodes/local-identity-html.test.js`.
 
-**14.31 Editor catalog fetches must honour `httpAdminRoot`.** ✔
-Node-RED can mount the editor under a prefix; bare `/mavlink/…` then 404s. Browser URLs
-go through `RED.mavlink.adminApiUrl`; server route registration stays `/mavlink/…`.
-Drift tests forbid bare `'/mavlink/` in `$.getJSON`/`$.ajax`.
-*Check:* `node --test test/nodes/local-identity-html.test.js test/nodes/command-html.test.js test/nodes/param-html.test.js`.
+**14.31 Editor admin calls are relative URLs (`'mavlink/…'`); Node-RED adds the admin root and the token.** ✔ 🧪 (2026-09-27, #514 4033dd4f)
+Node-RED's editor prefixes `httpAdminRoot` and attaches the `adminAuth` Bearer token only
+to relative URLs, which is what its own nodes use. The editor's `RED.settings` carries no
+`httpAdminRoot`, so the old `RED.mavlink.adminApiUrl` built `/mavlink/…` for every call.
+Measured on Node-RED 5.0.5 in Chromium: under `adminAuth` every admin call answered 401,
+and under `httpAdminRoot: '/admin'` every call 404'd — the Command preset select had 0
+options, so no Command node could be configured, and the Vehicle dialect list fell back
+to 3 static entries. `adminApiUrl` is deleted; server route registration stays
+`/mavlink/…`. The drift test forbids an editor admin URL that starts with `/` and any
+hand-rebuilt admin root.
+*Check:* `node --test test/nodes/mavlink-editor-resource.test.js` ("no editor admin URL starts with "/"…").
 
 **14.32 Shared editor helpers live once, in `resources/mavlink-editor.js`.** ✔
 Loaded by a relative `<script src>` from the first-listed node HTML; Node-RED defers
@@ -310,11 +321,17 @@ After affirmative dialect picks, a blank revision fails `resolveDialect` and the
 Connection throws at deploy. Every example profile ships `"dialectRevision": "seed"`;
 same contract test.
 
-**14.43 An omitted action-node `identity` must not become the string `"undefined"`.** ✔ 🧪 (2026-08-18)
-`String(undefined)` is a real override id that `Connection.send` fails to look up.
-`resolveIdentity` treats only `null`/`undefined`/`''` as "use the Connection default";
-missing values coerce to `''`.
-*Check:* `node --test test/addressing/delivery-context.test.js`.
+**14.43 An omitted action-node `identity` must not become the string `"undefined"`.** ✔ 🧪 (2026-08-18; one owner 2026-09-27, #513 011777b3)
+`String(undefined)` is a real override id that `Connection.send` fails to look up. One
+rule, owned by the Connection runtime: `resolveIdentityId(defaultId, overrideId)` in
+`lib/connection/runtime.js` reads `undefined`, `null` and `''` as "the Connection's
+default Local Identity"; anything else rides as given. The Connection node exposes it as
+`node.resolveIdentityId`, and Health resolves through it — Health had tested only `''`,
+so a config that omitted the key reported `faulted` while heartbeats continued (R24).
+`resolveDeliveryContext` picks `msg.payload.identityId` over the configured Identity by
+presence and leaves the blank reading to the Connection. The injected
+`lib/identity/resolve.js` seam is gone.
+*Check:* `rg -n resolveIdentityId lib nodes`; `node --test test/addressing/delivery-context.test.js`.
 
 ## 14.44 – 14.54 Node-RED runtime facts
 
@@ -339,10 +356,16 @@ plus `done(err)`. (Measured against Node-RED 5.0.1's editor-client; re-check
 `close` removes the node without aborting in-flight awaits — an unhandled fan-out kept
 sending live commands after redeploy. Cancellation needs: a signal checked between
 members, an abort hook on each in-flight wait (including hand-rolled promises), and
-timer-disposing pauses; `close` waits for the run to unwind. `'cancelled'` routes to the
-quiet branch, never the Catch-visible failure branch. (The mechanism now lives in the
-`inFlight` tracker + `AbortSignal` plumbing in `lib/fanout`.)
-*Check:* `rg -n 'signal|cancel' lib/fanout/index.js nodes/mavlink-fanout.js`; `node --test test/fanout/`.
+timer-disposing pauses; `close` waits for the run to unwind. A cancel made on close or
+redeploy routes to the quiet branch, never the Catch-visible failure branch. (The
+mechanism now lives in the `inFlight` tracker + `AbortSignal` plumbing in `lib/fanout`.)
+Only a close is quiet (amended 2026-09-27, #515 593e1558, owner answer Q2): an ack or
+completion wait cancelled because a newer input superseded it reports
+`{result: 'cancelled', detail: 'superseded'}` on output 1 and calls `done()`, because its
+command is already on the wire; and a vehicle's own `MAV_RESULT_CANCELLED` (6) is an
+ordinary terminal ack, reported by name (14.159).
+*Check:* `rg -n 'signal|cancel' lib/fanout/index.js nodes/mavlink-fanout.js`; `node --test test/fanout/`;
+`node --test test/command/node.test.js` ("a superseded Confirm wait reports cancelled/superseded on output 1 (R9, Q2)").
 
 **14.48 Palette nodes share `lib/delivery`'s badge/status helpers.** ✔
 Local `cap()`/`badge24()`/status-record copies drifted and are banned.
@@ -507,8 +530,9 @@ point (14.56) naming the field and the broadcast hazard.
 
 **14.73 Build catalogs come from an explicit Dialect (or the Vehicle Profile escape) — never a silent default.** ✔
 Empty dialect / empty escape-vehicle is editor-invalid; wire tiers hide the fields and
-use the Connection's profile. Param/Mission Build require Firmware when not using a
-profile. Hidden is not honored.
+use the Connection's profile. Param Build requires Firmware when not using a profile
+(it picks the parameter encoding, 14.81); Mission Build asks for none, because nothing
+read it (#517 65f3164f). Hidden is not honored.
 *Check:* editor HTML suites; `node --test test/addressing/resolve.test.js`.
 
 **14.74 The default COMMAND_INT frame is 3, and a wrong frame has no safety net.** ✔ 📖
@@ -583,11 +607,16 @@ any non-blank value without testing it. Then the `PARAM_ENCODE_BYTEWISE`/`_C_CAS
 capability bits. Then named firmware: px4 → bytewise, ardupilot → c-cast. Anything
 else — a hand-edited firmware token with no bits and no override (14.150), or an
 override the ladder does not recognise — resolves nothing, and `encodeParamValue` matches no case and
-returns NaN (§5), which is a legal float and rides `param_value` onto the wire. The
-confirm and collect tiers report `unconfirmed`, because no echo can match; the send
-tier reports `sent`. The ladder has no fourth rung and the driver authors no refusal:
-a config that cannot answer in three passes gets the natural consequence, the same
-call as #375's reverted enqueue guard. Deliberately no editor red-ring either: the
+returns NaN (§5), which is a legal float and rides `param_value` onto the wire. A
+confirm-tier set re-sends to its retry budget and then reports `unconfirmed`, because no
+echo can match (14.161); the send tier reports `sent`; read and collect decode through
+the same ladder, so each value decodes as NaN. On the System node `'auto'` — its own
+dialog option — is the no-override token whichever source names it: config or
+`msg.payload.paramEncoding` `'auto'` asks the capability and firmware rungs (R15,
+#516 dd7588f4; a payload `'auto'` had ridden the override rung verbatim and a backup
+reported `succeeded` with every value NaN). The ladder has no fourth rung and the driver
+authors no refusal: a config that cannot answer in three passes gets the natural
+consequence, the same call as #375's reverted enqueue guard. Deliberately no editor red-ring either: the
 capability rung cannot exist before runtime. `resolveParamEncoding` is the only place
 the ladder runs. (An earlier version of this entry claimed an invalid override
 "rejects" and an empty ladder "throws"; neither was ever true.)
@@ -647,7 +676,7 @@ fleet.
 **14.89 Mode-name resolution is a ladder: vehicle `AVAILABLE_MODES` first, shipped tables second.** ✔ 🧪 (2026-08-18)
 Both lab stacks answer `REQUEST_MESSAGE 512 param1=435` — the standard-modes protocol is
 not PX4-only. Protocol record in `MAVLINK.md`; the toolkit rungs live in
-`lib/vehicle/modes.js`.
+`lib/vehicle/modes.js`. The PX4 table rung follows `px4_custom_mode.h` (14.151).
 
 ## 14.90 – 14.93 Mission protocol
 
@@ -814,7 +843,9 @@ judges; non-finite on an integer is already refused at the wire choke, which say
 than a builder could. The tell: a refusal because *nothing was supplied* keeps
 information the flow lost; a refusal because *what was supplied looks wrong* is the
 dialog's job. Mask-ignored filler zeros are spelled at the call sites, next to the bit
-that makes them legal.
+that makes them legal. Re-affirmed 2026-09-29: R16 added a throw for a Set Mode name
+that resolves to no mode number; it was reverted (#515), `msg` is trusted, and this entry
+stands. What ArduCopter SITL does with a NaN `DO_SET_MODE` param2 is 14.152.
 *Check:* `test/connection/wire-nonfinite.test.js`; the five mask-ignored call sites in
 `lib/move`.
 
@@ -830,6 +861,8 @@ TTL expiry emits a status record (`result: 'expired'`) on **output 1** — never
 whose contract is "arrival means proceed, at most once per input"; a second message
 there runs the whole downstream chain again. Stops the flow itself caused (replacement,
 redeploy) stay silent: announce what the flow could not otherwise observe, nothing else.
+A replaced *stream* stays silent; an *ack wait* superseded by a newer input is not a
+stream, and it reports (14.47).
 *Check:* `node --test test/move/node.test.js` — the TTL test asserts output 0 is null.
 
 **14.108 PX4 accepts a one-shot `DO_REPOSITION`; `CHANGE_MODE` is the gate on both stacks.** 🧪 (2026-08-11/12, flag-clear 2026-08-22)
@@ -871,7 +904,15 @@ predicted the 2026-08-05 frame matrix in minutes, but only the rig answers actua
 `sphere` lays followers on a Fibonacci lattice with varying `down`; `pitchDeg` rotates
 body offsets around +right before heading yaws around down. Planar shapes keep
 `down: 0`; slot 0 rides the anchor; noses are not commanded (reposition yaw NaN).
-*Check:* `node --test test/formation/formation.test.js test/formation/node.test.js`.
+On a leader anchor the anchor *is* the leader, so the leader holds slot 0 and is never
+commanded; followers fill slots 1…N in sysid order (R5, #515 e7b4ed5f). Before, the
+lowest follower took slot 0: on ArduCopter SITL it was sent to the leader's exact
+position and settled 0.05 m from it while the run reported `succeeded` (2026-09-27;
+after the fix the followers held 14–28 m from it). Formation builds
+`DO_REPOSITION` through Move's `buildRepositionMessage` (R54, 10822032); the
+formation-only `reposition` Command preset row is gone (ff4cac78). The anchor's frame is
+14.153's.
+*Check:* `node --test test/formation/formation.test.js test/formation/node.test.js` ("on a leader anchor no follower is sent onto the leader, and a listed leader is never commanded (R5)").
 
 ## 14.113 – 14.115 Fan-out
 
@@ -883,10 +924,19 @@ vocabulary throw. Sysid lists are coerced, never vetted (one parser; an entry na
 vehicle selects none, and the aggregate names who was actually selected). The
 loud/quiet split stands: a `filter` matching nothing is a correct quiet answer (grey
 `0 matched`, output 1 `success: false`); an empty explicit `list` or empty `all` is loud
-(red badge, Catch-routable) — loudness follows whether the operator asserted vehicles
-exist. Broadcast refuses any non-`all` selection by construction (target_system 0
-cannot honour a subset).
-*Check:* `lib/fanout/index.js` `selectFanoutMembers`, `parseSysidList`; `node --test test/fanout/`.
+— red badge and the aggregate on output 1, with `done()` carrying no error (R37,
+#515 4a525749: action failures report on output 1, not Catch, 4fe87421) — loudness
+follows whether the operator asserted vehicles exist. Fan-out and Formation report
+through one `reportAggregate` in `lib/fanout`. Broadcast refuses any non-`all` selection
+by construction (target_system 0 cannot honour a subset). A member is never dropped
+silently: metre offsets apply where the frame has a metre reading — the global frames,
+and `LOCAL_NED` (1) / `LOCAL_OFFSET_NED` (7) on the NED setpoint — and in any other frame
+(local `COMMAND_INT` ×1e4, `BODY_*`, ENU, FRD/FLU) the member is recorded `failed`
+naming the frame, and nothing is built or sent for it (R20, #515 4b89166e; probed: every
+member of a `LOCAL_NED` `DO_REPOSITION` run got `x=0 z=30` and the run reported
+`succeeded`). A sequential PARAM_SET confirm waits once for its echo and is never
+re-sent; Max retries re-sends only `COMMAND_*` (#515 56e7bdcb).
+*Check:* `lib/fanout/index.js` `parseSysidList`, `reportAggregate`; `node --test test/fanout/` ("an empty list or empty fleet stays loud…", "a member whose offsets have no metre reading in the frame is reported failed, not sent (R20)").
 
 **14.114 Fan-out arm examples need a probe-arm, not a longer settle sleep.** 🧪
 Peers reappear seconds after a restart but arm answers DENIED for another 20–40 s while
@@ -1064,8 +1114,8 @@ inherited the wrong one. Ruled: the row's visibility is a function of the option
 `RED.mavlink.hasIdentityChoice` owns the count for the whole palette, and each dialog's
 own `refreshVisibility` ANDs it with its delivery-tier rule. Hiding changes what is
 shown, not what is sent — `fillIdentitySelect` still stamps the sole eligible identity
-into config, and a Connection with none eligible saves blank, which `resolveIdentity`
-has always read as "the Connection's default Local Identity". This generalizes the rule
+into config, and a Connection with none eligible saves blank, which `resolveIdentityId`
+reads as "the Connection's default Local Identity" (14.43). This generalizes the rule
 the Payload verb row already followed for its single-command topics (gripper, winch,
 parachute), and it is an editor-presentation rule: no runtime code moved, and §0 is
 untouched.
@@ -1303,6 +1353,318 @@ MAVLink as transmit-only telemetry), but none is flown here. Removed from the Ve
 Profile, the Fan-out firmware filter, and the Mission and Param Build firmware selects.
 The Local Identity role `custom` is a different vocabulary and stays.
 *Check:* `node --test test/nodes/vehicle-html.test.js test/command/completion.test.js`.
+
+## 14.151 – 14.169 Review fixes and their measurements (#513–#518)
+
+An external review of 0.7.3 (`c38bffe`) was re-run on the Docker SITL lab — ArduCopter
+4.7.0 (`nrc-ap-1`…`5`, the gimbal vehicle `ap-payload-31`, the companion at sysid 20)
+and PX4 1.18 SIH (`nrc-px4-11`…`13`) — through the package's real node constructors over
+a real Connection, and in real Node-RED 5.0.5, on 2026-09-27; fixes were re-measured on
+2026-09-29. The probe scripts were session-local; each entry gives the recipe. The
+fixes landed as the stacked PRs #513–#518, and the owner's 2026-09-29 review of that
+stack reverted what 14.168 and 14.169 list. Shas are the PR branches' commits.
+
+**14.151 PX4's AUTO sub-modes are TAKEOFF 2, LOITER 3, MISSION 4, RTL 5, LAND 6; the shipped table was mislabelled.** 🧪 📖 (2026-09-27; #513 ded13184, 94a7087b)
+`px4_custom_mode.h` ("never reorder") and `Commander.cpp` use those numbers. The table
+had Land=(4,2), Safe Recovery=(4,4), Return Home=(4,5), Mission=(4,6). Measured on PX4
+SIH through the Command node's Set Mode preset on Confirm: table "Land" entered
+**Takeoff** and, airborne, climbed 18.7 → 28.6 m; table "Mission" entered **Land** and
+descended 16.0 → 8.7 m; both were ACCEPTED and reported `accepted`. The 2026-08-18
+capture (`MAVLINK.md` T1) had the right raw `standard_mode` numbers, but the names
+written beside them (5 RETURN_HOME, 6 SAFE_RECOVERY, 7 MISSION, 8 LAND) are one off from
+the shipped seed's `MAV_STANDARD_MODE` (5 SAFE_RECOVERY, 6 MISSION, 7 LAND, 8 TAKEOFF);
+decoded with the seed, the capture agrees with the header row for row. Table now:
+Takeoff (4,2), Hold (4,3), Mission (4,4), Return (4,5) — PX4's own name; the standard
+mode it publishes is SAFE_RECOVERY — and Land (4,6). "Safe Recovery" and "Return Home"
+are gone. Names still match case-folded only (`nameKey` upper-cases); a space/underscore
+fold was dropped as a coercion of a `msg` value that no shipped row needs. The editor
+mirror is drift-tested against lib.
+*Check:* `node --test test/vehicle/modes.test.js` ("PX4 AUTO sub-modes follow px4_custom_mode.h…").
+*Re-measure:* Set Mode each PX4 table row on Confirm; read `px4-commander status`.
+
+**14.152 A NaN `DO_SET_MODE` param2 aborts ArduCopter SITL.** 🧪 (2026-09-27)
+`DO_SET_MODE` param2 is a float, so NaN serializes (14.56 guards integers only). Raw
+`COMMAND_LONG` 176 with `param1=1, param2=NaN` got no ACK from ArduCopter 4.7.0 SITL, and
+the process died — "Floating point exception - aborting", then a segfault and a
+container restart — on 3 of 3 vehicles (ap-2, ap-3, ap-4). What `(uint32_t)NaN` does on
+ArduPilot hardware is unmeasured (undefined behaviour in C++). PX4 1.18 SIH answered
+TEMPORARILY_REJECTED with "Unsupported main mode" and kept its mode. This is a firmware
+fact (`MAVLINK.md`), not a driver ruling: R16's throw was reverted, `msg` is trusted, and
+14.105 stands.
+*Re-measure:* raw `COMMAND_LONG` 176 `param1=1 param2=NaN` to an AP SITL; watch `docker inspect -f '{{.RestartCount}}'`.
+
+**14.153 PX4 flies a `DO_REPOSITION` altitude as AMSL whatever the frame; Formation's leader anchor rides frame 0.** 🧪 📖 (2026-09-27; #518 9e074c2e, dc7d9b0f)
+PX4's `mavlink_receiver.cpp` copies a `COMMAND_INT`'s `z` into param7 and ignores
+`frame`; `navigator` reads it as AMSL (the takeoff datum of 14.79). Move's Go to on
+Confirm with Above home and alt 20 sent `COMMAND_INT 192 frame 3 z 20`, was ACCEPTED and
+reported `accepted`; the vehicle (home 489.5 m AMSL) descended from 8.1 m to the ground,
+"Landing detected", "Disarmed by landing". The Stream tier's
+`SET_POSITION_TARGET_GLOBAL_INT` frame 6 does convert: the same node held about 19.5 m
+above home. Formation flew the same way on PX4 11–13, each run reporting `succeeded`: a
+fixed anchor at 20 on frame 3 landed and disarmed all three, and a leader anchor sent
+the leader's *relative* altitude (15.2) on frame 3 and both followers landed. The leader
+anchor's frame was one the driver chose, so it is fixed: followers ride
+`MAV_FRAME_GLOBAL` (0) at the leader's AMSL `alt` from the peer table, which both stacks
+fly as written (PX4 followers climbed to 14.5–14.8 m above home, the leader at 15 m, and
+held; ArduPilot followers to 609.1 m MSL, the leader's altitude). A fixed or
+`msg.payload.anchor` altitude, and Move's Above home, are an operator's choice of the
+spec-correct frame 3, and they ride: rings withholding Above home on PX4 were built and
+dropped (14.168). The two PX4 SITL examples (29, 30) that used Above home on a command
+tier — our own examples, flying into the ground — use Absolute (MSL) 510 m.
+*Check:* `node --test test/formation/node.test.js` ("leader anchor reads position, AMSL altitude and heading from the peer table, and rides MSL (FORMATION-PX4)").
+
+**14.154 A relative Turn is not re-sent on ack silence: ArduPilot turns the delta again.** 🧪 (2026-09-27, re-measured 2026-09-29; #515 4e9f2219, #516 ea6e3d26)
+ArduPilot applies a relative `CONDITION_YAW` to the heading at the moment each copy
+arrives. With the vehicle's first COMMAND_ACK(115) dropped by a relay, the Move node's
+Turn (+30°, relative, Confirm, timeout 1500 ms, 3 retries) re-sent after the ack window
+and ArduCopter 4.7.0 turned **60.2°** (212.5° → 272.7°) at the default rate and 45.1° at
+10°/s, while the node reported `accepted, retries 1`; the over-turn is whatever the
+first turn had done when the copy landed. PX4 answers `CONDITION_YAW` with UNSUPPORTED
+(3), so the double turn is ArduPilot's on this lab. Now Turn passes
+`noAutoRetry: relative` to the `AckWaiter`: a relative turn's silence is never re-sent,
+while a TEMPORARILY_REJECTED back-off keeps its configured budget, and an absolute Turn,
+Go to and Speed re-send as before. Re-measured with the same relay: one
+`COMMAND_LONG(115)`, `unconfirmed, retries 0` after 1501 ms, and the vehicle turned
+30.1° (270.0° → 300.0°); the unfixed code on that run re-sent and turned 45°.
+*Check:* `node --test test/move/node.test.js test/command/resend.test.js` ("mavlink-move relative Turn confirm settles unconfirmed on ack silence without re-sending (R29)").
+
+**14.155 MANUAL_CONTROL thrust neutral is 500 on ArduCopter and PX4, not only ArduSub.** 🧪 📖 (2026-09-27; #516 3dd59c0e, 32f8faf3)
+14.102 recorded ArduSub. ArduCopter's `handle_manual_control_axes` returns on `z < 0`,
+discarding the whole frame, and maps `z` 0…1000 onto throttle, so 0 is minimum; PX4 maps
+0…1000 onto its throttle range. Measured through Move's `buildManualMessage` at 10 Hz:
+ArduCopter 4.7.0 in ALT_HOLD at 20 m — `z = 0.5` (wire 500) held; `z = −0.2` dropped
+every frame, pitch included, and once `RC_OVERRIDE_TIME` (3 s) lapsed the vehicle fell
+back to SITL RC throttle and lost 4.3 m at 2.46 m/s; `z = 0` descended 5.2 m at full
+rate. PX4 SIH Altitude — 500 held, 0 descended at 1.36 m/s, negative z added no descent;
+Stabilized — 0 dropped at 3.3 m/s within 0.5 s. The Move help had said 0 is neutral
+outside Sub, which was our wrong text; it now says 0.5 on Copter, Sub and PX4. The ring
+stays ArduSub-only: extending it refused a value the dialect declares (±1000) because of
+how two firmwares read it (14.168).
+*Check:* `rg -n "0.5 for thrust on Copter, Sub and PX4" nodes/mavlink-move.html`; `node --test test/nodes/move-html.test.js`.
+
+**14.156 Attitude without thrust holds position on ArduCopter and is refused by PX4 Offboard.** 🧪 📖 (2026-09-27)
+`SET_ATTITUDE_TARGET` with THROTTLE_IGNORE (mask 71), roll 20°, 10 Hz for 4 s, to
+ArduCopter 4.7.0 in GUIDED at 20 m: max |roll| 0.0° and 0.01 m drift, against 20.2° and
+14.6 m with thrust 0.5 (mask 7). `handle_message_set_attitude_target` calls
+`hold_position()` on THROTTLE_IGNORE, and also on a body-rate set that is neither all
+three nor none (source, `GCS_MAVLink_Copter.cpp`). PX4 SIH publishes the setpoint only
+with thrust: Set Mode Offboard answered "Switching to Offboard is currently not
+available", and dropping thrust mid-Offboard triggered "Failsafe activated", "RTL: start
+return" — while the node reported `streaming` throughout. No ring: a thrust-required ring
+(except Plane) and a whole-rate-trio ring on Copter were built and dropped (14.168).
+*Re-measure:* stream `buildAttitudeMessage` with and without thrust to AP in GUIDED; watch roll and position.
+
+**14.157 PX4 records whatever yaw `DO_SET_HOME` carries, and ACKs a zero-radius Orbit it will not fly.** 🧪 (2026-09-27; #515 d98959d6)
+Set Home on PX4 SIH, vehicle heading 120.2°: param4 zero-filled → home yaw 0.0 (north,
+`manual_home: True`); param4 NaN → PX4 stores **NaN**; param1 = 1 ("use current") →
+120.0°. Orbit with every param blank (radius zero-filled): ACCEPTED, mode Orbit,
+STATUSTEXT "Orbit radius limit exceeded", no circling for 8 s, empty `orbit_status` — a
+false `accepted`; radius 10 orbited at 10 m. The zero-fills invented a north heading and a
+0 m radius where the spec's "no value" is NaN (§4), so Set Home pins param4 to NaN (the
+spec's "NaN to use default heading") and a blank Orbit radius sends NaN, like its
+centre, velocity and altitude. On PX4 that trades a false north for a stored NaN; only
+param1 = 1 records the real heading (`MAVLINK.md`). A NaN radius was not re-flown after
+the change.
+*Check:* `node --test test/command/merge-params-nan.test.js` ("Set Home sends yaw NaN…", "absent orbit centre, velocity and altitude encode the spec NaN sentinels…").
+
+**14.158 The route follows the newest endpoint a CRC-verified, signing-trusted frame arrives on.** 🧪 (2026-09-27; #513 c874095c)
+After `docker restart nrc-ap-5` the autopilot sent from a new UDP source port (53416 →
+37532). `_recordEndpoint` promoted only when a component had no primary, and UDP never
+reports a failed write that could demote one, so the table kept the dead port as primary
+and listed the new one `primary: false`: every directed command went to the dead port
+until a redeploy (`ALT_HOLD` ack null). Now a new endpoint of a known component becomes
+primary and emits `primary-changed`; a frame on an already-known endpoint never moves the
+route, so two live links to one vehicle do not alternate. Only a CRC-verified frame
+reaches the peer table (14.160), and a frame signing marks untrusted teaches no endpoint.
+On an unsigned link any CRC-valid frame from a new address moves the route — signing is
+the protection there. Re-measured through two restarts: `primary-changed` 53072 → 39989
+→ 47082, and the Command node's Set Mode `accepted` after each.
+*Check:* `node --test test/connection/runtime.test.js` ("a vehicle that restarts on a new UDP source port is commanded there, not at the dead port (N1)").
+
+**14.159 A vehicle's CANCELLED is a terminal answer; a superseded ack wait reports; only a close is quiet.** 🧪 (2026-09-27; #515 593e1558, owner answer Q2)
+The ack waiter's local `cancel()` resolved `result: 'cancelled', resultCode: 6`, so the
+nodes' quiet branch swallowed a vehicle's `MAV_RESULT_CANCELLED` too. PX4 SIH answers
+`DO_LAND_START` (189) with 6 in 8 ms: the Command node emitted nothing, left the badge on
+"#189…", and called `done()` with no error. ArduCopter 4.7.0 never sends 6 (no
+`MAV_RESULT_CANCELLED` in `libraries/**` or `ArduCopter/`; the node side was confirmed
+with an injected ack). The same branch swallowed supersession: two back-to-back Confirm
+inputs to the payload vehicle both reached it and were both ACCEPTED (servo 10 → 1100,
+11 → 1900), and only the second was reported. Now `cancel(reason)` settles
+`{cancelled: true, result: 'cancelled', resultCode: null, detail: reason}`; a vehicle's 6
+flows through `settleAck`'s terminal arm as `cancelled` with resultCode 6; a wait
+superseded by a newer input puts `{result: 'cancelled', detail: 'superseded'}` on output
+1 and calls `done()`; a close stays quiet (14.47). Command (Confirm and Complete), Move,
+Payload and Param share it.
+*Check:* `node --test test/command/ack.test.js test/command/node.test.js` ("a vehicle MAV_RESULT_CANCELLED settles as a terminal ack, not a local cancel (R9)", "a superseded Confirm wait reports cancelled/superseded on output 1 (R9, Q2)").
+
+**14.160 Only CRC-verified frames teach the peer table; an unknown message id still reaches subscribers.** 🧪 (2026-09-27; #513 bf7e23c5)
+A frame whose msgid the bound dialect lacks decodes as `UNKNOWN_<id>` with no CRC check
+(there is no CRC_EXTRA to check against), and those frames called `peerTable.update`:
+1 MiB of random bytes on loopback gave 957 UNKNOWN frames, 249 phantom systems with no
+endpoints, and a Fan-out `all` that built and "sent" to five of them, `succeeded`. Now
+`_onFrame` updates the table only for `frame.crcVerified`; UNKNOWN frames still dispatch
+to subscribers, and `mavlink-in` forwards them (§4). This supersedes 0.5.0's "the peer
+table counts the sender as alive". Re-run: 966 UNKNOWN frames dispatched, 0 peers, Fan-out
+`all` → `empty`.
+*Check:* `rg -n "frame.crcVerified" lib/connection/runtime.js`; `node --test test/connection/runtime.test.js` ("an UNKNOWN_<id> frame dispatches but teaches the peer table nothing (crcVerified gating)").
+
+**14.161 Param's waits run on lib/param's transfer machines, with bounded re-sends; a set whose echo never arrives is `unconfirmed`.** ✔ 🧪 (2026-09-29; #517 be4b0c1b, dcf94317; owner answers R38)
+The Param node carried its own fourth transfer engine. It is gone: confirm-set runs
+`ParamRestore` with one parameter, confirm-read `ParamRead`, collect `ParamBackup` — the
+machines System's backup and restore already run — under the node's `cancelSlot`. That
+fixed two defects of the hand engine: read and collect returned a PX4 integer's raw
+float bits (INT32 1 read as 1.4e-45, and read-then-set wrote 0; R28), and collect's
+deadline dropped frames still arriving (R32). The machines re-send on silence up to
+**Max retries** (editor default 3; 0 disables them; Timeout default 10000 ms), shown on
+Confirm and Collect only. This supersedes 0.6.0's removal of Param re-sends ("one set,
+one list request"): the re-send is the one `common.xml` describes for `PARAM_SET`, it is
+visible and operator-bounded, and it comes with the reused machines rather than as new
+policy. Silence cannot say whether the vehicle took a value, so a set whose echo never
+arrives settles `unconfirmed` (`ParamRestore._onStepExhausted`) with the reason
+`stalled at param <id> after N retries`; a read or collect that gives up reports
+`failed`. Output 0 is `{paramId, paramType, value}` for a set, the same plus `index` for
+a read, and an array of those for a collect. Measured on ArduCopter 4.7.0 SITL: a
+confirm-set of `WPNAV_SPEED`, which the firmware does not have, with Max retries 1
+reported `unconfirmed`, "stalled at param WPNAV_SPEED after 1 retries". System's restore
+shares the machine; there an unechoed section still lands under `failed[section]`.
+*Check:* `node --test test/param/node.test.js test/param/backup.test.js` ("read and collect decode a PX4 integer through the union, not as its raw float bits (R28)", "collect re-arms its window on every frame…(R32)").
+
+**14.162 A parameter backup survives a frame lost late in a vehicle-paced stream: every in-range frame re-arms the step timer.** 🧪 (2026-09-27, link emulated; #516 ef7a4ddd)
+ArduPilot restarts a repeated `PARAM_REQUEST_LIST` at index 0 (`GCS_Param.cpp`), and on
+a radio it paces `PARAM_VALUE` to its own budget. Against AP sysid 2 (1369 params)
+through a relay that paced 45 frames/s and purged its queue on a new request — an
+emulation, because `SIM_BAUDLIMIT_EN=1` on the udpclient link silenced the vehicle until
+restart — dropping index 900 on the first pass failed after 4 requests at 1368/1369 in
+70.4 s: duplicates did not re-arm the step timer, so it expired before index 900 came
+round. A buffering FIFO link recovered (1369 in 60.3 s), and so did a drop at index 100.
+Now every in-range frame, a duplicate included, re-arms the timer, so the re-stream is
+progress; the wait stays bounded by Max retries + 1 streams, and no by-index
+`PARAM_REQUEST_READ` path was added.
+*Check:* `node --test test/param/backup.test.js` ("a frame lost late in a vehicle-paced stream is recovered by the retry's re-stream (R14)").
+
+**14.163 One result vocabulary: Build reports `built`, Send reports `sent`, an ack tier its answer.** ✔ (2026-09-27; #515 202ded0c, 9670d758; #518 51646ccb)
+The same outcome had several spellings: ack silence was `unconfirmed`, `timeout`,
+`timed-out` or `failed` by node; Build was `built` or `succeeded`, green or yellow; a
+Fan-out broadcast denial was `result_2` (probed across Command, Move, Payload, Param,
+Mission, Build and Fan-out with editor defaults). Now `delivery.completeBuild` is the one
+Build report — yellow preview badge `built <label>`, the message on output 0,
+`result: 'built'` on output 1 — for Command, Move, Payload, Param and Mission; a Send
+reports `sent`, Param's included; and `settleAck` in `lib/command/ack.js` is the one ack
+classifier for Command, Move and Payload: `accepted` (output 0 carries the record),
+`unconfirmed` for a silent window, the vehicle's `MAV_RESULT` name through
+`RESULT_NAME`, `failed` when a send or re-send threw (its error reaches `done`), and
+14.159's `cancelled`. Fan-out members use the same words, a broadcast denial included.
+`succeeded` stays where a transfer machine settled a multi-message exchange (Param
+confirm/read/collect, Mission transfers, System backup/restore/FTP/log) and on the
+Fan-out and Formation aggregates.
+*Check:* `node --test test/command/settle-ack.test.js test/delivery/delivery.test.js test/fanout/` ("completeBuild: yellow preview badge, the message on output 0, a built record on output 1").
+
+**14.164 Mission's no-progress deadline is upload's alone, and as long as the configured step budget.** ✔ (2026-09-27, FakeTimers; #517 91b21eb3)
+A hidden 60 s `DEFAULT_TRANSFER_DEADLINE_MS` cut short retries the operator configured:
+a download with a 120 s step budget failed "no progress at request-list for 60000 ms
+(transfer deadline)" after 3 sends. The constant is deleted (§4: no invented timeout).
+Upload keeps its no-progress deadline — re-armed whenever a sequence is answered, since
+the vehicle drives that exchange — and it is `timeout × (maxRetries + 1)`, never shorter
+than the operator's own budget; download, clear and set-current are bounded by their
+step retries.
+*Check:* `node --test test/mission/retry.test.js` ("the deadline is the configured step budget, so it never cuts a retry short (R31)").
+
+**14.165 A log hole is re-requested when the outstanding request's last packet is in, once per hole.** 🧪 (2026-09-27, re-measured the same day; #517 7bf8c87e)
+Downloading 57 600 bytes of log 1 from ArduCopter 4.7.0 SITL (System defaults: 10000 ms,
+3 retries) with the relay dropping the `LOG_DATA` at offset 17280, the machine asked for
+the hole only when the step timer fired: a 10.04 s stall per lost packet with the link
+idle, 10.41 s for a transfer that takes about 0.4 s lossless. A hole is now a loss once
+the outstanding request's final packet has arrived, and it is re-requested then, once per
+hole, which also ends a per-packet request storm after EOF. No retry was added; the step
+budget is unchanged. Re-measured: the re-request left 0.04 s after the drop and the
+download took 0.42 s.
+*Check:* `node --test test/log/machine.test.js` ("a packet lost mid-window is re-requested when the window's last packet arrives, not after the step timeout (R33)").
+
+**14.166 Gimbal aim units follow the path, and a rate aim needs NaN angles.** 🧪 📖 (2026-09-27, `ap-payload-31`; #516 d24f41e0, 4e3a6f0c, 28ae1c1b)
+Same `values {pitch: −0.5, yaw: 0.4}` on ArduCopter 4.7.0 with a SITL gimbal:
+`GIMBAL_MANAGER_SET_PITCHYAW` aimed −28.67°/22.92° (radians);
+`DO_GIMBAL_MANAGER_PITCHYAW` and legacy `DO_MOUNT_CONTROL` aimed −0.56°/0.4° (degrees).
+Rates split the same way: 0.1 on the message path slewed 5.74°/s (rad/s), −5 on the
+command path −5°/s (deg/s). ArduPilot drops a manager message that sets both angles and
+rates (0/0 plus rates: no motion, no ack, the node reported success), and on the command
+path aims at 0/0, ignores the rates and answers ACCEPTED; with NaN angles both paths
+slewed at the commanded rate. The dialog could not express that — manager pitch/yaw
+defaulted to 0, an invented value where the dialect's "unused" is NaN (§4), and the
+blank ring refused blank angles — so a blank manager-path pitch or yaw now rides NaN.
+The attitude path keeps its `angular_velocity_*` slots (blank → NaN); removing them
+because ArduPilot drops an attitude plus rates was reverted (14.168). The help states the
+units per path. `DO_IMAGE_START_CAPTURE` with count 0 and interval 0 took **one** photo on
+ArduPilot (`image_count` 0 → 1); continuous capture needs an interval > 0.
+*Check:* `node --test test/payload/payload.test.js` ("gimbal manager rate aim: blank pitch/yaw ride NaN on both manager paths (R17)").
+
+**14.167 Both firmwares keep 238 bytes of an FTP path; the ring stays at the wire's 239.** 🧪 📖 (2026-09-27; #517 112e1aea, 436f67dd)
+ArduPilot `GCS_FTP.cpp` and PX4 `mavlink_ftp.cpp` write NUL over byte 239 of the request
+path (source). Measured on ArduCopter 4.7.0: a 239-byte path uploaded `succeeded` and was
+stored as 238 bytes, last character dropped; downloading the same 239-byte path also
+`succeeded`, because it truncates identically, so a round trip hides the rename. A
+`list "/"` returned neither a 237- nor a 238-byte name. The System dialog's ring stays at
+the `data[239]` the wire carries, now measured with `TextEncoder`; a 238-byte ring and a
+listing advisory were built and dropped (14.168). The fact is in `MAVLINK.md`.
+*Check:* `rg -n "TextEncoder" nodes/mavlink-system.html`.
+
+**14.168 A ring may refuse what our own code would get wrong, never what a firmware does with a legal value.** ✔ (owner ruling, 2026-09-29)
+"If pymavlink can fly it into the ground, so can we. But if it's due to [our] incorrect
+behavior, then that's bad." Applied to the #513–#518 stack, these rings and help
+advisories were built and then dropped, each refusing or annotating a value the dialect
+carries because of what a vehicle does with it:
+- Move: Above home withheld on PX4 command tiers (b5180f53, reverted 623d15a7; the
+  shared `repositionAboveHomeRefusal` went with it, fe415b1c) — 14.153.
+- Move: the thrust stick ringed at ≤ 0 on Copter and PX4 (3dd59c0e, trimmed 32f8faf3;
+  the ArduSub ring stays) — 14.155.
+- Move: a yaw-only Steer ringed on ArduPilot (0692ba82, the advisory #285 removed, back
+  as a refusal) and Attitude needing thrust except on Plane plus a whole rate trio on
+  Copter (e1d3521c); both reverted by dec7ce35 — 14.98.2, 14.156.
+- Formation: a fixed-anchor altitude ref with Above home withheld on PX4 (9e074c2e,
+  trimmed dc7d9b0f), and a sphere or pitched fixed anchor needing alt ≥ spacing (E5,
+  638c88e4, reverted 2622c158).
+- Payload: the attitude aim's rate slots removed (d24f41e0, restored 4e3a6f0c) — 14.166.
+- System: a 238-byte FTP path ring and a listing advisory (112e1aea, trimmed 436f67dd
+  and 80c5cee4) — 14.167.
+- Param: a Param id ring refusing lowercase and whitespace because PX4's `param_find` is
+  case-sensitive (f29252c3, trimmed 0b6afcf8). The dialog's own defect is fixed instead:
+  its definition lookup trimmed and upper-cased the id, so " fltmode1" showed FLTMODE1's
+  widgets; the lookup is now exact, and the ring is the wire's 16 characters.
+- Mission: a help sentence that ArduPilot's item 0 is home (71976bc2, dropped d4fd95dc).
+
+Kept, because each is our own behaviour: the leader anchor's frame (14.153), the PX4
+examples that flew into the ground (14.153), the Move help that called 0 neutral outside
+Sub (14.155), manager pitch/yaw defaulting to 0 (14.166), the Set Home and Orbit
+zero-fills (14.157), and Liveness (band 1) withdrawn from Out and Build, where the queue
+replaces the frame with a heartbeat while the node reports `sent` (R27, ddf18559). The
+firmware facts are in `MAVLINK.md`.
+*Check:* `rg -n "repositionAboveHomeRefusal" nodes resources` — no matches.
+
+**14.169 Rulings the #513–#518 stack re-raised; the earlier ruling stands.** ✔ (owner, 2026-09-29)
+Each was built in the stack and reverted before merge. A review finding that asks for
+the same remedy again is declined without re-analysis (§9).
+- `send()` does not check what the band queue returned. A `msg.band` no queue case
+  answers to (a string `"2"` from a Change node) queues nothing while Out reports `sent`
+  (measured, R10), and a throw there is the runtime guard reverted on 2026-08-22
+  (cd77122d, d793c48a; 14.81 cites it): `msg.band` is trusted, the band select is the
+  protection. Revert: a1ae5e97.
+- The compiled-dialect cache is written in place. A truncated file craters at
+  `JSON.parse` and Rebuild dialect recovers (b15845ca, review 1.17); an atomic write for
+  a simulated tear, and a `seedStamp` header nothing reads, were reverted (e1d27e0c,
+  383cc419).
+- "To compid" keeps out a message with no `target_component` (#506, 83c0b1dc; revert
+  88bfe6bd), although ArduPilot does forward a system-addressed `SET_MODE` to a
+  companion's link (measured: 3 of 3 frames).
+- The companion-on-target-0 Connection ring stays removed (#508, d2ea42b3; revert
+  ac37b11d), and so does an inherited-0 rung on Mission's Target sysid (#508; revert
+  80b5798a; the explicit-0 ring stays).
+- A parent change in `dependentSelect` re-picks the first enabled option, as #511
+  designed (revert 4aac2b53).
+- Out selects the topic shape by the presence of `msg.topic`, a stock Inject's
+  `topic: ""` included (eb096259; revert 8b3797f7). The help now says so, and that
+  `{name, fields}` takes the wire's snake_case field names.
+- The signing first-contact floor reads local wall time (14.140; revert 42bbd10c).
+- R16's Set Mode throw (14.105).
+*Check:* `rg -n "msg.topic !== undefined" nodes/mavlink-out.js`; `rg -n "writeFileSync" lib/metadata/bundled.js`.
 
 ## Removed from the old §14, and why
 
