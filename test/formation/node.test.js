@@ -22,7 +22,6 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon in d
     spacing: 10,
     sysids: '1,2,3',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: ANCHOR.lat,
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
@@ -225,7 +224,6 @@ test('a fixed anchor reports no leader — there is none', async () => {
     spacing: 10,
     sysids: '1,2,3',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: ANCHOR.lat,
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
@@ -389,7 +387,6 @@ test('a blank fixed anchor altitude rides as the coercion — the editor is the 
     spacing: 10,
     sysids: '1',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: 47.4,
     lon: 8.5,
     alt: '',
@@ -422,7 +419,6 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
     spacing: 10,
     sysids: '1,2',
     anchorMode: 'leader',
-    altRef: 'home',
     leader: 7,
     pitchDeg: 0,    delivery: 'send',
     intervalMs: 0,
@@ -436,37 +432,8 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
   assert.equal(bySysid[1].x, e7(47.0), 'payload anchor wins over the leader');
   assert.equal(bySysid[1].y, e7(8.0));
   assert.equal(bySysid[1].z, 25);
-  assert.equal(bySysid[1].frame, 3, 'a payload anchor rides the configured Altitude ref, not the leader MSL frame');
+  assert.equal(bySysid[1].frame, 3, 'a payload anchor rides the default frame (above home), not the leader MSL frame');
   assert.ok(bySysid[2].y > e7(8.0), 'payload heading 0 (not leader 180) orients the line east');
-});
-
-test('a fixed anchor on Absolute (MSL) rides MAV_FRAME_GLOBAL with the altitude as entered (FORMATION-PX4)', async () => {
-  const connection = connectionStub([peer(1), peer(2)]);
-  const RED = redStub({ conn: connection });
-  require('../../nodes/mavlink-formation')(RED);
-  const node = new (RED.nodes.types['mavlink-formation'])({
-    connection: 'conn',
-    shape: 'line',
-    spacing: 10,
-    sysids: '1,2',
-    anchorMode: 'fixed',
-    altRef: 'msl',
-    lat: ANCHOR.lat,
-    lon: ANCHOR.lon,
-    alt: 510,
-    headingDeg: 0,
-    pitchDeg: 0,
-    delivery: 'send',
-    intervalMs: 0,
-  });
-
-  await emitInput(node, { payload: {} }, () => {});
-
-  assert.equal(connection.sends.length, 2);
-  for (const { message } of connection.sends) {
-    assert.equal(message.fields.frame, 0, 'Absolute (MSL) is MAV_FRAME_GLOBAL');
-    assert.equal(message.fields.z, 510, 'the MSL altitude rides z as entered');
-  }
 });
 
 test('msg.payload.headingDeg is trusted input: Number() coercion, never a refusal', async () => {
@@ -482,7 +449,6 @@ test('msg.payload.headingDeg is trusted input: Number() coercion, never a refusa
     spacing: 10,
     sysids: '1,2',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: 47.397742,
     lon: 8.545594,
     alt: 30,
@@ -520,7 +486,6 @@ test('formation builds COMMAND_INT with per-member degE7 coords (§9)', async ()
     spacing: 10,
     sysids: '1,2',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: ANCHOR.lat,
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
@@ -559,7 +524,6 @@ test('Build previews: a yellow badge, nothing sent, one built message per member
     spacing: 10,
     sysids: '1,2',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: ANCHOR.lat,
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
@@ -591,7 +555,6 @@ test('Change mode sets the DO_REPOSITION CHANGE_MODE flag in param2; radius ride
       spacing: 10,
       sysids: '1',
       anchorMode: 'fixed',
-      altRef: 'home',
       lat: ANCHOR.lat,
       lon: ANCHOR.lon,
       alt: ANCHOR.alt,
@@ -622,7 +585,6 @@ test('close aborts an in-flight formation run and waits for it to unwind', async
     spacing: 10,
     sysids: '1,2,3',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: ANCHOR.lat,
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,
@@ -665,7 +627,6 @@ test('msg.payload.sysids overrides the configured member list', async () => {
     spacing: 5,
     sysids: '1,2,3',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: 47.4,
     lon: 8.5,
     alt: 30,
@@ -694,7 +655,6 @@ test('sphere with pitchDeg override fans distinct altitudes via DO_REPOSITION', 
     spacing: 12,
     sysids: '1,2,3,4,5',
     anchorMode: 'fixed',
-    altRef: 'home',
     lat: ANCHOR.lat,
     lon: ANCHOR.lon,
     alt: ANCHOR.alt,

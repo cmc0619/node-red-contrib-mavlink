@@ -75,39 +75,21 @@
             || 'must be a longitude within ±180°'),
       },
       // alt is required whenever set as the fixed anchor: a blank altitude
-      // must not become 0 — that commands a descent to home level or sea
-      // level. A sphere, or any pitched shape, puts slots below the anchor
-      // (the lowest sphere slot at alt − spacing), so Above home the anchor
-      // must be at least one spacing up or a vehicle is commanded below home.
-      // Absolute (MSL) has no home to measure against here.
+      // must not become 0 — that commands a descent to home level. A sphere,
+      // or any pitched shape, puts slots below the anchor (the lowest sphere
+      // slot at alt − spacing), so there the anchor must be at least one
+      // spacing above home or a vehicle is commanded below it.
       alt: {
         value: '',
         validate: whenAnchorMode('fixed', function (v, _opt) {
-          if (!finiteRequired(v)) return 'needs an altitude — blank would ride as 0 m';
-          const ref = RED.mavlink.liveOr(this, '#node-input-altRef', this.altRef, 'home');
+          if (!finiteRequired(v)) return 'needs an altitude — blank would ride as ground level';
           const shape = RED.mavlink.liveOr(this, '#node-input-shape', this.shape);
           const pitch = Number(RED.mavlink.liveOr(this, '#node-input-pitchDeg', this.pitchDeg, '0'));
           const spacing = Number(RED.mavlink.liveOr(this, '#node-input-spacing', this.spacing));
-          if (ref === 'home' && (shape === 'sphere' || pitch !== 0) && Number(v) < spacing) {
+          if ((shape === 'sphere' || pitch !== 0) && Number(v) < spacing) {
             return 'must be at least the spacing on a sphere or pitched shape — a lower slot would sit below home';
           }
           return true;
-        }),
-      },
-      /**
-       * The frame a fixed or msg.payload.anchor altitude rides: Above home
-       * (GLOBAL_RELATIVE_ALT, 3) or Absolute MSL (GLOBAL, 0). A leader
-       * anchor always rides MSL from the leader's own AMSL altitude, so this
-       * is on screen in both modes only for the payload anchor's sake. Above
-       * home is withheld on PX4, which flies a DO_REPOSITION z as AMSL
-       * whatever the frame; a saved one survives and reds (§9 ruling 6).
-       */
-      altRef: {
-        value: 'home',
-        validate: RED.mavlink.oneOf(['home', 'msl'], function (v, _opt) {
-          if (RED.mavlink.liveOr(this, '#node-input-altRef', v, 'home') !== 'home') return true;
-          const firmware = RED.mavlink.resolveCatalogTarget({ source: this, isBuild: false }).firmware;
-          return RED.mavlink.repositionAboveHomeRefusal(firmware) || true;
         }),
       },
       /**
@@ -135,25 +117,6 @@
     icon: 'font-awesome/fa-th',
     label() { return this.name || 'mavlink formation'; },
     oneditprepare() {
-      const node = this;
-      const ALTREF_OPTIONS = [['home', 'Above home'], ['msl', 'Absolute (MSL)']];
-      /**
-       * Rebuild the altitude-reference list from the Connection's Vehicle
-       * Profile: Above home is withheld where the firmware flies it as MSL.
-       * No profile withholds nothing, and a saved value survives (§9 ruling 6).
-       */
-      function refreshAltRefOptions() {
-        const firmware = RED.mavlink.resolveCatalogTarget({ isBuild: false }).firmware;
-        const homeRefused = Boolean(RED.mavlink.repositionAboveHomeRefusal(firmware));
-        RED.mavlink.refreshOptionSelect({
-          select: '#node-input-altRef',
-          options: ALTREF_OPTIONS,
-          saved: node.altRef,
-          withhold: (value) => value === 'home' && homeRefused,
-        });
-      }
-      $('#node-input-connection').on('change', refreshAltRefOptions);
-      refreshAltRefOptions();
       function refreshAnchorRows() {
         const mode = $('#node-input-anchorMode').val() || 'leader';
         $('#row-formation-leader').toggle(mode === 'leader');
@@ -181,7 +144,6 @@
   <div class="form-row" id="row-formation-lat"><label for="node-input-lat">Latitude</label><input type="number" id="node-input-lat"></div>
   <div class="form-row" id="row-formation-lon"><label for="node-input-lon">Longitude</label><input type="number" id="node-input-lon"></div>
   <div class="form-row" id="row-formation-alt"><label for="node-input-alt">Altitude m</label><input type="number" id="node-input-alt"></div>
-  <div class="form-row"><label for="node-input-altRef">Altitude ref</label><select id="node-input-altRef"></select></div>
   <div class="form-row"><label for="node-input-headingDeg">Heading deg</label><input type="number" id="node-input-headingDeg" placeholder="blank = leader's heading (leader anchor only)"></div>
   <div class="form-row"><label for="node-input-pitchDeg">Pitch deg</label><input type="number" id="node-input-pitchDeg" step="any"></div>
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
@@ -224,19 +186,15 @@
   <p>A leader anchor rides <i>Absolute (MSL)</i> (<code>MAV_FRAME_GLOBAL</code>,
   frame 0) at the leader's own reported MSL altitude, so followers hold the
   leader's height on ArduPilot and PX4 alike. A fixed anchor, and
-  <code>msg.payload.anchor</code> in either mode, read their altitude by
-  <b>Altitude ref</b>: <i>Above home</i> (<code>MAV_FRAME_GLOBAL_RELATIVE_ALT</code>,
-  frame 3, the default) or <i>Absolute (MSL)</i> (frame 0). On a PX4 profile
-  <i>Above home</i> is not offered: PX4's <code>COMMAND_INT</code> handler
-  ignores the frame and flies the altitude as MSL, so 20 m "above home" is a
-  descent to 20 m above sea level — use <i>Absolute (MSL)</i> with the home
-  elevation added. Slot 0 sits on the anchor altitude; planar shapes keep every
+  <code>msg.payload.anchor</code> in either mode, are metres above home
+  (<code>MAV_FRAME_GLOBAL_RELATIVE_ALT</code>, frame 3, the carrier's default
+  frame). Slot 0 sits on the anchor altitude; planar shapes keep every
   follower level with it. <b>Sphere</b> places followers on a Fibonacci lattice
   of radius = spacing, so their altitudes differ (<code>alt − ned.down</code>).
-  With a fixed anchor Above home on a sphere or a pitched shape, the dialog
-  requires the anchor altitude to be at least the spacing; a larger pitched
-  pattern can reach lower still, and on MSL the dialog cannot know the ground,
-  so pick an anchor high enough that its lowest slot stays clear of it.</p>
+  With a fixed anchor on a sphere or a pitched shape, the dialog requires the
+  anchor altitude to be at least the spacing; a larger pitched pattern can
+  reach lower still, so pick an anchor high enough that its lowest slot stays
+  clear of the ground.</p>
   <h3>Heading and pitch</h3>
   <p>Heading yaws the pattern in the horizontal plane (0 = north). A fixed
   anchor requires one. If blank, a leader anchor uses the leader's reported

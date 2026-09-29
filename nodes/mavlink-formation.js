@@ -5,7 +5,7 @@ const { executeFanout, parseSysidList, isActive, autopilotComponent, reportAggre
 const { isBlank, valueFrom } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
 const { buildRepositionMessage, frameForAltRef } = require('../lib/move');
-const { scaleLatLon } = require('../lib/command/carrier');
+const { DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
 
 /**
  * mavlink-formation — position a group of vehicles into a geometric formation.
@@ -20,8 +20,8 @@ const { scaleLatLon } = require('../lib/command/carrier');
  * Altitude semantics: a leader anchor rides MAV_FRAME_GLOBAL at the leader's
  * AMSL `alt`, which both stacks fly as written; PX4's COMMAND_INT handler
  * reads every DO_REPOSITION z as AMSL whatever the frame (FORMATION-PX4). An
- * explicit anchor altitude rides the frame of the configured Altitude ref
- * (Move's frameForAltRef vocabulary).
+ * explicit anchor altitude is metres above home and rides
+ * MAV_FRAME_GLOBAL_RELATIVE_ALT, the carrier's default frame.
  */
 
 module.exports = function registerMavlinkFormation(RED) {
@@ -139,7 +139,7 @@ module.exports = function registerMavlinkFormation(RED) {
  * payload heading is trusted input like every other: Number() coercion.
  *
  * Frame: a leader anchor is the leader's AMSL altitude, so MSL; a payload or
- * fixed anchor rides the configured Altitude ref.
+ * fixed anchor rides the carrier's default frame (above home).
  *
  * Pitch follows the same payload-then-config rule via {@link resolvePitch}.
  * Pitch tumbles the pattern around body +Y; it is not taken from telemetry.
@@ -161,14 +161,14 @@ function resolveAnchor(config, payload, peerTable) {
 
   // A payload anchor overrides the configured mode outright.
   if (payload.anchor !== undefined) {
-    return { anchor: payload.anchor, frame: frameForAltRef(config.altRef), headingDeg: heading };
+    return { anchor: payload.anchor, frame: DEFAULT_FRAME, headingDeg: heading };
   }
 
   switch (config.anchorMode) {
     case 'fixed':
       return {
         anchor: { lat: config.lat, lon: config.lon, alt: config.alt },
-        frame: frameForAltRef(config.altRef),
+        frame: DEFAULT_FRAME,
         headingDeg: heading,
       };
     case 'leader': {
