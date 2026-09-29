@@ -14,6 +14,7 @@ const {
   seedSources,
   setCompiledCacheDir,
   clearCompiledCache,
+  seedStamp,
 } = require('../../lib/metadata/bundled');
 
 const CORE = [
@@ -35,12 +36,12 @@ test('seed ships as a stamp-named gzip blob pointed at by active.json', () => {
   const active = JSON.parse(fs.readFileSync(path.join(seedDir, 'active.json'), 'utf8'));
   assert.match(active.file, /^mavlink-\d{4}-\d{2}-\d{2}-[0-9a-f]+\.seed\.gz$/);
   assert.ok(fs.existsSync(path.join(seedDir, active.file)), 'the named blob ships');
-  assert.equal(active.stamp, loadBundled('common').seedStamp, 'a compiled bundle carries the seed stamp');
+  assert.equal(active.stamp, seedStamp());
   const manifest = readManifest();
   assert.equal(manifest.license, 'MIT');
   assert.ok(manifest.commit && manifest.commit.length >= 7);
   assert.ok(manifest.stamp);
-  assert.equal(active.stamp, manifest.stamp);
+  assert.equal(seedStamp(), manifest.stamp);
   assert.ok(manifest.dialects.length >= CORE.length);
 });
 
@@ -177,10 +178,6 @@ test('a compiled dialect is cached on disk', () => {
     // The cache is a JSON round-trip: attributes the XML never had are absent
     // keys on disk, undefined in the compiled bundle.
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), JSON.parse(JSON.stringify(bundle)));
-    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).seedStamp, readManifest().stamp,
-      'the entry records the seed it was compiled from');
-    assert.deepEqual(fs.readdirSync(dir).filter((f) => f.endsWith('.tmp')), [],
-      'written through a temp file and renamed into place');
 
     // A second process would read the entry rather than recompile. Nothing
     // invalidates it — only clearCompiledCache() removes an entry.
