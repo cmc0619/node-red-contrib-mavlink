@@ -2152,25 +2152,6 @@
   };
 
   /**
-   * Why Above home (frame 3) is refused for a DO_REPOSITION sent as
-   * COMMAND_INT on this firmware, or null where the frame is honoured. PX4's
-   * COMMAND_INT handler copies z into param7 and never reads the frame, and
-   * navigator flies it as AMSL: alt 20 over a 489 m home flew Move (R11) and
-   * Formation (FORMATION-PX4) into the ground on SITL. Move and Formation
-   * withhold the option with this predicate and red a saved one with this
-   * reason (§9 ruling 6).
-   *
-   * @param {string} firmware  resolveCatalogTarget(...).firmware
-   * @returns {?string}
-   */
-  RED.mavlink.repositionAboveHomeRefusal = function (firmware) {
-    return firmware === 'px4'
-      ? 'PX4 reads a DO_REPOSITION altitude as MSL whatever the frame, so Above home '
-        + 'would fly to that height above sea level — use Absolute (MSL)'
-      : null;
-  };
-
-  /**
    * A `<select>` whose legal options depend on other selects. `allowed` gets
    * the parents' values and returns the legal option values, or null for all
    * of them; the rest are greyed out. A parent change re-picks the first
