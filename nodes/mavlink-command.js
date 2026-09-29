@@ -123,10 +123,11 @@ module.exports = function registerMavlinkCommand(RED) {
      * ModeContext). Wire tiers resolve against the addressed peer component
      * (the vehicle-published cache) plus the bound profile's firmware/family
      * and bundle; Build resolves through the Vehicle Profile escape only — a
-     * concrete Build dialect has no firmware axis on this node, so no name
-     * resolves there and it rides as NaN in param2 (applyModeName). A tier the
-     * editor's delivery select cannot save composes only the firmware axis
-     * (§5).
+     * concrete Build dialect has no firmware axis on this node, so shipped
+     * tables cannot pick and an unmatched name rides to the NaN tail. A tier
+     * the editor's delivery select cannot save composes only the firmware
+     * axis (§5), so name resolution falls to that same NaN tail — and the
+     * tier dispatch in handleInput sends nothing anyway.
      *
      * @param {{target: {sysid: number, compid: number}, profile: object|null}} resolution
      * @returns {import('../lib/vehicle/modes').ModeContext}
@@ -159,11 +160,8 @@ module.exports = function registerMavlinkCommand(RED) {
      * param keeps winning over the name; the name beats configured params.
      * param1 gains MAV_MODE_FLAG_CUSTOM_MODE_ENABLED — without it the
      * autopilot ignores the custom mode (the preset's help text) — OR-ed into
-     * whatever base-mode flags were already supplied.
-     *
-     * The pair always carries param2, NaN until a stack's packing writes it:
-     * a name nothing resolves rides as NaN in param2, and the vehicle judges
-     * it (§14.105).
+     * whatever base-mode flags were already supplied. An unresolvable name is
+     * NaN in param2: loud at the wire choke, never a silent mode 0.
      *
      * @param {Object<number, number>} userParams  mergeParams output, mutated
      * @param {*} payload
@@ -172,7 +170,7 @@ module.exports = function registerMavlinkCommand(RED) {
     function applyModeName(userParams, payload, resolution) {
       if (commandId !== DO_SET_MODE) return;
       if (isBlank(payload.mode)) return;
-      const modeParams = { 2: NaN, ...setModeParams(payload.mode, modeContext(resolution)) };
+      const modeParams = setModeParams(payload.mode, modeContext(resolution));
       // A resolved mode is one indivisible answer, so an explicit number wins
       // over the *whole* of it, never half. PX4's answer is a pair — param2
       // main_mode, param3 sub_mode — and filling one side from the name while
