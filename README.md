@@ -74,7 +74,7 @@ the bytes in `msg.payload` and the ID in `msg.logId`, preserving fields such as
 
 **Files** uses MAVLink FTP: list and download read `msg.payload.path` or the configured
 Path; upload takes a Buffer from `msg.payload` and reads `msg.path` or the configured Path.
-The path is limited to 238 UTF-8 bytes and cannot contain NUL. FTP `CREATE_FILE` may
+The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP `CREATE_FILE` may
 truncate an existing remote file.
 
 **Parameters → Backup** returns parameter-only `{paramId, paramType, value}` records that
