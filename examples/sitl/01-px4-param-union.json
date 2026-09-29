@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 01 PX4 param union",
     "disabled": false,
-    "info": "Set an integer PX4 parameter and read it back to verify the int/float union survives — observable only against real PX4 firmware.",
+    "info": "Set an integer PX4 parameter; its PARAM_VALUE echo verifies the int/float union survives (the read is a Send-tier request) — observable only against real PX4 firmware.",
     "env": []
   },
   {
@@ -173,7 +173,7 @@
     "id": "sitl05-read-done",
     "type": "debug",
     "z": "sitl05-tab",
-    "name": "read value",
+    "name": "read request sent",
     "active": true,
     "tosidebar": true,
     "console": false,
