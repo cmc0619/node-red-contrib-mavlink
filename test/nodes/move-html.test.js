@@ -1528,34 +1528,36 @@ test('mavlink-move: an all-blank Attitude reds — every ignore bit set commands
   );
 });
 
-test('mavlink-move: the thrust stick reds 0 and below on Copter, Sub and PX4, where neutral is 0.5 (R12)', () => {
-  // ArduCopter, ArduSub and PX4 read z as 0..1000 with neutral 500, not
-  // -1000..1000 neutral 0 (source-read). The runtime keeps the dialect's
-  // uniform scaling, so the editor is where an operator finds out: ArduCopter
-  // discards the whole frame below 0, and 0 is minimum or reverse thrust.
-  const lookup = { ...FAMILY_LOOKUP, 'conn-px4': { vehicle: 'veh-px4' }, 'veh-px4': { firmware: 'px4', dialect: 'common' } };
-  const { stickZ, stickX } = loadNodeDefaults('mavlink-move', lookup);
-  const on = (connection, v) => stickZ.validate.call(
-    { id: 'm1', action: 'manual', delivery: 'send', connection }, v, {}
+test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface lies', () => {
+  // ArduSub reads z as 0..1000 with neutral 500, not -1000..1000 neutral 0
+  // (§14, source-read). The runtime keeps the dialect's uniform scaling — a
+  // per-family map is the unmeasured guess doctrine keeps off the wire — so
+  // the editor is where an operator finds out. With the blank-axis INT16_MAX
+  // sentinel gone there is no unset escape either, so this check is all that
+  // stands between an operator's "neutral" and a dive (Codex, #303).
+  const { stickZ, stickX } = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  const onSub = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, v, {}
+  );
+  const onCopter = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-copter' }, v, {}
   );
 
-  for (const connection of ['conn-sub', 'conn-copter', 'conn-px4']) {
-    assert.match(String(on(connection, '-0.5')), /neutral 0\.5/, `a negative thrust reds on ${connection}`);
-    assert.match(String(on(connection, '0')), /minimum/, `and so does the 0 an operator means as neutral on ${connection}`);
-    assert.equal(on(connection, '0.5'), true, `the neutral ${connection} reads passes`);
-    assert.equal(on(connection, '1'), true, 'full up passes');
-    assert.match(String(on(connection, '')), /is required for Manual/, 'blank is refused outright');
-    assert.match(String(on(connection, '5')), /must be -1\.\.1/, 'out of range still reds first');
-  }
+  assert.match(String(onSub('-0.5')), /neutral 0\.5/, 'a negative thrust reds on a Sub');
+  assert.match(String(onSub('0')), /full reverse thrust/, 'and so does the 0 an operator means as neutral');
+  assert.equal(onSub('0.5'), true, 'the neutral a Sub actually reads passes');
+  assert.equal(onSub('1'), true, 'full up passes');
+  assert.match(String(onSub('')), /is required for Manual/, 'and blank is refused outright now');
 
-  // Only the thrust axis, and only where the vehicle reads it that way.
-  assert.equal(on('conn-rover', '-0.5'), true, 'a rover reads the declared -1..1 range');
-  assert.equal(on('conn-unknown', '0'), true, 'no family knowledge gates nothing');
+  // Only the thrust axis, and only on a Sub profile.
+  assert.equal(onCopter('-0.5'), true, 'the ring is ArduSub-only');
   assert.equal(
     stickX.validate.call({ id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, '-0.5', {}),
     true,
-    'pitch is unaffected'
+    'pitch is unaffected on a Sub'
   );
+  // The generic range check still applies on top.
+  assert.match(String(onSub('5')), /must be -1\.\.1/, 'out of range still reds first');
 });
 
 test('move closed vocabularies and target compid carry rings (walled-garden sweep)', () => {
