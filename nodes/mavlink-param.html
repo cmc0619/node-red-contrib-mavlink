@@ -41,11 +41,6 @@
        * The driver sends what it is handed: a blank id rides as 16 empty bytes
        * and the vehicle answers nothing, so the only place this can be caught
        * before the wire is here (§0 walled garden).
-       *
-       * The id is sent exactly as saved, and PX4's `param_find` compares it
-       * byte for byte. The dialog trims and uppercases it only to find its
-       * definition, so " fltmode1" would show FLTMODE1's widgets while a set
-       * the vehicle ignores reports `sent`: lowercase and whitespace red.
        */
       paramId: {
         value: '',
@@ -55,9 +50,6 @@
           if (RED.mavlink.isBlank(v)) {
             return 'is required — a set or a read by name identifies the parameter by its '
               + 'PARAM_ID, and a blank one reaches the vehicle as an empty name';
-          }
-          if (/[a-z\s]/.test(v)) {
-            return 'must be the exact PARAM_ID, uppercase with no spaces — the vehicle matches it byte for byte';
           }
           // char[16] on the wire. The input carries maxlength, so this catches
           // a hand-edited flow rather than typing.
@@ -239,8 +231,7 @@
    * @returns {string}
    */
   function editedParamId(node) {
-    return RED.mavlink.liveOr(node, '#node-input-paramId', node?.paramId)
-      .toUpperCase().trim();
+    return RED.mavlink.liveOr(node, '#node-input-paramId', node?.paramId);
   }
 
   /**
@@ -567,7 +558,7 @@
       let _infoDef;
 
       function refreshParamInfo() {
-        const id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        const id = $('#node-input-paramId').val();
         const def = _paramDefs[id];
         _infoDef = def;
 
@@ -836,7 +827,7 @@
         // Same read refreshParamInfo opens with; equal definition = equal
         // render, so only a keystroke that lands on (or leaves) a definition
         // rebuilds the selects. The results panel below still updates.
-        const id = ($('#node-input-paramId').val() || '').toUpperCase().trim();
+        const id = $('#node-input-paramId').val();
         if (_paramDefs[id] === _infoDef) return;
         refreshParamInfo();
       });
