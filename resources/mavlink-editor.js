@@ -1838,7 +1838,6 @@
   function inheritedTargetSystem(self, tier) {
     return inheritedProfileDefault(self, tier, 'defaultTargetSystem');
   }
-  RED.mavlink.inheritedTargetSystem = inheritedTargetSystem;
 
   /**
    * One Vehicle Profile default a blank target field inherits, by the rung

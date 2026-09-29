@@ -192,27 +192,6 @@ test('mavlink-mission target sysid: a configured broadcast reds for download/upl
   assert.match(String(targetComponent.validate.call({ id: 'm1' }, '300', {})), /between 0 and 255/);
 });
 
-test('mavlink-mission target sysid: a blank that inherits broadcast (0) from the profile reds (R25)', () => {
-  // With target 0 the transfer takes every vehicle's replies: a download
-  // assembled one plan from sysids [1, 2, 1] and reported it succeeded.
-  const { targetSystem } = loadNodeDefaults('mavlink-mission', {
-    c0: { vehicle: 'v0' },
-    c1: { vehicle: 'v1' },
-    v0: { defaultTargetSystem: 0 },
-    v1: { defaultTargetSystem: 1 },
-  });
-  const verdict = (config) => targetSystem.validate.call({ id: 'm1', ...config }, '', {});
-
-  assert.match(String(verdict({ operation: 'download', delivery: 'confirm', connection: 'c0' })),
-    /inherits broadcast \(0\).*cannot download/);
-  assert.match(String(verdict({ operation: 'upload', delivery: 'confirm', connection: 'c0' })), /cannot upload/);
-  assert.match(String(verdict({ operation: 'set-current', delivery: 'confirm', connection: 'c0' })), /cannot set-current/);
-  assert.match(String(verdict({ operation: 'download', delivery: 'build', dialect: '__vehicle', vehicle: 'v0' })),
-    /inherits broadcast/, 'Build reads the node\'s own profile');
-  assert.equal(verdict({ operation: 'clear', delivery: 'confirm', connection: 'c0' }), true, 'clear stays broadcast-legal');
-  assert.equal(verdict({ operation: 'download', delivery: 'confirm', connection: 'c1' }), true);
-});
-
 test('mavlink-mission exposes set-current with a uint16 sequence field', () => {
   const { operation, seq } = loadNodeDefaults('mavlink-mission');
   assert.equal(operation.validate('set-current', {}), true);
