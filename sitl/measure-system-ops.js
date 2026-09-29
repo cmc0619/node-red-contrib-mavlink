@@ -250,29 +250,27 @@ async function main() {
     }
 
     // 2) RESTORE
-    {
-      if (!paramBundle) {
-        note(results, 'restore-parameters', false, 'skipped — no backup');
-      } else {
-        const t0 = Date.now();
-        const outcome = await new ParamRestore(engineOpts(conn, {
-          params: paramBundle,
-          onProgress(u) {
-            if (u.phase === 'param' && u.index % 250 === 0) {
-              process.stderr.write(`  restore ${u.index}\r`);
-            }
-          },
-        })).start();
-        note(results, 'restore-parameters', outcome.result === 'succeeded',
-          `${outcome.result}: restored=${outcome.restored} in ${Date.now() - t0} ms`,
-          {
-            result: outcome.result,
-            restored: outcome.restored,
-            elapsedMs: Date.now() - t0,
-            phase: outcome.phase,
-            reason: outcome.reason,
-          });
-      }
+    if (!paramBundle) {
+      note(results, 'restore-parameters', false, 'skipped — no backup');
+    } else {
+      const t0 = Date.now();
+      const outcome = await new ParamRestore(engineOpts(conn, {
+        params: paramBundle,
+        onProgress(u) {
+          if (u.phase === 'param' && u.index % 250 === 0) {
+            process.stderr.write(`  restore ${u.index}\r`);
+          }
+        },
+      })).start();
+      note(results, 'restore-parameters', outcome.result === 'succeeded',
+        `${outcome.result}: restored=${outcome.restored} in ${Date.now() - t0} ms`,
+        {
+          result: outcome.result,
+          restored: outcome.restored,
+          elapsedMs: Date.now() - t0,
+          phase: outcome.phase,
+          reason: outcome.reason,
+        });
     }
 
     // 3) LOG PULL
