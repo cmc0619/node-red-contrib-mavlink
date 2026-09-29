@@ -13,12 +13,14 @@ version = 1
 # on this PR after the tag landed. `.codacy.yml` excludes the same tree.
 # `scripts/` is maintainer tooling (seed generators, the line counter), run by
 # hand and never shipped.
-exclude_patterns = ["seed/**", "examples/**", "sitl/**", "scripts/**", "**/eslint.config.mjs"]
-
-# Tagged as tests so analyzer rules meant for shipped code (no-op stubs,
-# assert-shaped "redundant" literals) stop grading the harness files.
-# `integration/` is the Node-RED smoke harness and belongs here too.
-test_patterns = ["test/**", "lib/**/test/**", "integration/**"]
+# `test/` and `integration/` (the Node-RED smoke harness) are excluded, not
+# tagged: DeepSource still analyses `test_patterns` files, only with relaxed
+# rules, and kept failing PR checks on test-only style findings.
+# `.codacy.yml` excludes the test tree the same way (owner ruling, 2026-08-12).
+exclude_patterns = [
+  "seed/**", "examples/**", "sitl/**", "scripts/**", "test/**", "integration/**",
+  "**/eslint.config.mjs",
+]
 
 [[analyzers]]
 name = "javascript"
