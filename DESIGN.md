@@ -67,7 +67,7 @@ editor/runtime contract alignment.
 Shipped dialects come from `seed/mavlink-*.seed.gz` (pointer in `seed/active.json`;
 current stamp `2026-07-29-de1e078`). There is no free-text XML path/upload control and
 nothing that resolves one; private XML becomes a profile through the userDir catalog.
-*Check:* `node -e "const {knownDialects,seedStamp}=require('./lib/metadata/bundled'); console.log(seedStamp(), knownDialects().slice(0,3))"`.
+*Check:* `node -e "const {knownDialects,readManifest}=require('./lib/metadata/bundled'); console.log(readManifest().stamp, knownDialects().slice(0,3))"`.
 
 **14.7 Message-field `enum=` comes from the compiled seed/catalog XML.** ✔
 The old `.d.ts` recovery pipeline is deleted and nothing references it.
