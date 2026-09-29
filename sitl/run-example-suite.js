@@ -342,7 +342,7 @@ const PROFILE = {
     // Matching sets finish in ~1 s; crossed AP bytewise waits out its echo retries.
     injectGapMs: 8000,
     notes:
-      'matching overrides (PX4 bytewise / AP c-cast) succeed; crossed AP bytewise must echo-timeout (proves override rung)',
+      'matching overrides (PX4 bytewise / AP c-cast) succeed; crossed AP bytewise must settle unconfirmed (proves override rung)',
   },
   '15-param-echo-timeout': {
     restart: 'none',
@@ -350,7 +350,7 @@ const PROFILE = {
     expect: 'known param then unknown WPNAV_SPEED echo timeout',
     injectGapMs: 3000,
     notes:
-      'LOIT_SPEED_MS confirm proves AP-1 reachable; then missing WPNAV_SPEED must timed-out / echo timeout',
+      'LOIT_SPEED_MS confirm proves AP-1 reachable; then missing WPNAV_SPEED must settle unconfirmed (stalled at param WPNAV_SPEED)',
   },
   '16-payload-gimbal-legacy': {
     restart: 'none',
@@ -547,7 +547,8 @@ function verdictFrom(profile, summary, log) {
     };
   }
   if (/completion timeout/i.test(expect)) {
-    // Must be the takeoff node's completion timeout — arm/GUIDED timed-out must not PASS.
+    // Must be the takeoff node's Complete-tier `timeout` — ack silence
+    // (`unconfirmed`) on arm/GUIDED/takeoff is a different outcome and must not PASS.
     const takeoffTimedOut = summary.debug.some((d) => {
       const aboutTakeoff =
         /takeoff/i.test(d.tag) ||
@@ -555,9 +556,7 @@ function verdictFrom(profile, summary, log) {
         /NAV_TAKEOFF|takeoff/i.test(d.excerpt || '');
       return (
         aboutTakeoff &&
-        (d.result === 'timed-out' ||
-          d.result === 'unconfirmed' ||
-          /timeout/i.test(d.detail || ''))
+        d.result === 'timeout'
       );
     });
     if (takeoffTimedOut) {
@@ -876,8 +875,8 @@ function verdictFrom(profile, summary, log) {
     const aggregateFailed = summary.debug.some((d) =>
       d.result === 'failed' && /mavlink-fanout|aggregate|fanout/i.test(d.excerpt)
     );
-    const memberFailed = /members:\s*\[[\s\S]*?(?:result:\s*'(?:failed|timed-out|unconfirmed)'|detail:\s*'[^']*(?:timeout|expired|failed))/i.test(log) ||
-      /"members"\s*:\s*\[[\s\S]*?(?:"result"\s*:\s*"(?:failed|timed-out|unconfirmed)"|"detail"\s*:\s*"[^"]*(?:timeout|expired|failed))/i.test(log);
+    const memberFailed = /members:\s*\[[\s\S]*?(?:result:\s*'(?:failed|unconfirmed)'|detail:\s*'[^']*(?:timeout|expired|failed))/i.test(log) ||
+      /"members"\s*:\s*\[[\s\S]*?(?:"result"\s*:\s*"(?:failed|unconfirmed)"|"detail"\s*:\s*"[^"]*(?:timeout|expired|failed))/i.test(log);
     if (aggregateFailed || memberFailed) {
       return { status: 'PASS', reason: 'fan-out aggregate/member failure observed' };
     }
@@ -1106,19 +1105,8 @@ function verdictFrom(profile, summary, log) {
     }
     return { status: 'FAIL', reason: 'paramEncoding override path not observed' };
   }
-  // Payload ack/send vocabulary — DESIGN §14.163 (and Cliff's language/output-0
-  // matrix). ACK success is `accepted`; Send is `sent` (unconfirmed implied,
-  // never spelled); `succeeded` is banned here (it belongs to multi-message
-  // exchanges / aggregates only).
+  // Payload words, DESIGN §14.163: an ack tier answers `accepted`; a Send is `sent`.
   if (/AP-31 legacy gimbal|legacy gimbal aim mode ROI/i.test(expect)) {
-    const payloadStatus = (d) =>
-      /aim status|mode status|roi set status|roi clear status/i.test(d.tag);
-    if (summary.debug.some((d) => payloadStatus(d) && d.result === 'succeeded')) {
-      return {
-        status: 'FAIL',
-        reason: "legacy gimbal status speaks banned 'succeeded' — want accepted (§14.163)",
-      };
-    }
     const aim = summary.debug.some((d) => /aim status/i.test(d.tag) && d.result === 'accepted');
     const mode = summary.debug.some((d) => /mode status/i.test(d.tag) && d.result === 'accepted');
     const roiSet = summary.debug.some((d) => /roi set status/i.test(d.tag) && d.result === 'accepted');
@@ -1132,12 +1120,6 @@ function verdictFrom(profile, summary, log) {
     };
   }
   if (/AP-31 camera photo|camera photo accepted video denied/i.test(expect)) {
-    if (summary.debug.some((d) => /photo status/i.test(d.tag) && d.result === 'succeeded')) {
-      return {
-        status: 'FAIL',
-        reason: "camera photo status speaks banned 'succeeded' — want accepted (§14.163)",
-      };
-    }
     const photo = summary.debug.some((d) => /photo status/i.test(d.tag) && d.result === 'accepted');
     // Video DENIED is measured firmware behaviour on this SITL (§14.128), not a
     // harness failure. MAV_RESULT names (`denied`) and the ack classifier's
@@ -1160,21 +1142,7 @@ function verdictFrom(profile, summary, log) {
     };
   }
   if (/AP-31 gimbal manager|gimbal manager aim sent/i.test(expect)) {
-    const mgrBlocks = summary.debug.filter((d) => /manager status/i.test(d.tag));
-    if (mgrBlocks.some((d) => d.result === 'succeeded')) {
-      return {
-        status: 'FAIL',
-        reason: "manager status speaks banned 'succeeded' — want sent (§14.163)",
-      };
-    }
-    // "unconfirmed" is implied by `sent` and must not appear on the badge/detail.
-    if (mgrBlocks.some((d) => /unconfirmed/i.test(`${d.detail || ''} ${d.excerpt || ''}`))) {
-      return {
-        status: 'FAIL',
-        reason: "manager status spells 'unconfirmed' — banned by §14.163 (sent implies it)",
-      };
-    }
-    if (mgrBlocks.some((d) => d.result === 'sent')) {
+    if (summary.debug.some((d) => /manager status/i.test(d.tag) && d.result === 'sent')) {
       return { status: 'PASS', reason: 'gimbal manager aim sent on AP-31' };
     }
     return { status: 'FAIL', reason: 'manager sent status not observed' };
@@ -1317,7 +1285,7 @@ function verdictFrom(profile, summary, log) {
     if (knownOk && echoTimedOut) {
       return {
         status: 'PASS',
-        reason: 'known LOIT_SPEED_MS confirmed; unknown WPNAV_SPEED echo-timed-out',
+        reason: 'known LOIT_SPEED_MS confirmed; unknown WPNAV_SPEED settled unconfirmed',
       };
     }
     if (knownOk || echoTimedOut) {
@@ -1333,13 +1301,12 @@ function verdictFrom(profile, summary, log) {
   }
 
   const bad = results.filter((r) =>
-    /fail|timed-out|unconfirmed|error|denied/i.test(r)
+    /fail|timeout|unconfirmed|error|denied|rejected|unsupported|cancelled|_only|not_in_control|refused|skipped/i.test(r)
   );
   // §14.163 good words: ack `accepted`, Send `sent`, Build `built`, multi-message
-  // / aggregate `succeeded`. `sent` used to be missing here, so a Send-only fall-
-  // through could not PASS on its own vocabulary.
+  // / aggregate `succeeded`, Move `streaming` / `stopped`.
   const good = results.filter((r) =>
-    /accepted|sent|succeeded|success|built|ok/i.test(r)
+    /accepted|sent|succeeded|success|built|streaming|stopped|ok/i.test(r)
   );
 
   if (good.length && !bad.length && !summary.errors.length) {

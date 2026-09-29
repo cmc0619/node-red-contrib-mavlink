@@ -218,7 +218,7 @@
     "id": "sitl22-out-done",
     "type": "debug",
     "z": "sitl22-tab",
-    "name": "out accepted",
+    "name": "out sent",
     "active": true,
     "tosidebar": true,
     "console": false,

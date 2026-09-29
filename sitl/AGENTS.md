@@ -85,7 +85,7 @@ deploys one `examples/sitl/*.json` → enable debug→console → fire injects �
 (or `PROFILE.readyWhen`) capped by `waitMs` (a max wait, not a fixed sleep;
 generic `results: …` PASS does not early-exit — first ack is not “done”;
 `SITL_READY_POLL_MS`, default 500) → write JSON under `/tmp/` (default). Example
-**12** (signing) targets companion AP sysid 20: harness sends `SETUP_SIGNING` with
+**38** (signing) targets companion AP sysid 20: harness sends `SETUP_SIGNING` with
 `sha256(hunter11)` and injects `{ signingPassphrase: "hunter11" }` on Admin API
 deploy (`hunter11` is a joke lab passphrase, not a secret). Example **19** (TCP)
 is **SKIP** unless Compose exposes SITL TCP.
@@ -173,7 +173,7 @@ Asserts every DESIGN.md §8 field (identity, armed/mode, endpoints, position,
 GPS, battery, home, section freshness, snapshot projection; AUTOPILOT_VERSION /
 STATUSTEXT best-effort) on AP GUIDED + PX4 OFFBOARD after takeoff and a short
 velocity tour. Suite example **26** is the thinner flow-level State snapshot
-regression (`run-example-suite.js --only 36`).
+regression (`run-example-suite.js --only 26`).
 
 ### Post results (no PR)
 
@@ -212,30 +212,32 @@ full suite is the end-to-end confirmation of the vehicle-judges refactor.
 
 ### Harness auto-verdict traps
 
-- Example **02** historically false-PASS’d on the word “timeout” in node names;
-  verdict now requires a real `timed-out` / timeout detail.
-- Example **09**: kill must land mid-run; late kill → all-accepted aggregate.
-- Examples **15/16**: many `sent` lines → look for `NAMED_VALUE_FLOAT` specifically.
-- Example **07**: bad upload must fail validation; empty success is not fail-loud.
-- Example **03**: PX4 packed `DO_SET_MODE` (196608) — expect `temporarily_rejected`
+- Example **21** historically false-PASS'd on the word “timeout” in node names;
+  verdict now requires the takeoff record's `result: 'timeout'` (Command Complete;
+  ack silence is `unconfirmed` and does not count).
+- Example **32**: kill must land mid-run; late kill → all-accepted aggregate.
+- Examples **05/06**: many `sent` lines → look for `NAMED_VALUE_FLOAT` specifically.
+- Example **03**: bad upload must fail validation; empty success is not fail-loud.
+- Example **28**: PX4 packed `DO_SET_MODE` (196608) — expect `temporarily_rejected`
   with `retries >= 1` (AP arm never returns result `(1)` on this firmware).
-- Example **12**: needs `SETUP_SIGNING` + Admin credentials before deploy; verdict
+- Example **38**: needs `SETUP_SIGNING` + Admin credentials before deploy; verdict
   wants arm `accepted` and debug `trusted flag` → `true` (not merely “sign” in the log).
-- Example **18**: needs `ap-home-ready` (HOME_POSITION) or AP GLOBAL_INT home FAILs.
-- Example **21**: AP param is `LOIT_SPEED_MS` (no `WPNAV_SPEED` on Copter 4.7.0).
-- Example **23**: inherit PASS is resolved `target.sysid === 2` (prep `ap-arm-ready-2`).
-- Examples **34/35**: formation + takeoff need `ap-arm-ready-fleet`; **27** wait is long
+- Example **07**: needs `ap-home-ready` (HOME_POSITION) or AP GLOBAL_INT home FAILs.
+- Example **08**: AP param is `LOIT_SPEED_MS` (no `WPNAV_SPEED` on Copter 4.7.0).
+- Example **25**: inherit PASS is resolved `target.sysid === 2` (prep `ap-arm-ready-2`).
+- Examples **34/35**: formation + takeoff need `ap-arm-ready-fleet`; **35** wait is long
   (sphere pitch steps + peel land). Verdict keys on named debug tags (`line status`,
   `s0 status`…`land status`), not a generic succeeded count.
-- Example **28**: list collect then index-read — verdict needs `list status` + `index assert`
+- Example **11**: list collect then index-read — verdict needs `list status` + `index assert`
   both `succeeded` (wire shape: `param_index ≥ 0`, empty `param_id`).
-- Example **29**: PARAM_SET fan-out — `fanout status` succeeded with `count: 5` (subset
+- Example **12**: PARAM_SET fan-out — `fanout status` succeeded with `count: 5` (subset
   fleets also report succeeded; count is required).
-- Example **30**: PX4 list — `list status` + `list assert` (known ids present).
-- Example **31**: matching `ap set` / `px4 set` succeeded **and** `ap wrong status`
-  `timed-out` (crossed bytewise on AP); matching-only would not prove the override rung.
-- Example **32**: `known set status` succeeded (LOIT_SPEED_MS) **then** `unknown set status`
-  `timed-out` / `echo timeout` on missing `WPNAV_SPEED` (dead peer alone must not PASS).
+- Example **13**: PX4 list — `list status` + `list assert` (known ids present).
+- Example **14**: matching `ap set` / `px4 set` succeeded **and** `ap wrong status`
+  `unconfirmed` (crossed bytewise on AP; reason `stalled at param …`); matching-only
+  would not prove the override rung.
+- Example **15**: `known set status` succeeded (LOIT_SPEED_MS) **then** `unknown set status`
+  `unconfirmed`, stalled at param `WPNAV_SPEED` (dead peer alone must not PASS).
 - Examples **16–18**: Payload on **sysid 31 / 14570** (`nrc-ap-payload-31`). Vocabulary is
   DESIGN §14.163: **16** needs `aim`/`mode`/`roi set`/`roi clear` all `accepted`; **17**
   photo `accepted` **and** video start/stop `denied`|`failed` (§14.128); **18**

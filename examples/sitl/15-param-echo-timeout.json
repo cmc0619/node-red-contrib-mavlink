@@ -149,7 +149,7 @@
     "id": "sitl32-unknown-set",
     "type": "mavlink-param",
     "z": "sitl32-tab",
-    "name": "Set WPNAV_SPEED (expect timeout)",
+    "name": "Set WPNAV_SPEED (expect unconfirmed)",
     "connection": "sitl32-connection",
     "delivery": "confirm",
     "action": "set",
