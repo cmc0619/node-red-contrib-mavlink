@@ -163,10 +163,67 @@ test('mavlink-payload confirm tier waits for COMMAND_ACK and continues only on A
   await tick();
 
   assert.ok(sent, 'outputs fire once the ack arrives');
-  assert.equal(sent[0].payload.result, 'succeeded', 'output 0 continues on ACCEPTED');
-  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[0].payload.result, 'accepted', 'output 0 continues on ACCEPTED');
+  assert.equal(sent[1].result, 'accepted');
   assert.equal(sent[1].confirmedBy, 'ack');
 
+  node.emit('close', () => {});
+});
+
+test('mavlink-payload confirm tier reports ack silence as unconfirmed, Command\'s word (R51)', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    sendAs: 'long',
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeoutMs: 5,
+    maxRetries: 0,
+  });
+
+  let sent;
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => { sent = m; }, () => {});
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  assert.equal(sent[0], null);
+  assert.equal(sent[1].result, 'unconfirmed');
+  assert.equal(sent[1].resultCode, null);
+});
+
+test('mavlink-payload: a second input supersedes the first wait on output 1, never silently (R9, Q2)', async () => {
+  const conn = connStub();
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-payload')(RED);
+  const Node = RED.nodes.types['mavlink-payload'];
+  const node = new Node({
+    sendAs: 'long',
+    delivery: 'confirm',
+    topic: 'servo',
+    verb: 'set',
+    connection: 'conn',
+    targetSystem: 7,
+    targetComponent: 1,
+    timeoutMs: 2000,
+    maxRetries: 0,
+  });
+
+  const first = [];
+  let firstDone;
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1600 } } }, (m) => first.push(m), (...a) => { firstDone = a; });
+  await tick();
+  node.emit('input', { payload: { values: { servo: 8, pwm: 1700 } } }, () => {}, () => {});
+  await tick();
+
+  assert.equal(first.length, 1);
+  assert.equal(first[0][1].result, 'cancelled');
+  assert.equal(first[0][1].detail, 'superseded');
+  assert.deepEqual(firstDone, []);
   node.emit('close', () => {});
 });
 
@@ -204,7 +261,7 @@ test('mavlink-payload confirm tier with carrier int sends COMMAND_INT without a 
   conn.injectAck({ command: 195, result: 0 }, 7, 1);
   await tick();
   assert.ok(sent, 'outputs fire once the ack arrives');
-  assert.equal(sent[1].result, 'succeeded');
+  assert.equal(sent[1].result, 'accepted');
 
   node.emit('close', () => {});
 });

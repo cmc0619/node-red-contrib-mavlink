@@ -2,7 +2,7 @@
 
 const delivery = require('../lib/delivery');
 const { valueFrom, isBlank } = require('../lib/addressing/resolve');
-const { executeFanout, parseSysidList } = require('../lib/fanout');
+const { executeFanout, parseSysidList, reportAggregate } = require('../lib/fanout');
 
 module.exports = function registerMavlinkFanout(RED) {
   function MavlinkFanoutNode(config) {
@@ -33,22 +33,21 @@ module.exports = function registerMavlinkFanout(RED) {
         const listSelected = selectionMode === 'list' || opts.targets !== undefined;
 
         let effectiveConnection = connectionNode;
-        if (!connectionNode) {
-          switch (effectiveDelivery) {
-            case 'build':
-              // Build is the one tier that can run without a Connection (§5):
-              // with an explicit sysid list it replicates against a synthetic
-              // peer table instead of a live one (§6 Fan-out exception).
-              if (listSelected) {
-                effectiveConnection = buildListStub(
-                  opts.targets !== undefined
-                    ? opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
-                    : selection.sysids
-                );
-              }
-              break;
-            default: break; // This space intentionally left blank (§5)
-          }
+        switch (effectiveDelivery) {
+          case 'build':
+            // On Build an explicit sysid list is the directory (§6 Fan-out
+            // exception): it replicates against a synthetic peer table, never
+            // a live one — a Connection kept hidden from an earlier tier would
+            // drop every listed member it has not heard.
+            if (listSelected) {
+              effectiveConnection = buildListStub(
+                opts.targets !== undefined
+                  ? opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
+                  : selection.sysids
+              );
+            }
+            break;
+          default: break; // This space intentionally left blank (§5)
         }
 
         const aggregate = await inFlight.track((signal) => executeFanout({
@@ -66,10 +65,10 @@ module.exports = function registerMavlinkFanout(RED) {
           // starts and the aggregate comes back undefined (handled below).
           mode: valueFrom(opts, config, 'executionMode'),
           delivery: effectiveDelivery,
-          intervalMs: numberOption(opts, config, 'intervalMs'),
-          timeoutMs: numberOption(opts, config, 'timeoutMs'),
-          maxRetries: numberOption(opts, config, 'maxRetries'),
-          concurrency: numberOption(opts, config, 'concurrency'),
+          intervalMs: valueFrom(opts, config, 'intervalMs'),
+          timeoutMs: valueFrom(opts, config, 'timeoutMs'),
+          maxRetries: valueFrom(opts, config, 'maxRetries'),
+          concurrency: valueFrom(opts, config, 'concurrency'),
           stopOnError: valueFrom(opts, config, 'stopOnError'),
           identityId: opts.identityId === undefined ? config.identity : opts.identityId,
         }));
@@ -86,33 +85,7 @@ module.exports = function registerMavlinkFanout(RED) {
           return;
         }
 
-        applyAggregateStatus(node, aggregate, effectiveDelivery);
-        // Output 1 always carries the aggregate status record at the message
-        // root. Output 0 is tier-selected (§5): on Build delivery it carries
-        // the product — one message per member, ready for mavlink-out —
-        // matching every other Build tier (§9 "Build's output goes to
-        // mavlink-out"); on the wire tiers it is the continue trigger
-        // wrapping the aggregate (§9). Either arm holds output 0 back (null)
-        // when the run did not fully succeed.
-        let output0 = null;
-        switch (effectiveDelivery) {
-          case 'build':
-            if (aggregate.result === 'succeeded') {
-              // Sequential build: one message per member. Broadcast build: the
-              // single target_system=0 packet (aggregate.message).
-              output0 = aggregate.message
-                ? [{ payload: aggregate.message }]
-                : aggregate.members.map((member) => ({ payload: member.message }));
-            }
-            break;
-          case 'send':
-          case 'confirm':
-            if (aggregate.continue) output0 = { payload: aggregate };
-            break;
-          default: break; // This space intentionally left blank (§5)
-        }
-        send([output0, aggregate]);
-        done();
+        reportAggregate(node, send, done, aggregate, effectiveDelivery);
       } catch (err) {
         delivery.failInput(node, send, err, done);
       }
@@ -161,9 +134,9 @@ function selectionFrom(config) {
 /**
  * The config member rows for this run, or undefined when they do not apply:
  * a payload `targets` array replaces them entirely (§6 — the override of last
- * resort), a payload `selection` override picks its own group, and rows
- * without any offset or patch are plain list selection, already covered by
- * {@link selectionFrom}.
+ * resort), a payload `selection` override picks its own group, and only list
+ * selection has rows. Bare rows become bare-sysid targets, which select
+ * exactly the listed vehicles.
  *
  * @param {object} config
  * @param {object} opts unwrapped payload options
@@ -171,68 +144,18 @@ function selectionFrom(config) {
  */
 function configMembersFor(config, opts) {
   if (opts.targets !== undefined || opts.selection !== undefined) return undefined;
-  if (config.selectionMode !== 'list') return undefined;
-  const patched = config.members.some((member) =>
-    member.north !== undefined || member.east !== undefined
-    || member.up !== undefined || member.patch !== undefined);
-  return patched ? config.members : undefined;
-}
-
-/**
- * A filter matching zero vehicles is the correct answer, not a fault:
- * the run reports quietly — grey badge, no done(err) — while output 1 still
- * carries the empty aggregate with success:false, so nothing downstream sees
- * a phantom success (§2). An empty explicit list or an empty 'all' stays
- * loud: the operator named vehicles (or expected a fleet) and reached none.
- *
- * @param {object} aggregate
- * @returns {boolean}
- */
-function quietEmpty(aggregate) {
-  return aggregate.result === 'empty' && aggregate.selection === 'filter';
-}
-
-function applyAggregateStatus(node, aggregate, tier) {
-  if (aggregate.success) {
-    // A fully successful run badges by tier (§5): Build previews the fan-out
-    // — every member message constructed, none sent — so it wears the yellow
-    // preview badge (§6), the same as every other action node's Build
-    // (mavlink-command, mavlink-mission). The aggregate result is 'succeeded'
-    // either way (all members built), so the tier is the signal, not the
-    // result. The wire tiers wear the green success badge.
-    switch (tier) {
-      case 'build':
-        delivery.applyActionStatus(node, 'preview', `${aggregate.count} preview`);
-        break;
-      case 'send':
-      case 'confirm':
-        delivery.applyActionStatus(node, 'ok', `${aggregate.count} succeeded`);
-        break;
-      default: break; // This space intentionally left blank (§5)
-    }
-    return;
+  switch (config.selectionMode) {
+    case 'list':
+      return config.members;
+    default: break; // This space intentionally left blank (§5)
   }
-  if (quietEmpty(aggregate)) {
-    // Not a §6 action situation: neither an error nor a success — grey ring,
-    // matching the palette's other idle/none badges.
-    node.status({ fill: 'grey', shape: 'ring', text: '0 matched' });
-    return;
-  }
-  delivery.applyActionStatus(node, 'error', aggregate.result);
-}
-
-/**
- * A numeric run option: `msg.payload` overrides by presence, otherwise the
- * editor's saved value, which the editor defaults and red-rings.
- */
-function numberOption(opts, config, key) {
-  return opts[key] === undefined ? Number(config[key]) : opts[key];
+  return undefined;
 }
 
 /**
  * Synthetic connection used when delivery=build with an explicit sysid list
- * (config list selection or a runtime targets array) and no real Connection
- * configured. Peer table returns one active autopilot entry per listed sysid
+ * (config list selection or a runtime targets array), whether or not a
+ * Connection is saved. Peer table returns one active autopilot entry per listed sysid
  * so executeFanout can retarget messages without a live peer table (§6 Fan-out
  * exception).
  *

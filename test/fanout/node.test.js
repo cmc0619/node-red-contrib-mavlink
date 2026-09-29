@@ -103,6 +103,29 @@ test('build+list with no connection emits one retargeted message per member on o
   assert.match(node._status.text, /preview/);
 });
 
+test('build+list with a hidden saved Connection still builds every listed member (R19)', async () => {
+  // The Connection row hides on Build but keeps its saved value; the list is
+  // the directory, so a member the live link has not heard is still built.
+  const connection = connectionStub([peer(1)]);
+  const RED = redStub({ conn: connection });
+  require('../../nodes/mavlink-fanout')(RED);
+  const Node = RED.nodes.types['mavlink-fanout'];
+  const node = new Node({
+    connection: 'conn',
+    delivery: 'build',
+    selectionMode: 'list',
+    members: [{ sysid: 1 }, { sysid: 2 }, { sysid: 3 }],
+    executionMode: 'sequential',
+    intervalMs: 0,
+  });
+  let sent;
+  await emitInput(node, { payload: builtCommand() }, (messages) => { sent = messages; });
+
+  assert.equal(sent[1].count, 3);
+  assert.deepEqual(sent[0].map((m) => m.payload.fields.target_system), [1, 2, 3]);
+  assert.equal(connection.sends.length, 0, 'Build sends nothing');
+});
+
 test('a payload that is not a built message reports a failed aggregate', async () => {
   const connection = connectionStub([peer(1)]);
   const RED = redStub({ conn: connection });
@@ -251,6 +274,7 @@ test('an empty list or empty fleet stays loud — someone was named and nobody a
   });
   let listSent;
   await emitInput(listNode, { payload: builtCommand() }, (m) => { listSent = m; });
+  assert.equal(listSent[0], null);
   assert.equal(listSent[1].result, 'empty');
   assert.equal(listNode._status.fill, 'red');
 
@@ -491,8 +515,8 @@ test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', as
   // Trusted-msg garbage, but the failure shape matters: with nothing in
   // flight there is nothing to race, and Promise.race([]) never settles — a
   // run that hangs forever is not GIGO, it is a broken promise. The launch
-  // loop's liveness guard degenerates 0 (and negatives) to strict
-  // one-at-a-time; the value is still never repaired.
+  // loop only waits while something is in flight, so 0 caps nothing and
+  // every member launches; the value is never repaired.
   const connection = connectionStub([peer(1), peer(2)]);
   const RED = redStub({ conn: connection });
   require('../../nodes/mavlink-fanout')(RED);
@@ -502,7 +526,7 @@ test('a wrapper concurrency of 0 completes instead of hanging (Codex, #287)', as
 
   await emitInput(
     node,
-    { payload: { message: builtCommand(), options: { concurrency: 0 } } },
+    { payload: { message: builtCommand(), concurrency: 0 } },
     (messages) => { sent = messages; }
   );
 

@@ -39,6 +39,13 @@ test('Build tier: the editor default carries COMMAND_LONG and a top-level status
   assert.ok(sent[0], sent[1] && sent[1].detail);
   assert.equal(sent[0].payload.name, 'COMMAND_LONG');
   assert.equal(sent[1].result, 'built');
+  // One record shape across tiers: the ack fields a Build never has are null.
+  assert.equal(sent[1].command, 'MAV_CMD_COMPONENT_ARM_DISARM');
+  assert.equal(sent[1].commandId, 400);
+  assert.equal(sent[1].resultCode, null);
+  assert.equal(sent[1].resultParam2, null);
+  assert.equal(sent[1].retries, 0);
+  assert.equal(sent[1].detail, null);
 });
 
 test('Run Prearm Checks builds MAV_CMD 401 with no completion wait', async () => {
@@ -70,14 +77,14 @@ test('Build tier with carrier int: output 0 carries a COMMAND_INT with config fr
   const RED = redStub({});
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
-  // reposition (MAV_CMD_DO_REPOSITION) carries lat/lon in params 5/6 —
+  // Set Home (MAV_CMD_DO_SET_HOME) carries lat/lon in params 5/6 —
   // entered as degrees, scaled to degE7 by the INT carrier (§9).
   const node = new Node({
     params: '{}',
     sendAs: 'int',
     frame: '3', // GLOBAL_RELATIVE_ALT
     mode: 'preset',
-    preset: 'reposition',
+    preset: 'set_home',
     delivery: 'build',
     dialect: 'common',
     targetSystem: '1',
@@ -127,7 +134,7 @@ test('Build tier: payload.mode resolves through the AP profile into param2', asy
   assert.equal(sent[0].payload.fields.param2, 4, 'COPTER_MODE_GUIDED');
   assert.equal(sent[0].payload.fields.param1, 1, 'custom-mode-enabled bit set');
 
-  // An unknown name builds NaN — the loud tail, nothing invented (§5).
+  // An unknown name builds NaN — nothing invented (§14.105).
   let bad;
   node.emit('input', { payload: { mode: 'WARP_9' } }, (m) => { bad = m; }, () => {});
   await tick();
@@ -274,7 +281,7 @@ test('two consecutive INT inputs both fail loud when dialect lookup fails', asyn
     sendAs: 'int',
     frame: '3',
     mode: 'preset',
-    preset: 'reposition',
+    preset: 'set_home',
     delivery: 'send',
     connection: 'conn',
     targetSystem: '1',
@@ -592,16 +599,16 @@ test('ack-matcher pin: companion target used for COMMAND_ACK matching; ack from 
   node.emit('close', () => {});
 });
 
-test('a hand-edited garbage Command mode resolves no command — nothing is built', async () => {
+test('a hand-edited garbage Command mode resolves no command — the node craters at deploy', () => {
   // Only Preset and Advanced are modes. A token the editor cannot save
-  // (`mode` carries RED.mavlink.oneOf) matches neither, so no preset and no
-  // command id resolve, and the message craters at the wire's own guard
-  // rather than silently building the preset branch.
+  // (`mode` carries RED.mavlink.oneOf) matches neither, so no command row
+  // resolves and the constructor's read of it craters — loud, and nothing
+  // silently builds the preset branch or reaches the wire.
   const conn = connStubWithInject();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-command')(RED);
   const Node = RED.nodes.types['mavlink-command'];
-  const node = new Node({
+  assert.throws(() => new Node({
     params: '{}',
     sendAs: 'long',
     mode: 'presett',
@@ -610,14 +617,32 @@ test('a hand-edited garbage Command mode resolves no command — nothing is buil
     connection: 'conn',
     targetSystem: '1',
     targetComponent: '1',
-  });
-
-  let sent;
-  node.emit('input', { payload: {} }, (m) => { sent = m; }, () => {});
-  await Promise.resolve();
-
-  assert.ok(Number.isNaN(sent[0].payload.fields.command), 'no command id was resolved');
+  }), TypeError);
   assert.equal(conn.sent.length, 0, 'nothing reached the wire');
+});
+
+test('Advanced mode runs the preset path: every param rides, blanks zero-filled (Tier 5)', async () => {
+  const RED = redStub({});
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{"1":5,"7":"NaN"}',
+    sendAs: 'long',
+    mode: 'advanced',
+    advancedCommand: '183',
+    delivery: 'build',
+    dialect: 'common',
+    targetSystem: '1',
+    targetComponent: '1',
+  });
+  let sent;
+  node.emit('input', { payload: { 2: 1500 } }, (m) => { sent = m; }, () => {});
+  await tick();
+  const f = sent[0].payload.fields;
+  assert.equal(f.command, 183);
+  assert.deepEqual([f.param1, f.param2, f.param3, f.param4, f.param5, f.param6], [5, 1500, 0, 0, 0, 0]);
+  assert.ok(Number.isNaN(f.param7));
+  assert.equal(sent[1].command, 'MAV_CMD(183)');
 });
 
 test('a silent ACK window spends the retry budget on re-sends, then settles the unconfirmed record', async (t) => {
@@ -1132,6 +1157,86 @@ test('a redeploy-cancelled completion wait finishes quietly (accepted-risk M1)',
 
   assert.equal(doneErr, undefined, 'done() called with no error — a cancel is not a failure');
   assert.equal(emitted, false, 'nothing is emitted onto a node being torn down');
+});
+
+/** A confirm/complete Arm node on connStubWithInject, for the R9 cases. */
+function armNode(delivery) {
+  const conn = connStubWithInject();
+  conn.peerTable = new StubPeerTable();
+  conn.peerTable.setComponent(1, 1, { armed: false });
+  const RED = redStub({ conn });
+  require('../../nodes/mavlink-command')(RED);
+  const Node = RED.nodes.types['mavlink-command'];
+  const node = new Node({
+    params: '{}',
+    connection: 'conn',
+    sendAs: 'long',
+    mode: 'preset',
+    preset: 'arm',
+    delivery,
+    targetSystem: '1',
+    targetComponent: '1',
+    timeoutMs: '60000',
+    maxRetries: '0',
+    completionTimeout: '60000',
+  });
+  return { conn, node };
+}
+
+test('a vehicle\'s MAV_RESULT_CANCELLED is a terminal answer on output 1, not a quiet redeploy (R9)', async () => {
+  const { conn, node } = armNode('confirm');
+  const outputs = [];
+  let doneArgs;
+  node.emit('input', { payload: {} }, (m) => outputs.push(m), (...args) => { doneArgs = args; });
+  await tick();
+
+  conn.injectAck({ command: 400, result: 6 }, 1, 1);
+  await tick();
+
+  assert.equal(outputs.length, 1);
+  assert.equal(outputs[0][0], null);
+  assert.equal(outputs[0][1].result, 'cancelled');
+  assert.equal(outputs[0][1].resultCode, 6, 'the vehicle said it');
+  assert.equal(outputs[0][1].confirmedBy, 'ack');
+  assert.equal(doneArgs[0], undefined, 'a vehicle verdict is data, not an error for Catch');
+  node.emit('close', () => {});
+});
+
+test('a superseded Confirm wait reports cancelled/superseded on output 1 (R9, Q2)', async () => {
+  const { conn, node } = armNode('confirm');
+  const first = [];
+  let firstDone;
+  node.emit('input', { payload: {} }, (m) => first.push(m), (...args) => { firstDone = args; });
+  await tick();
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  await tick();
+
+  assert.equal(conn.sent.length, 2, 'both commands went on the wire');
+  assert.equal(first.length, 1);
+  assert.equal(first[0][0], null);
+  assert.equal(first[0][1].result, 'cancelled');
+  assert.equal(first[0][1].detail, 'superseded');
+  assert.equal(first[0][1].resultCode, null);
+  assert.deepEqual(firstDone, [], 'a supersession is not a failure for Catch');
+  node.emit('close', () => {});
+});
+
+test('a superseded Complete-tier completion wait reports cancelled/superseded too (R9, Q2)', async () => {
+  const { conn, node } = armNode('complete');
+  const first = [];
+  node.emit('input', { payload: {} }, (m) => first.push(m), () => {});
+  await tick();
+  conn.injectAck({ command: 400, result: 0 }, 1, 1);
+  await tick();
+
+  node.emit('input', { payload: {} }, () => {}, () => {});
+  await tick();
+  await tick();
+
+  assert.equal(first.length, 1);
+  assert.equal(first[0][1].result, 'cancelled');
+  assert.equal(first[0][1].detail, 'superseded');
+  node.emit('close', () => {});
 });
 
 test('IN_PROGRESS moves the badge and the terminal record carries result_param2 (§9)', async () => {

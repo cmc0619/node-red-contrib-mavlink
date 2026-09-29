@@ -188,7 +188,7 @@ test('a retry send that throws settles the transaction instead of escaping the t
   conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
 
   const outcome = await p;
-  assert.equal(outcome.result, 'send failed');
+  assert.equal(outcome.result, 'failed');
   assert.match(outcome.detail, /queue overflow/);
   assert.equal(sends, 2, 'the retry was attempted');
 });
@@ -242,7 +242,37 @@ test('cancel after duplicate TEMPORARILY_REJECTED acks leaves no timer that can 
 
   await new Promise((resolve) => setTimeout(resolve, 1100));
   assert.equal(sends, sendsAtCancel, 'no send fires after settlement');
-  assert.equal((await p).result, 'cancelled');
+  const outcome = await p;
+  assert.equal(outcome.result, 'cancelled');
+  // A local cancel is marked as ours; MAV_RESULT_CANCELLED stays the
+  // vehicle's word (R9).
+  assert.equal(outcome.cancelled, true);
+  assert.equal(outcome.resultCode, null);
+});
+
+test('a vehicle MAV_RESULT_CANCELLED settles as a terminal ack, not a local cancel (R9)', async () => {
+  const conn = stubConn();
+  const waiter = makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 });
+  const pending = waiter.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.CANCELLED }, 1, 1);
+  const outcome = await pending;
+  assert.equal(outcome.result, 'cancelled');
+  assert.equal(outcome.resultCode, 6);
+  assert.equal(typeof outcome.cancelled, 'undefined');
+  assert.equal(outcome.confirmedBy, 'ack');
+});
+
+test('cancelSlot.run supersedes the wait in flight with reason "superseded"', async () => {
+  const { cancelSlot, SUPERSEDED } = require('../../lib/command/ack');
+  const conn = stubConn();
+  const slot = cancelSlot();
+  const first = slot.run(makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 }));
+  const second = slot.run(makeWaiter(conn, { commandId: 400, targetSystem: 1, targetComponent: 1 }));
+  const outcome = await first;
+  assert.equal(outcome.cancelled, true);
+  assert.equal(outcome.detail, SUPERSEDED);
+  slot.cancel();
+  assert.equal((await second).detail, 'node closed during transaction');
 });
 
 test('an initial send that throws rejects AND cleans up — no timer or subscription outlives it (Codex, #237)', async () => {

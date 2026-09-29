@@ -119,7 +119,7 @@
     change_speed:  [{ index: 1 },
                     { index: 2, label: 'Speed (blank = no change)' },
                     { index: 3, label: 'Throttle (blank = no change)' }],
-    orbit:         [{ index: 1 },
+    orbit:         [{ index: 1, label: 'Radius (blank = default)' },
                     { index: 2, label: 'Velocity (blank = default)' },
                     { index: 3 },
                     { index: 5, units: 'deg' },
@@ -378,6 +378,12 @@
             }
           }
           const preset = RED.mavlink.liveOr(this, '#node-input-preset', this.preset, 'arm');
+          // A blank takeoff altitude is zero-filled: PX4 reads 0 as AMSL and
+          // answers ACCEPTED with a ~1 m hop (§14.79). A NaN "stack default"
+          // rides msg.payload, which overrides a configured value.
+          if (preset === 'takeoff' && !presentParam(values[7])) {
+            return 'Takeoff needs an altitude — a blank is sent as 0';
+          }
           // A blank centre on these presets is the NaN sentinel, and int32 has
           // no NaN: the build refuses the pair, so the operator would meet it
           // on the first message instead of at deploy.
@@ -1148,7 +1154,9 @@
       custom-mode params — the vehicle's published <code>AVAILABLE_MODES</code>
       table first, then the profile's shipped table. Sets param1's
       custom-mode-enabled bit; an explicit numeric payload param still wins.
-      A name nothing resolves rides as NaN and fails loudly at the wire.
+      A name nothing resolves rides as NaN in param2; the vehicle judges it.
+      On Build that includes any name under a concrete dialect, which carries
+      no firmware to resolve it against; use the Vehicle Profile dialect.
     </dd>
     <dt class="optional">mavFrame <span class="property-type">number</span></dt>
     <dd>Per-message MAV_FRAME override for the COMMAND_INT carrier; takes

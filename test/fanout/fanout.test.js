@@ -3,10 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const {
-  executeFanout,
-  selectFanoutMembers,
-} = require('../../lib/fanout');
+const { executeFanout } = require('../../lib/fanout');
 
 // Every runtime caller hands executeFanout the in-flight tracker's abort
 // signal; the tests share one that never fires.
@@ -16,7 +13,7 @@ const { streamLocks } = require('../../lib/delivery/lock');
 const { offsetLatLon } = require('../../lib/formation');
 const { paramValueToWire } = require('../../lib/codec/param-union');
 
-test('selection resolves all, explicit list, and filters while excluding stale peers', () => {
+test('selection resolves all, explicit list, and filters while excluding stale peers', async () => {
   const peerTable = peerTableStub([
     peer(1, { type: 2, firmware: 'ardupilot', armed: true }),
     peer(2, { type: 3, firmware: 'px4', armed: false }),
@@ -24,18 +21,18 @@ test('selection resolves all, explicit list, and filters while excluding stale p
     { sysid: 4, components: [{ compid: 154, state: 'active', type: 26 }] },
   ]);
 
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'all' }).map((m) => m.sysid), [1, 2]);
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: '2, 3' }).map((m) => m.sysid), [2]);
+  assert.deepEqual(await selected(peerTable, { mode: 'all' }), [1, 2]);
+  assert.deepEqual(await selected(peerTable, { mode: 'list', sysids: '2, 3' }), [2]);
   assert.deepEqual(
-    selectFanoutMembers(peerTable, {
+    await selected(peerTable, {
       mode: 'filter',
       filter: { type: 2, firmware: 'ardupilot', armed: true },
-    }).map((m) => m.sysid),
+    }),
     [1]
   );
 });
 
-test('a list selection coerces its sysids — an entry naming no vehicle selects none', () => {
+test('a list selection coerces its sysids — an entry naming no vehicle selects none', async () => {
   const peerTable = peerTableStub([peer(1), peer(2), peer(4)]);
 
   // The editor bounds every configured sysid (the members table,
@@ -44,16 +41,31 @@ test('a list selection coerces its sysids — an entry naming no vehicle selects
   // aggregate record names the members that were actually selected.
   for (const bad of [[1, 'abc'], [1, 300], [1, 0], '1, 300', '1, abc']) {
     assert.deepEqual(
-      selectFanoutMembers(peerTable, { mode: 'list', sysids: bad }).map((m) => m.sysid),
+      await selected(peerTable, { mode: 'list', sysids: bad }),
       [1],
       `${JSON.stringify(bad)} selects only the entry that names a vehicle`
     );
   }
 
   // Readable lists are untouched, in either spelling.
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: [1, 4] }).map((m) => m.sysid), [1, 4]);
-  assert.deepEqual(selectFanoutMembers(peerTable, { mode: 'list', sysids: ['1', '4'] }).map((m) => m.sysid), [1, 4]);
+  assert.deepEqual(await selected(peerTable, { mode: 'list', sysids: [1, 4] }), [1, 4]);
+  assert.deepEqual(await selected(peerTable, { mode: 'list', sysids: ['1', '4'] }), [1, 4]);
 });
+
+/**
+ * The sysids a selection resolves to, read off a Build run's aggregate —
+ * Build sends nothing, so the members are exactly the selection.
+ */
+async function selected(peerTable, selection) {
+  const aggregate = await executeFanout({ signal, selection,
+    connection: { peerTable },
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'build',
+    intervalMs: 0,
+  });
+  return aggregate.members.map((m) => m.sysid);
+}
 
 test('an empty resolution records which selection produced it (#226)', async () => {
   // The node's loud/quiet decision branches on the field: a filter matching
@@ -223,6 +235,20 @@ test('sequential execution paces retargeted sends between members', async () => 
   assert.deepEqual(waits, [25, 25]);
   assert.deepEqual(connection.sends.map((s) => s.message.fields.target_system), [1, 2, 3]);
   assert.deepEqual(connection.sends.map((s) => s.message.fields.target_component), [1, 1, 1]);
+});
+
+test('the build tier does not pause between members — nothing reaches the wire to pace', async () => {
+  const waits = [];
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection: connectionStub([peer(1), peer(2), peer(3)]),
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'build',
+    intervalMs: 25,
+    wait: async (ms) => waits.push(ms),
+  });
+  assert.equal(result.count, 3);
+  assert.deepEqual(waits, []);
 });
 
 test('retargeting does not invent target_component on a system-only message', async () => {
@@ -775,26 +801,28 @@ test('an east offset scales through cos(lat), not the latitude divisor', async (
     `10 m east at 47° is ~1318 degE7 (898 / cos 47°), got ${dLon}`);
 });
 
-test('offsets patch no coordinate on a frame whose metre scale is not measured', async () => {
-  // Local-frame INT x/y are metres ×1e4 (§14-measured), so the degE7 path
-  // would turn a commanded 10 m into ~9 cm; a body frame re-aims "north"
-  // along the vehicle's own heading. Neither frame matches the offset
-  // surface, so no coordinate patch is produced — the message goes out as
-  // built, and the raw patch surface is how a flow reaches those frames.
-  const intConn = connectionStub([peer(1)]);
+test('a member whose offsets have no metre reading in the frame is reported failed, not sent (R20)', async () => {
+  // Local-frame INT x/y are metres ×1e4 (§14-measured), and a body frame
+  // re-aims "north" along the vehicle's own heading. Sending the unoffset
+  // point would converge the fleet under a `succeeded` run, so the member is
+  // recorded failed with the reason; bare rows still go out.
+  const intConn = connectionStub([peer(1), peer(2)]);
   const intResult = await executeFanout({ signal, selection: { mode: 'all' },
     connection: intConn,
     message: {
       name: 'COMMAND_INT',
       fields: { target_system: 0, target_component: 0, command: 192, frame: 1, x: 50000, y: 0, z: 30 },
     },
-    members: [{ sysid: 1, north: 10 }],
+    members: [{ sysid: 1, north: 10 }, { sysid: 2 }],
     mode: 'sequential',
     delivery: 'send',
     intervalMs: 0,
   });
-  assert.equal(intResult.result, 'succeeded');
-  assert.equal(intConn.sends[0].message.fields.x, 50000, 'x is untouched, never degE7-scaled');
+  assert.equal(intResult.result, 'failed');
+  assert.equal(intResult.members[0].result, 'failed');
+  assert.match(intResult.members[0].detail, /no reading in MAV_FRAME 1 on COMMAND_INT/);
+  assert.equal(intResult.members[1].result, 'sent', 'a bare row is unaffected');
+  assert.deepEqual(intConn.sends.map((s) => s.message.fields.target_system), [2], 'the offset member is never sent');
 
   const localConn = connectionStub([peer(1)]);
   const localResult = await executeFanout({ signal, selection: { mode: 'all' },
@@ -809,8 +837,38 @@ test('offsets patch no coordinate on a frame whose metre scale is not measured',
     delivery: 'send',
     intervalMs: 0,
   });
-  assert.equal(localResult.result, 'succeeded');
-  assert.equal(localConn.sends[0].message.fields.x, 0, 'the body-axis x is left alone');
+  assert.equal(localResult.members[0].result, 'failed');
+  assert.match(localResult.members[0].detail, /MAV_FRAME 9 on SET_POSITION_TARGET_LOCAL_NED/);
+  assert.equal(localConn.sends.length, 0);
+
+  // Build reports the same: the product would carry the unoffset point.
+  const buildResult = await executeFanout({ signal, selection: { mode: 'all' },
+    connection: connectionStub([peer(1)]),
+    message: {
+      name: 'COMMAND_INT',
+      fields: { target_system: 0, target_component: 0, command: 192, frame: 1, x: 50000, y: 0, z: 30 },
+    },
+    members: [{ sysid: 1, up: 5 }],
+    mode: 'sequential',
+    delivery: 'build',
+    intervalMs: 0,
+  });
+  assert.equal(buildResult.success, false);
+  assert.equal(buildResult.members[0].result, 'failed');
+});
+
+test('member metre offsets on LOCAL_OFFSET_NED apply as NED metres too', async () => {
+  const connection = connectionStub([peer(1)]);
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtSetpoint({ fields: { coordinate_frame: 7, z: -10 } }),
+    members: [{ sysid: 1, north: 3, up: 5 }],
+    mode: 'sequential',
+    delivery: 'send',
+  });
+  assert.equal(result.success, true);
+  assert.equal(connection.sends[0].message.fields.x, 3);
+  assert.equal(connection.sends[0].message.fields.z, -15);
 });
 
 test('member metre offsets on SET_POSITION_TARGET_LOCAL_NED apply directly with up = -z', async () => {
@@ -1181,6 +1239,7 @@ test('a fan-out member record carries the terminal ack\'s result_param2 (§9, Co
 
   const result = await promise;
   const member = result.members.find((m) => m.sysid === 1);
+  assert.equal(member.result, 'denied', 'the MAV_RESULT name, the same word sequential reports');
   assert.equal(member.resultCode, 2);
   assert.equal(member.resultParam2, 11, 'the denial reason survives the member record');
 });
@@ -1353,6 +1412,28 @@ test('confirm-mode retry resends the member\'s patched message with the confirma
     assert.equal(message.fields.param6, 8.7);
     assert.equal(message.fields.param7, 30);
   }
+});
+
+test('a silent sequential ack wait reports unconfirmed, the word broadcast and echo use', async () => {
+  const connection = {
+    peerTable: peerTableStub([peer(1)]),
+    sends: [],
+    send(message, sendOptions) { this.sends.push({ message, options: sendOptions }); },
+    resolveSourceIds: () => ({ sysid: 255, compid: 190 }),
+    subscribe() { return () => {}; },
+  };
+  const result = await executeFanout({ signal, selection: { mode: 'all' },
+    connection,
+    message: builtCommand(),
+    mode: 'sequential',
+    delivery: 'confirm',
+    intervalMs: 0,
+    concurrency: 1,
+    timeoutMs: 5,
+    maxRetries: 0,
+  });
+  assert.equal(result.members[0].result, 'unconfirmed');
+  assert.equal(result.members[0].success, false);
 });
 
 // ── Cancellation (#54/#57, CodeRabbit #140) ───────────────────────────────────

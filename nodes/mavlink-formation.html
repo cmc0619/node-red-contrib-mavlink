@@ -155,8 +155,10 @@
   <p>Positions a group of vehicles into a geometric formation: computes one absolute
   target per sysid (lib/formation) and fans a <b>Go To / Reposition</b>
   (<code>MAV_CMD_DO_REPOSITION</code>) out sequentially with each vehicle's own
-  lat/lon/alt as per-member params 5/6/7. Slot 0 sits exactly on the anchor;
-  slots are assigned in sorted sysid order. Members hold their commanded
+  lat/lon/alt as per-member params 5/6/7. Slot 0 sits exactly on the anchor,
+  and the rest are assigned in sorted sysid order. On a leader anchor slot 0 is
+  the leader's own and it is never commanded: the other listed vehicles fill
+  slots 1..N, whether or not the leader is itself in <b>Sysids</b>. Members hold their commanded
   position indefinitely — <code>DO_REPOSITION</code> is one-shot, the node
   maintains nothing after the fan-out settles, and there is no TTL; re-send a
   new formation, or use Move to displace individual members.</p>
@@ -210,7 +212,9 @@
   override the configured values per message. Shape and spacing are design-time
   choices.</p>
   <h3>Outputs</h3>
-  <p>Output 0 fires only when every member succeeded, carrying the fan-out
+  <p>On <b>Build</b> nothing is sent: output 0 carries one built Reposition per
+  member for a downstream <b>mavlink-out</b>, and the badge is a preview. On the
+  wire tiers output 0 fires only when every member succeeded, carrying the fan-out
   aggregate under <code>msg.payload</code>. Output 1 always carries the
   aggregate with per-vehicle detail. An anchor leader that has not reported
   position fails the input. On a leader anchor both records carry

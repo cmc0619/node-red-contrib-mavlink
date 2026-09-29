@@ -191,9 +191,10 @@ test('a silence re-send that throws settles the transaction instead of escaping 
   const outcome = await waiter.start();
 
   assert.equal(sends, 2);
-  assert.equal(outcome.result, 'send failed');
+  assert.equal(outcome.result, 'failed');
   assert.equal(outcome.retries, 1);
   assert.equal(outcome.detail, 'retry send failed: queue full');
+  assert.equal(outcome.error.message, 'queue full', 'the error rides the settle for done(err)');
 });
 
 test('a TEMPORARILY_REJECTED retry is a fresh transmission: silence after it spends the remaining budget', async () => {
@@ -215,4 +216,50 @@ test('a TEMPORARILY_REJECTED retry is a fresh transmission: silence after it spe
   assert.deepEqual(confirmations, [0, 1, 2], 'the rejection retry, then one silence re-send');
   assert.equal(outcome.result, 'timeout');
   assert.equal(outcome.retries, 2);
+});
+
+test('noAutoRetry: silence never re-sends a delta; a TEMPORARILY_REJECTED retry still runs (Q3)', async () => {
+  // A relative turn re-sent after a lost *ack* turns the aircraft twice
+  // (measured: +30° commanded, 60.2° flown on ArduCopter SITL).
+  const conn = stubConn();
+  let sends = 0;
+  const silent = await makeWaiter(conn, {
+    timeoutMs: 5,
+    maxRetries: 3,
+    noAutoRetry: true,
+    sendFn: () => { sends += 1; },
+  }).start();
+  assert.equal(sends, 1, 'one transmission, no silence re-send');
+  assert.equal(silent.result, 'timeout');
+  assert.equal(silent.retries, 0);
+
+  const confirmations = [];
+  const waiter = makeWaiter(conn, {
+    timeoutMs: 5,
+    maxRetries: 3,
+    noAutoRetry: true,
+    sendFn: (c) => confirmations.push(c),
+  });
+  const p = waiter.start();
+  conn.injectAck({ command: 400, result: MAV_RESULT.TEMPORARILY_REJECTED }, 1, 1);
+  const rejected = await p;
+  assert.deepEqual(confirmations, [0, 1], 'the vehicle refused the first, so the retry is safe');
+  assert.equal(rejected.result, 'timeout');
+});
+
+test('ackWaiterFor carries noAutoRetry to the waiter (Move\'s relative turn rides it)', async () => {
+  const { ackWaiterFor } = require('../../lib/command/ack');
+  const conn = stubConn();
+  let sends = 0;
+  conn.send = () => { sends += 1; };
+  conn.resolveSourceIds = () => ({ sysid: 255, compid: 190 });
+  const waiter = ackWaiterFor(conn, { name: 'COMMAND_LONG', fields: { command: 115 } }, {
+    band: 2,
+    target: { sysid: 1, compid: 1 },
+    timeoutMs: 5,
+    maxRetries: 3,
+    noAutoRetry: true,
+  });
+  await waiter.start();
+  assert.equal(sends, 1);
 });

@@ -47,6 +47,17 @@ test('absent orbit centre, velocity and altitude encode the spec NaN sentinels; 
   assert.ok(Number.isNaN(blankVelocity[1]), 'absent velocity encodes NaN (vehicle default)');
   assert.equal(buildParamArray(getPreset('orbit'), mergeParams(JSON.parse('{"2":0}'), {}))[1], 0,
     'an explicit 0 velocity is a typed value and wins');
+
+  // Radius NaN is the vehicle default; a zero-fill was a 0 m orbit PX4 ACKs
+  // and then refuses to fly (review R40).
+  assert.ok(Number.isNaN(buildParamArray(getPreset('orbit'), mergeParams(JSON.parse('{}'), {}))[0]),
+    'absent radius encodes NaN (vehicle default)');
+});
+
+test('Set Home sends yaw NaN, the spec\'s "use default heading" — never a zero-filled north', () => {
+  const arr = buildParamArray(getPreset('set_home'), mergeParams(JSON.parse('{"1":1}'), { 4: 90 }));
+  assert.equal(arr[0], 1);
+  assert.ok(Number.isNaN(arr[3]), 'param4 is pinned: the editor renders no yaw field');
 });
 
 test('undefined payload override does not wipe a configured value into NaN', () => {

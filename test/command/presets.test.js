@@ -88,17 +88,8 @@ test('yaw and rotate are gone from the curated list — Move owns motion', () =>
   assert.ok(!offered.includes('rotate'));
 });
 
-test('reposition is library metadata, not operator surface', () => {
-  // Formation builds from the row (blankParams sentinels, commandId), so it
-  // must exist — and the Command editor must not offer it, or the goto is
-  // duplicated across two nodes again.
-  const row = getPreset('reposition');
-  assert.equal(row.commandId, 192);
-  assert.equal(row.listed, false);
-  assert.equal(row.blankParams[1], -1, 'speed sentinel rides with the row');
-  assert.ok(Number.isNaN(row.blankParams[4]), 'yaw sentinel rides with the row');
-  const offered = presetGroups().flatMap((g) => g.presets.map((p) => p.id));
-  assert.ok(!offered.includes('reposition'), 'the dropdown no longer offers the goto');
+test('reposition is not a Command preset: Move owns the goto', () => {
+  assert.equal(getPreset('reposition'), undefined);
 });
 
 // ── Mission pause / resume ─────────────────────────────────────────────────
@@ -269,25 +260,6 @@ test('a blank msg.payload override stays blank instead of coercing to 0 (Greptil
   // A real override still lands, and an explicit 0 still counts as typed.
   assert.equal(mergeParams(JSON.parse('{}'), { 5: 47.4 })[5], 47.4);
   assert.equal(mergeParams(JSON.parse('{}'), { 5: 0 })[5], 0);
-});
-
-test('GCS parity: blank reposition speed and yaw encode the spec sentinels (#240)', () => {
-  // QGC/MAVSDK transmit speed -1 (vehicle default) and yaw NaN (current
-  // heading mode) for unspecified fields. The old zero-fill commanded 0 m/s
-  // and yaw-to-north on every goto — the #98b land-yaw hazard, on the goto
-  // primitive.
-  const arr = buildParamArray(getPreset('reposition'), mergeParams(JSON.parse('{"5":47.4,"6":8.5,"7":30}'), {}));
-  assert.equal(arr[0], -1, 'blank speed encodes -1 (vehicle default)');
-  assert.ok(Number.isNaN(arr[3]), 'blank yaw encodes NaN (keep current heading mode)');
-  assert.deepEqual(arr.slice(4), [47.4, 8.5, 30]);
-
-  // Explicit values — including 0 — are typed and win over the sentinels.
-  const explicit = buildParamArray(
-    getPreset('reposition'),
-    mergeParams(JSON.parse('{"1":5,"4":0,"5":47.4,"6":8.5,"7":30}'), {})
-  );
-  assert.equal(explicit[0], 5);
-  assert.equal(explicit[3], 0, 'an explicit 0 yaw is a command to heading 0');
 });
 
 test('GCS parity: blank change-speed fields encode -1 "no change", never a commanded zero (#240)', () => {
