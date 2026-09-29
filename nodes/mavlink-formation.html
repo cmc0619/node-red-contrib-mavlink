@@ -34,16 +34,8 @@
       // dispatches these tokens with affirmative cases only, so a hand-edited
       // stray value must be caught here, the only place that can see it.
       shape: { value: 'line', validate: RED.mavlink.oneOf(['line', 'column', 'grid', 'wedge', 'circle', 'sphere']) },
-      spacing: {
-        value: 10,
-        validate(v, _opt) {
-          // Spacing must be a positive distance: 0 stacks every vehicle on the
-          // same point — a commanded collision, not a formation.
-          const n = Number(v);
-          if (Number.isFinite(n) && n > 0) return true;
-          return 'must be a distance in metres > 0 — 0 stacks the fleet on one point';
-        },
-      },
+      /** A positive distance: 0 stacks every vehicle on one point — a commanded collision. */
+      spacing: { value: 10, validate: RED.mavlink.validatePositive('metres') },
       sysids: {
         value: '',
         validate(v, _opt) {
@@ -66,11 +58,9 @@
       promoteLeader: { value: false },
       leader: {
         value: '',
-        validate: whenAnchorMode('leader', (v, _opt) => {
-          const n = Number(v);
-          if (Number.isInteger(n) && n >= 1 && n <= 255) return true;
-          return 'must be the leader\'s SysID (1–255)';
-        }),
+        validate: whenAnchorMode('leader', (v, opt) => (RED.mavlink.isBlank(v)
+          ? 'needs the leader\'s SysID'
+          : RED.mavlink.validateUint8(1)(v, opt))),
       },
       // A fixed anchor must be a place on the ellipsoid: latitude ±90,
       // longitude ±180. Out of range is a typo, not a position.
@@ -147,8 +137,8 @@
   <div class="form-row"><label for="node-input-delivery">Delivery</label><select id="node-input-delivery"><option value="build">Build</option><option value="send">Send</option><option value="confirm">Send and confirm</option></select></div>
   <div class="form-row"><label for="node-input-changeMode">Change mode</label><input type="checkbox" id="node-input-changeMode" style="display:inline-block;width:auto;"></div>
   <div class="form-row"><label for="node-input-intervalMs">Interval ms</label><input type="number" id="node-input-intervalMs" min="0"></div>
-  <div class="form-row"><label for="node-input-timeoutMs">Timeout ms</label><input type="number" id="node-input-timeoutMs" min="1"></div>
-  <div class="form-row"><label for="node-input-maxRetries">Retries</label><input type="number" id="node-input-maxRetries" min="0"></div>
+  <div class="form-row"><label for="node-input-timeoutMs">ACK timeout</label><input type="number" id="node-input-timeoutMs" min="1" style="width:80px"> ms</div>
+  <div class="form-row"><label for="node-input-maxRetries">Max retries</label><input type="number" id="node-input-maxRetries" min="0"></div>
 </script>
 
 <script type="text/html" data-help-name="mavlink-formation">
@@ -181,9 +171,12 @@
   the configured leader takes the pattern back on the first message after it
   reports again. Off by default because anchoring on a vehicle the flow did not
   name is a substitution, and the flow has to ask for it.</p>
-  <p>Altitudes are metres above home (<code>MAV_FRAME_GLOBAL_RELATIVE_ALT</code>,
-  the carrier's default frame): a leader anchor uses the leader's relative
-  altitude. Slot 0 sits on the anchor altitude; planar shapes keep every
+  <p>A leader anchor rides <i>Absolute (MSL)</i> (<code>MAV_FRAME_GLOBAL</code>,
+  frame 0) at the leader's own reported MSL altitude, so followers hold the
+  leader's height on ArduPilot and PX4 alike. A fixed anchor, and
+  <code>msg.payload.anchor</code> in either mode, are metres above home
+  (<code>MAV_FRAME_GLOBAL_RELATIVE_ALT</code>, frame 3, the carrier's default
+  frame). Slot 0 sits on the anchor altitude; planar shapes keep every
   follower level with it. <b>Sphere</b> places followers on a Fibonacci lattice
   of radius = spacing, so their altitudes differ (<code>alt − ned.down</code>).
   Pick an anchor high enough that the lowest sphere slot stays clear of the

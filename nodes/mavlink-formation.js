@@ -4,7 +4,7 @@ const delivery = require('../lib/delivery');
 const { executeFanout, parseSysidList, isActive, autopilotComponent, reportAggregate } = require('../lib/fanout');
 const { isBlank, valueFrom } = require('../lib/addressing/resolve');
 const { formationTargets } = require('../lib/formation');
-const { buildRepositionMessage } = require('../lib/move/reposition');
+const { buildRepositionMessage, frameForAltRef } = require('../lib/move');
 const { DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
 
 /**
@@ -17,10 +17,11 @@ const { DEFAULT_FRAME, scaleLatLon } = require('../lib/command/carrier');
  * (wire units — Fan-out is a raw surface, §10). All geometry lives in
  * lib/formation; all replication lives in lib/fanout.
  *
- * Altitude semantics: targets ride MAV_FRAME_GLOBAL_RELATIVE_ALT (metres above
- * home), the frame a guided reposition assumes. A leader anchor therefore uses
- * the leader's `relativeAlt`, and an explicit anchor altitude is metres above
- * home.
+ * Altitude semantics: a leader anchor rides MAV_FRAME_GLOBAL at the leader's
+ * AMSL `alt`, which both stacks fly as written; PX4's COMMAND_INT handler
+ * reads every DO_REPOSITION z as AMSL whatever the frame (FORMATION-PX4). An
+ * explicit anchor altitude is metres above home and rides
+ * MAV_FRAME_GLOBAL_RELATIVE_ALT, the carrier's default frame.
  */
 
 module.exports = function registerMavlinkFormation(RED) {
@@ -34,97 +35,87 @@ module.exports = function registerMavlinkFormation(RED) {
     // delivery.inFlightTracker.
     const inFlight = delivery.inFlightTracker();
 
-    /**
-     * Input-invariant Reposition scaffold, built once by Move's owner of
-     * MAV_CMD_DO_REPOSITION (COMMAND_INT). Blank speed and yaw ride the
-     * spec's sentinels, speed -1 (vehicle default) and yaw NaN (hold
-     * heading — the formation heading rotates the pattern, not the noses).
-     * The coordinates are zero here and patched in per member as degE7 x/y,
-     * since Fan-out patches are the raw wire surface (§10) and executeFanout
-     * never mutates its base message. Guided reposition is relative-alt, so
-     * the frame is passed explicitly. Change mode sets
-     * MAV_DO_REPOSITION_FLAGS_CHANGE_MODE — the gate on both stacks
-     * (§14.108): without it the reposition is DENIED unless the vehicle is
-     * already in GUIDED / Hold.
-     */
-    const message = buildRepositionMessage({
-      position: { lat: 0, lon: 0, alt: 0 },
-      target: { sysid: 0, compid: 0 },
-      changeMode: config.changeMode,
-      frame: DEFAULT_FRAME,
-    });
+    delivery.onActionInput(node, async (msg, send, done) => {
+      const payload = msg.payload;
+      const sysids = parseSysidList(valueFrom(payload, config, 'sysids'));
+      const { anchor, frame, headingDeg, leaderSysid } = resolveAnchor(
+        config, payload, connectionNode.peerTable
+      );
+      /**
+       * The run's Reposition scaffold, built by Move's owner of
+       * MAV_CMD_DO_REPOSITION (COMMAND_INT) in the anchor's frame. Blank
+       * speed and yaw ride the spec's sentinels, speed -1 (vehicle default)
+       * and yaw NaN (hold heading — the formation heading rotates the
+       * pattern, not the noses). The coordinates are zero here and patched
+       * in per member as degE7 x/y, since Fan-out patches are the raw wire
+       * surface (§10) and executeFanout never mutates its base message.
+       * Change mode sets MAV_DO_REPOSITION_FLAGS_CHANGE_MODE — the gate on
+       * both stacks (§14.108): without it the reposition is DENIED unless
+       * the vehicle is already in GUIDED / Hold.
+       */
+      const message = buildRepositionMessage({
+        position: { lat: 0, lon: 0, alt: 0 },
+        target: { sysid: 0, compid: 0 },
+        changeMode: config.changeMode,
+        frame,
+      });
+      const pitchDeg = resolvePitch(config, payload);
+      /**
+       * Slot 0 sits on the anchor. On a leader anchor that slot is the
+       * leader's own: the followers fill slots 1..N in sysid order and the
+       * leader is never commanded (it is already where slot 0 is).
+       */
+      const followers = sysids.filter((id) => id !== leaderSysid).sort((a, b) => a - b);
+      const targets = formationTargets({
+        shape: config.shape,
+        spacing: config.spacing,
+        anchor,
+        headingDeg,
+        pitchDeg,
+        sysids: leaderSysid === undefined ? followers : [leaderSysid, ...followers],
+      }).filter((target) => target.sysid !== leaderSysid);
 
-    node.on('input', async (msg, send, done) => {
-      try {
-        if (delivery.shouldSuppress(msg)) {
-          done();
-          return;
-        }
-        const payload = msg.payload;
-        const sysids = parseSysidList(valueFrom(payload, config, 'sysids'));
-        const { anchor, headingDeg, leaderSysid } = resolveAnchor(
-          config, payload, connectionNode.peerTable
-        );
-        const pitchDeg = resolvePitch(config, payload);
-        /**
-         * Slot 0 sits on the anchor. On a leader anchor that slot is the
-         * leader's own: the followers fill slots 1..N in sysid order and the
-         * leader is never commanded (it is already where slot 0 is).
-         */
-        const followers = sysids.filter((id) => id !== leaderSysid).sort((a, b) => a - b);
-        const targets = formationTargets({
-          shape: config.shape,
-          spacing: config.spacing,
-          anchor,
-          headingDeg,
-          pitchDeg,
-          sysids: leaderSysid === undefined ? followers : [leaderSysid, ...followers],
-        }).filter((target) => target.sysid !== leaderSysid);
+      const memberTargets = targets.map((target) => ({
+        sysid: target.sysid,
+        x: scaleLatLon(target.lat),
+        y: scaleLatLon(target.lon),
+        z: target.alt,
+      }));
 
-        const memberTargets = targets.map((target) => ({
-          sysid: target.sysid,
-          x: scaleLatLon(target.lat),
-          y: scaleLatLon(target.lon),
-          z: target.alt,
-        }));
+      const aggregate = await inFlight.track((signal) => executeFanout({
+        signal,
+        // Aggregates from this node say mavlink-formation, not the library's
+        // replicator — failure records already do (§9 one record owner).
+        nodeType: node.type,
+        connection: connectionNode,
+        message,
+        targets: memberTargets,
+        mode: 'sequential',
+        // One vehicle at a time, as the help promises. The retry budget,
+        // interval and timeout are the editor's, read as saved.
+        concurrency: 1,
+        maxRetries: config.maxRetries,
+        delivery: config.delivery,
+        intervalMs: config.intervalMs,
+        timeoutMs: config.timeoutMs,
+      }));
 
-        const aggregate = await inFlight.track((signal) => executeFanout({
-          signal,
-          // Aggregates from this node say mavlink-formation, not the library's
-          // replicator — failure records already do (§9 one record owner).
-          nodeType: node.type,
-          connection: connectionNode,
-          message,
-          targets: memberTargets,
-          mode: 'sequential',
-          // One vehicle at a time, as the help promises. The retry budget,
-          // interval and timeout are the editor's, read as saved.
-          concurrency: 1,
-          maxRetries: config.maxRetries,
-          delivery: config.delivery,
-          intervalMs: config.intervalMs,
-          timeoutMs: config.timeoutMs,
-        }));
-
-        // A redeploy cancelled us: finish quietly rather than emitting or
-        // raising on a closed node (same rule as mavlink-fanout).
-        if (aggregate.result === 'cancelled') {
-          done();
-          return;
-        }
-
-        // Which vehicle actually anchored the pattern. Present on every
-        // leader-anchored run, not only a promoted one, so a flow reads one
-        // field rather than inferring a substitution from its absence. Copied
-        // rather than threaded through lib/fanout: the replicator has no
-        // notion of a leader and should not grow one for a single caller.
-        const record = leaderSysid === undefined
-          ? aggregate
-          : { ...aggregate, leader: leaderSysid };
-        reportAggregate(node, send, done, record, config.delivery);
-      } catch (err) {
-        delivery.failInput(node, send, err, done);
+      // A redeploy cancelled us: finish quietly rather than emitting or
+      // raising on a closed node (same rule as mavlink-fanout).
+      if (aggregate.result === 'cancelled') {
+        done();
+        return;
       }
+
+      // Which vehicle actually anchored the pattern. Present on every
+      // leader-anchored run, not only a promoted one, so a flow reads one
+      // field rather than inferring a substitution from its absence. Copied
+      // rather than threaded through lib/fanout: the replicator has no
+      // notion of a leader and should not grow one for a single caller.
+      const record = leaderSysid === undefined
+        ? aggregate
+        : { ...aggregate, leader: leaderSysid };
+      reportAggregate(node, send, done, record, config.delivery);
     });
 
     node.on('close', (done) => inFlight.close(done));
@@ -147,13 +138,16 @@ module.exports = function registerMavlinkFormation(RED) {
  * unknown — 0 would face the pattern north without anyone asking. A present
  * payload heading is trusted input like every other: Number() coercion.
  *
+ * Frame: a leader anchor is the leader's AMSL altitude, so MSL; a payload or
+ * fixed anchor rides the carrier's default frame (above home).
+ *
  * Pitch follows the same payload-then-config rule via {@link resolvePitch}.
  * Pitch tumbles the pattern around body +Y; it is not taken from telemetry.
  *
  * @param {object} config node config
  * @param {object} payload msg.payload
  * @param {{snapshot: Function}} peerTable connection peer table
- * @returns {{anchor: {lat: *, lon: *, alt: *}, headingDeg: *, leaderSysid: (number|undefined)}}
+ * @returns {{anchor: {lat: *, lon: *, alt: *}, frame: number, headingDeg: *, leaderSysid: (number|undefined)}}
  *   `leaderSysid` only on a leader anchor — the vehicle the pattern hung off.
  */
 function resolveAnchor(config, payload, peerTable) {
@@ -167,13 +161,14 @@ function resolveAnchor(config, payload, peerTable) {
 
   // A payload anchor overrides the configured mode outright.
   if (payload.anchor !== undefined) {
-    return { anchor: payload.anchor, headingDeg: heading };
+    return { anchor: payload.anchor, frame: DEFAULT_FRAME, headingDeg: heading };
   }
 
   switch (config.anchorMode) {
     case 'fixed':
       return {
         anchor: { lat: config.lat, lon: config.lon, alt: config.alt },
+        frame: DEFAULT_FRAME,
         headingDeg: heading,
       };
     case 'leader': {
@@ -183,7 +178,8 @@ function resolveAnchor(config, payload, peerTable) {
       const position = leader.component.position;
       if (!headingGiven && position.heading != null) heading = position.heading;
       return {
-        anchor: { lat: position.lat, lon: position.lon, alt: position.relativeAlt },
+        anchor: { lat: position.lat, lon: position.lon, alt: position.alt },
+        frame: frameForAltRef('msl'),
         headingDeg: heading,
         leaderSysid: leader.sysid,
       };

@@ -20,75 +20,70 @@ module.exports = function registerMavlinkFanout(RED) {
     // waits for each to unwind. Rationale lives with delivery.inFlightTracker.
     const inFlight = delivery.inFlightTracker();
 
-    node.on('input', async (msg, send, done) => {
-      try {
-        if (delivery.shouldSuppress(msg)) {
-          done();
-          return;
-        }
-        const { message, opts } = unwrapPayload(msg.payload);
-        const selection = opts.selection === undefined ? selectionFrom(config) : opts.selection;
-        const selectionMode = selection.mode;
-        const effectiveDelivery = valueFrom(opts, config, 'delivery');
-        const listSelected = selectionMode === 'list' || opts.targets !== undefined;
+    delivery.onActionInput(node, async (msg, send, done) => {
+      const { message, opts } = unwrapPayload(msg.payload);
+      const selection = opts.selection === undefined ? selectionFrom(config) : opts.selection;
+      const effectiveDelivery = valueFrom(opts, config, 'delivery');
 
-        let effectiveConnection = connectionNode;
-        switch (effectiveDelivery) {
-          case 'build':
-            // On Build an explicit sysid list is the directory (§6 Fan-out
-            // exception): it replicates against a synthetic peer table, never
-            // a live one — a Connection kept hidden from an earlier tier would
-            // drop every listed member it has not heard.
-            if (listSelected) {
-              effectiveConnection = buildListStub(
-                opts.targets !== undefined
-                  ? opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
-                  : selection.sysids
-              );
-            }
+      let effectiveConnection = connectionNode;
+      switch (effectiveDelivery) {
+        case 'build':
+          // On Build an explicit sysid list is the directory (§6 Fan-out
+          // exception): it replicates against a synthetic peer table, never
+          // a live one — a Connection kept hidden from an earlier tier would
+          // drop every listed member it has not heard.
+          if (opts.targets !== undefined) {
+            effectiveConnection = buildListStub(
+              opts.targets.map((target) => target.sysid === undefined ? target : target.sysid)
+            );
             break;
-          default: break; // This space intentionally left blank (§5)
-        }
-
-        const aggregate = await inFlight.track((signal) => executeFanout({
-          signal,
-          // The aggregate record's `node` field names the emitting node —
-          // formation runs the same executor and stamps its own type.
-          nodeType: node.type,
-          connection: effectiveConnection,
-          message,
-          targets: opts.targets,
-          members: configMembersFor(config, opts),
-          selection,
-          // Affirmative dispatch (§5): lib/fanout maps only broadcast and
-          // sequential — an unknown or blank mode selects no case, so no run
-          // starts and the aggregate comes back undefined (handled below).
-          mode: valueFrom(opts, config, 'executionMode'),
-          delivery: effectiveDelivery,
-          intervalMs: valueFrom(opts, config, 'intervalMs'),
-          timeoutMs: valueFrom(opts, config, 'timeoutMs'),
-          maxRetries: valueFrom(opts, config, 'maxRetries'),
-          concurrency: valueFrom(opts, config, 'concurrency'),
-          stopOnError: valueFrom(opts, config, 'stopOnError'),
-          identityId: opts.identityId === undefined ? config.identity : opts.identityId,
-        }));
-
-        // Two ways there is nothing to report. A redeploy cancelled us: the
-        // node is going away, so finish quietly rather than emitting or raising
-        // on a closed node, which would trip a Catch node wired for "fan-out
-        // failed → failsafe" on a mere deploy. Or no execution mode matched, so
-        // no run started (§5) and executeFanout selected no behavior. Either
-        // way the input still completes — a message left hanging is worse than
-        // one that did nothing (same rule as mavlink-mission's tier dispatch).
-        if (aggregate === undefined || aggregate.result === 'cancelled') {
-          done();
-          return;
-        }
-
-        reportAggregate(node, send, done, aggregate, effectiveDelivery);
-      } catch (err) {
-        delivery.failInput(node, send, err, done);
+          }
+          switch (selection.mode) {
+            case 'list':
+              effectiveConnection = buildListStub(selection.sysids);
+              break;
+            default: break; // This space intentionally left blank (§5)
+          }
+          break;
+        default: break; // This space intentionally left blank (§5)
       }
+
+      const aggregate = await inFlight.track((signal) => executeFanout({
+        signal,
+        // The aggregate record's `node` field names the emitting node —
+        // formation runs the same executor and stamps its own type.
+        nodeType: node.type,
+        connection: effectiveConnection,
+        message,
+        targets: opts.targets,
+        members: configMembersFor(config, opts),
+        selection,
+        // Affirmative dispatch (§5): lib/fanout maps only broadcast and
+        // sequential — an unknown or blank mode selects no case, so no run
+        // starts and the aggregate comes back undefined (handled below).
+        mode: valueFrom(opts, config, 'executionMode'),
+        delivery: effectiveDelivery,
+        intervalMs: valueFrom(opts, config, 'intervalMs'),
+        timeoutMs: valueFrom(opts, config, 'timeoutMs'),
+        maxRetries: valueFrom(opts, config, 'maxRetries'),
+        concurrency: valueFrom(opts, config, 'concurrency'),
+        stopOnError: valueFrom(opts, config, 'stopOnError'),
+        identityId: opts.identityId === undefined ? config.identity : opts.identityId,
+      }));
+
+      // Two ways there is nothing to report. A redeploy cancelled us: the
+      // node is going away, so finish quietly rather than emitting or raising
+      // on a closed node, which would trip a Catch node wired for "fan-out
+      // failed → failsafe" on a mere deploy. Or no execution mode matched, so
+      // no run started (§5) and executeFanout selected no behavior. Either
+      // way the input still completes — a message left hanging is worse than
+      // one that did nothing (same rule as mavlink-mission's tier dispatch).
+      if (aggregate === undefined || aggregate.result === 'cancelled') {
+        done();
+        return;
+      }
+
+      reportAggregate(node, send, done, aggregate, effectiveDelivery);
     });
 
     node.on('close', (done) => inFlight.close(done));
@@ -123,12 +118,13 @@ function selectionFrom(config) {
   // No `|| 'all'`: the editor always saves a member, and the runtime maps
   // nothing — a blank saved mode crashes at dispatch, like any non-member.
   const mode = config.selectionMode;
-  return {
-    mode,
-    // List selection reads its sysids from the members table rows.
-    sysids: mode === 'list' ? config.members.map((member) => member.sysid) : undefined,
-    filter,
-  };
+  switch (mode) {
+    case 'list':
+      /** List selection reads its sysids from the members table rows. */
+      return { mode, sysids: config.members.map((member) => member.sysid), filter };
+    default: break; // This space intentionally left blank (§5)
+  }
+  return { mode, filter };
 }
 
 /**

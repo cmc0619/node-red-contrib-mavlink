@@ -37,9 +37,9 @@ const { valueFrom } = require('../lib/addressing/resolve');
 const { cancelSlot } = require('../lib/command/ack');
 const {
   makeStatusRecord,
-  shouldSuppress,
   applyActionStatus,
-  failInput,
+  onActionInput,
+  completeBuild,
 } = require('../lib/delivery');
 const { resolveDeliveryContext } = require('../lib/addressing/delivery-context');
 
@@ -159,140 +159,133 @@ module.exports = function registerMavlinkParam(RED) {
     const slot = cancelSlot();
     let closing = false;
 
-    node.on('input', async (msg, send, done) => {
-      try {
-        if (shouldSuppress(msg)) {
-          done();
+    onActionInput(node, async (msg, send, done) => {
+      const payload = msg.payload;
+      // Concrete Build dialects carry firmware from the editor (no target rung).
+      const {
+        connectionNode: connNode,
+        profile,
+        target,
+        identityId,
+      } = resolveDeliveryContext(RED, {
+        delivery,
+        config,
+        payload,
+        connectionNode: connAtDeploy,
+        buildFirmwareProfile: true,
+      });
+
+      const action = valueFrom(payload, config, 'action');
+
+      /**
+       * The request, its encoding resolved from the msg override, then the
+       * peer's AUTOPILOT_VERSION capabilities, then the named firmware
+       * (DESIGN.md §11). Build has no peer table to ask.
+       *
+       * @param {number|string|undefined} capabilities
+       * @returns {object}
+       */
+      const requestWith = (capabilities) => requestFrom(config, payload, target, resolveParamEncoding({
+        encoding: payload.paramEncoding,
+        capabilities,
+        firmware: valueFrom(payload, profile, 'firmware'),
+      }));
+      const wireRequest = () => requestWith(capabilitiesFromPeer(connNode, target));
+
+      /**
+       * Affirmative dispatch on the tier and action (§5): a pair the
+       * editor's rings cannot save matches no case, so nothing reaches the
+       * wire and the input completes as a no-op.
+       */
+      switch (`${delivery}|${action}`) {
+        case 'build|read':
+        case 'build|set':
+        case 'build|request-list': {
+          const message = buildParamMessage(requestWith());
+          completeBuild(node, send, message, 'param', { message });
+          break;
+        }
+        case 'send|read':
+        case 'send|set':
+        case 'send|request-list': {
+          const message = buildParamMessage(wireRequest());
+          connNode.send(message, { band: bandFor(action), target, identityId });
+          applyActionStatus(node, 'ok', 'sent');
+          send([{ payload: message }, makeStatusRecord(node.type, { result: 'sent', payload: message })]);
+          break;
+        }
+        case 'confirm|set': {
+          const request = wireRequest();
+          const param = { paramId: request.paramId, paramType: request.paramType, value: request.value };
+          await wait(new ParamRestore({ ...transferOptions(request), params: [param] }), 'echo-confirmed', () => param);
           return;
         }
+        case 'confirm|read': {
+          const request = wireRequest();
+          await wait(new ParamRead({ ...transferOptions(request), request }), 'value-received', (outcome) => outcome.param);
+          return;
+        }
+        case 'collect|request-list':
+          await wait(
+            new ParamBackup({ ...transferOptions(wireRequest()), warn: (text) => node.warn(`mavlink-param: ${text}`) }),
+            'list-complete',
+            (outcome) => outcome.params
+          );
+          return;
+        default: break; // This space intentionally left blank (§5)
+      }
+      done();
+      return;
 
-        const payload = msg.payload;
-        // Concrete Build dialects carry firmware from the editor (no target rung).
-        const {
-          connectionNode: connNode,
-          profile,
+      /**
+       * The transfer skeleton's options for this input (lib/delivery/transfer.js).
+       *
+       * @param {object} request  carries the resolved encoding
+       * @returns {object}
+       */
+      function transferOptions(request) {
+        return {
+          send: (message) => connNode.send(message, { band: bandFor(action), target, identityId }),
+          subscribe: (filter, handler) => connNode.subscribe(filter, handler),
           target,
-          identityId,
-        } = resolveDeliveryContext(RED, {
-          delivery,
-          config,
-          payload,
-          connectionNode: connAtDeploy,
-          buildFirmwareProfile: true,
-        });
+          /** The editor owns both numbers and their rings (RED.mavlink.ackDefaults). */
+          timeoutMs: Number(config.timeoutMs),
+          maxRetries: Number(config.maxRetries),
+          encoding: request.encoding,
+          onProgress: (update) => send([null, makeStatusRecord(node.type, { result: 'progress', ...update })]),
+        };
+      }
 
-        const action = valueFrom(payload, config, 'action');
-
-        /**
-         * The request, its encoding resolved from the msg override, then the
-         * peer's AUTOPILOT_VERSION capabilities, then the named firmware
-         * (DESIGN.md §11). Build has no peer table to ask.
-         *
-         * @param {number|string|undefined} capabilities
-         * @returns {object}
-         */
-        const requestWith = (capabilities) => requestFrom(config, payload, target, resolveParamEncoding({
-          encoding: payload.paramEncoding,
-          capabilities,
-          firmware: valueFrom(payload, profile, 'firmware'),
-        }));
-        const wireRequest = () => requestWith(capabilitiesFromPeer(connNode, target));
-
-        /**
-         * Affirmative dispatch on the tier and action (§5): a pair the
-         * editor's rings cannot save matches no case, so nothing reaches the
-         * wire and the input completes as a no-op.
-         */
-        switch (`${delivery}|${action}`) {
-          case 'build|read':
-          case 'build|set':
-          case 'build|request-list':
-            completeBuild(node, send, buildParamMessage(requestWith()));
+      /**
+       * Run one waiting exchange in the slot and report its outcome. Output
+       * 0 fires on success only; output 1 carries the terminal record. A
+       * close cancels quietly (§14.47); a later input superseding this one
+       * says so on output 1, because this one's frame is already on the wire.
+       *
+       * @param {object} machine
+       * @param {string} detail  the success word
+       * @param {function(object): *} continued  output 0's payload
+       */
+      async function wait(machine, detail, continued) {
+        applyActionStatus(node, 'sending', `${action}\u2026`);
+        const outcome = await slot.run(machine);
+        const { params: _params, param: _param, ...fields } = outcome;
+        switch (outcome.result) {
+          case 'succeeded':
+            applyActionStatus(node, 'ok', detail);
+            send([{ payload: continued(outcome) }, makeStatusRecord(node.type, { ...fields, detail })]);
             break;
-          case 'send|read':
-          case 'send|set':
-          case 'send|request-list': {
-            const message = buildParamMessage(wireRequest());
-            connNode.send(message, { band: bandFor(action), target, identityId });
-            applyActionStatus(node, 'ok', 'sent');
-            send([{ payload: message }, makeStatusRecord(node.type, { result: 'succeeded', detail: 'sent', payload: message })]);
+          case 'cancelled':
+            if (!closing) send([null, makeStatusRecord(node.type, { ...fields, detail: 'superseded' })]);
             break;
-          }
-          case 'confirm|set': {
-            const request = wireRequest();
-            const param = { paramId: request.paramId, paramType: request.paramType, value: request.value };
-            await wait(new ParamRestore({ ...transferOptions(request), params: [param] }), 'echo-confirmed', () => param);
-            return;
-          }
-          case 'confirm|read': {
-            const request = wireRequest();
-            await wait(new ParamRead({ ...transferOptions(request), request }), 'value-received', (outcome) => outcome.param);
-            return;
-          }
-          case 'collect|request-list':
-            await wait(
-              new ParamBackup({ ...transferOptions(wireRequest()), warn: (text) => node.warn(`mavlink-param: ${text}`) }),
-              'list-complete',
-              (outcome) => outcome.params
-            );
-            return;
+          case 'failed':
+          case 'unconfirmed':
+            applyActionStatus(node, 'error', outcome.reason);
+            send([null, makeStatusRecord(node.type, fields)]);
+            break;
           default: break; // This space intentionally left blank (§5)
         }
         done();
-        return;
-
-        /**
-         * The transfer skeleton's options for this input (lib/delivery/transfer.js).
-         *
-         * @param {object} request  carries the resolved encoding
-         * @returns {object}
-         */
-        function transferOptions(request) {
-          return {
-            send: (message) => connNode.send(message, { band: bandFor(action), target, identityId }),
-            subscribe: (filter, handler) => connNode.subscribe(filter, handler),
-            target,
-            /** The editor owns both numbers and their rings (RED.mavlink.ackDefaults). */
-            timeoutMs: Number(config.timeoutMs),
-            maxRetries: Number(config.maxRetries),
-            encoding: request.encoding,
-            onProgress: (update) => send([null, makeStatusRecord(node.type, { result: 'progress', ...update })]),
-          };
-        }
-
-        /**
-         * Run one waiting exchange in the slot and report its outcome. Output
-         * 0 fires on success only; output 1 carries the terminal record. A
-         * close cancels quietly (§14.47); a later input superseding this one
-         * says so on output 1, because this one's frame is already on the wire.
-         *
-         * @param {object} machine
-         * @param {string} detail  the success word
-         * @param {function(object): *} continued  output 0's payload
-         */
-        async function wait(machine, detail, continued) {
-          applyActionStatus(node, 'sending', `${action}\u2026`);
-          const outcome = await slot.run(machine);
-          const { params: _params, param: _param, ...fields } = outcome;
-          switch (outcome.result) {
-            case 'succeeded':
-              applyActionStatus(node, 'ok', detail);
-              send([{ payload: continued(outcome) }, makeStatusRecord(node.type, { ...fields, detail })]);
-              break;
-            case 'cancelled':
-              if (!closing) send([null, makeStatusRecord(node.type, { ...fields, detail: 'superseded' })]);
-              break;
-            case 'failed':
-            case 'unconfirmed':
-              applyActionStatus(node, 'error', outcome.reason);
-              send([null, makeStatusRecord(node.type, fields)]);
-              break;
-            default: break; // This space intentionally left blank (§5)
-          }
-          done();
-        }
-      } catch (err) {
-        failInput(node, send, err, done);
       }
     });
 
@@ -357,9 +350,4 @@ function bandFor(action) {
     default: break; // This space intentionally left blank (§5)
   }
   return undefined;
-}
-
-function completeBuild(node, send, message) {
-  applyActionStatus(node, 'ok', 'built param');
-  send([{ payload: message }, makeStatusRecord(node.type, { result: 'succeeded', detail: 'built', message })]);
 }

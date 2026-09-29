@@ -21,7 +21,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function makeConn() {
   const bundle = loadBundled('ardupilotmega');
-  const resolveIdentity = (i) => ({ identityId: i.defaultIdentityId, source: 'default' });
   return new Connection(
     {
       transport: {
@@ -42,7 +41,7 @@ function makeConn() {
       signing: { linkId: 0, signOutbound: false, acceptInvalid: false, hasKey: false },
       heartbeat: { staleMs: 5000, expireMs: 15000 },
     },
-    { resolveIdentity, logger: { info() {}, warn() {}, error() {} } }
+    { logger: { info() {}, warn() {}, error() {} } }
   );
 }
 

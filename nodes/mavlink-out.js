@@ -33,9 +33,8 @@
 
 const {
   makeStatusRecord,
-  shouldSuppress,
   applyActionStatus,
-  failInput,
+  onActionInput,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkOut(RED) {
@@ -51,43 +50,33 @@ module.exports = function registerMavlinkOut(RED) {
     // The editor owns the default ('2' = Control) — just convert it.
     const defaultBand = Number(config.band);
 
-    node.on('input', (msg, send, done) => {
-      // §9 suppress: msg.payload === false → silent no-op.
-      if (shouldSuppress(msg)) {
-        done();
-        return;
-      }
-
+    onActionInput(node, (msg, send, done) => {
       // Everything that can go wrong here — a missing Connection, a payload
       // shape the wire cannot carry, a queue send throwing on a full band or
       // unknown identity — exits through one terminal record plus done(err),
       // so the chain halts and a Catch node hears about it (§2, §9).
-      try {
-        // An unrecognised payload rides as given and craters in
-        // connectionNode.send, whose serializer throws synchronously on a
-        // non-message before anything is enqueued (§0).
-        const message = resolveMessage(msg);
-        /**
-         * msg.band overrides the config default by presence and rides as
-         * given — msg is trusted (§0); a band no queue case answers to
-         * selects no behavior at the switch (§5).
-         */
-        const band = msg.band === undefined ? defaultBand : msg.band;
-        connectionNode.send(message, {
-          band,
-          target: msg.target,
-          identityId: msg.identityId,
-        });
-        applyActionStatus(node, 'ok', message.name);
-        send([msg, makeStatusRecord(node.type, {
-          result: 'sent',
-          message: message.name,
-          band,
-        })]);
-        done();
-      } catch (err) {
-        failInput(node, send, err, done);
-      }
+      // An unrecognised payload rides as given and craters in
+      // connectionNode.send, whose serializer throws synchronously on a
+      // non-message before anything is enqueued (§0).
+      const message = resolveMessage(msg);
+      /**
+       * msg.band overrides the config default by presence and rides as
+       * given — msg is trusted (§0); a band no queue case answers to
+       * selects no behavior at the switch (§5).
+       */
+      const band = msg.band === undefined ? defaultBand : msg.band;
+      connectionNode.send(message, {
+        band,
+        target: msg.target,
+        identityId: msg.identityId,
+      });
+      applyActionStatus(node, 'ok', message.name);
+      send([msg, makeStatusRecord(node.type, {
+        result: 'sent',
+        message: message.name,
+        band,
+      })]);
+      done();
     });
   }
 

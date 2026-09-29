@@ -1023,7 +1023,7 @@ test('mavlink-out: forwards target from msg to the connection send', () => {
   assert.deepEqual(sent[0].opts.target, { sysid: 2, compid: 1 });
 });
 
-test('mavlink-out: rejects unrecognised payload and emits error status on output 1', () => {
+test('mavlink-out: rejects unrecognised payload and emits error status on output 1', async () => {
   const RED = makeRED();
   const { stub, sent } = makeConnectionStub();
   RED.nodes._register('conn-1', stub);
@@ -1033,6 +1033,7 @@ test('mavlink-out: rejects unrecognised payload and emits error status on output
   Constructor.call(node, { connection: 'conn-1' });
 
   node._input({ payload: 'not-an-object' });
+  await new Promise(setImmediate);
 
   assert.equal(sent.length, 0, 'nothing should be sent to the connection');
   assert.equal(node._sends.length, 1);
@@ -1041,7 +1042,7 @@ test('mavlink-out: rejects unrecognised payload and emits error status on output
   assert.equal(out1.result, 'failed');
 });
 
-test('mavlink-out: a connection send throw becomes a failed status record, not an uncaught throw', () => {
+test('mavlink-out: a connection send throw becomes a failed status record, not an uncaught throw', async () => {
   const RED = makeRED();
   const throwingConn = {
     vehicle: Object.freeze({ id: 'v1', dialect: 'test' }),
@@ -1055,6 +1056,7 @@ test('mavlink-out: a connection send throw becomes a failed status record, not a
   Constructor.call(node, { connection: 'conn-1' });
 
   assert.doesNotThrow(() => node._input({ payload: { name: 'HEARTBEAT', fields: {} } }));
+  await new Promise(setImmediate);
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];
   assert.equal(out0, null, 'output 0 must not fire when the send fails');
@@ -1062,7 +1064,7 @@ test('mavlink-out: a connection send throw becomes a failed status record, not a
   assert.equal(node._doneErrors.length, 1, 'the failure reaches Catch via done(err)');
 });
 
-test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', () => {
+test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', async () => {
   // The real disabled-connection stub used to swallow sends, so mavlink-out
   // reported sent/green over a switched-off link — the §2 phantom success.
   const RED = makeRED();
@@ -1077,6 +1079,7 @@ test('mavlink-out: a disabled connection fails the send, not a phantom "sent"', 
   Constructor.call(node, { connection: 'conn-1' });
 
   node._input({ payload: { name: 'HEARTBEAT', fields: {} } });
+  await new Promise(setImmediate);
 
   assert.equal(node._sends.length, 1);
   const [out0, out1] = node._sends[0];

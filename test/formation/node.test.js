@@ -65,7 +65,7 @@ test('line formation fans DO_REPOSITION out with each member\'s own lat/lon in d
   assert.equal(bySysid[2].z, ANCHOR.alt, 'every target inherits the anchor altitude');
 });
 
-test('leader anchor reads position, relative altitude and heading from the peer table', async () => {
+test('leader anchor reads position, AMSL altitude and heading from the peer table, and rides MSL (FORMATION-PX4)', async () => {
   const leader = peer(7, { position: { lat: 47.4, lon: 8.5, alt: 430, relativeAlt: 30, heading: 90 } });
   const connection = connectionStub([peer(1), peer(2), leader]);
   const RED = redStub({ conn: connection });
@@ -87,7 +87,8 @@ test('leader anchor reads position, relative altitude and heading from the peer 
   assert.equal(sent[1].result, 'succeeded');
   assert.equal(connection.sends.length, 2, 'only the followers are commanded');
   const bySysid = Object.fromEntries(connection.sends.map((s) => [s.message.fields.target_system, s.message.fields]));
-  assert.equal(bySysid[1].z, 30, 'altitude is the leader relativeAlt (GLOBAL_RELATIVE_ALT), not AMSL alt');
+  assert.equal(bySysid[1].z, 430, 'altitude is the leader AMSL alt, not relativeAlt');
+  assert.equal(bySysid[1].frame, 0, 'MAV_FRAME_GLOBAL: PX4 reads a DO_REPOSITION z as AMSL whatever the frame');
   // Leader heading 90 rotates the line: "right of the leader" now points
   // south. The leader holds slot 0; sysid 1 takes slot 1 and sysid 2 slot 2.
   assert.ok(bySysid[1].x < e7(47.4), 'slot 1 is south of the leader at heading 90');
@@ -431,6 +432,7 @@ test('msg.payload.anchor and headingDeg override the configured leader anchor', 
   assert.equal(bySysid[1].x, e7(47.0), 'payload anchor wins over the leader');
   assert.equal(bySysid[1].y, e7(8.0));
   assert.equal(bySysid[1].z, 25);
+  assert.equal(bySysid[1].frame, 3, 'a payload anchor rides the default frame (above home), not the leader MSL frame');
   assert.ok(bySysid[2].y > e7(8.0), 'payload heading 0 (not leader 180) orients the line east');
 });
 

@@ -224,11 +224,30 @@
 
 <script type="text/html" data-help-name="mavlink-mission">
   <p>Downloads, uploads, clears, or selects the current item of a mission plan over the MAVLink mission protocol — the one exchange the vehicle drives. Set Current does not apply to fence or rally plans.</p>
-  <p>Output 0 (continue) fires only on a successful <code>MISSION_ACK</code> or matching <code>MISSION_CURRENT</code>. Output 1 (status) carries progress records (phase and item counts) as they happen and the terminal record either way.</p>
-  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on output 0 without sending. Choose a bundled <b>Dialect</b>, or choose <i>from Vehicle Profile…</i> to inherit the dialect and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
-  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type is not gated by firmware: a vehicle that does not carry fence or rally refuses the transfer itself, and the refusal rides to output 1.</p>
+  <h3>Inputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object | false</span></dt>
+    <dd>Any input runs the configured operation; <code>false</code> suppresses it.</dd>
+    <dt class="optional">payload.items <span class="property-type">array</span></dt>
+    <dd>Upload: the mission items, in place of the configured items JSON.</dd>
+    <dt class="optional">payload.seq <span class="property-type">number</span></dt>
+    <dd>Set current: the mission sequence to select.</dd>
+    <dt class="optional">payload.missionType <span class="property-type">string | number</span></dt>
+    <dd>The plan type: <code>mission</code>, <code>fence</code>, <code>rally</code>, or a <code>MAV_MISSION_TYPE</code> number, which rides as given.</dd>
+    <dt class="optional">payload.target <span class="property-type">object</span></dt>
+    <dd><code>{sysid, compid}</code> of the vehicle.</dd>
+    <dt class="optional">payload.identityId <span class="property-type">string</span></dt>
+    <dd>Local identity override.</dd>
+  </dl>
+  <h3>Outputs</h3>
+  <ol class="node-ports">
+    <li>Continue — fires only on a successful <code>MISSION_ACK</code> or matching <code>MISSION_CURRENT</code>; on <b>Build</b>, the protocol plan.</li>
+    <li>Status — progress records (phase and item counts) as they happen and the terminal record either way. Status records are plain objects; they are not refused if wired into another action input — chain control is silence on Continue.</li>
+  </ol>
+  <h3>Details</h3>
+  <p><b>Delivery.</b> <i>Build</i> emits the protocol plan on Continue without sending. Choose a bundled <b>Dialect</b>, or choose <i>from Vehicle Profile…</i> to inherit the dialect and target defaults from a Vehicle Profile. <i>Send and confirm</i> runs the transfer to its acknowledgement over the selected <b>Connection</b>.</p>
+  <p><b>Addressing.</b> For a companion identity the target is derived automatically (airframe sysid, compid 1). The mission type is not gated by firmware: a vehicle that does not carry fence or rally refuses the transfer itself, and the refusal rides to Status.</p>
   <p><b>Upload</b> answers whatever sequence the vehicle requests. A failed upload fails — it never degrades into a clear. Provide items in the config JSON or as <code>msg.payload.items</code>. An explicit empty array sends <code>MISSION_COUNT</code> 0 (the wire erase). A message that omits <code>items</code> over blank config does not invent an empty list. Use <b>Clear</b> to erase a plan on purpose.</p>
   <p><b>Clear</b> erases the selected plan on the vehicle. Selecting the Clear operation is the confirmation — any input triggers it.</p>
   <p><b>Set current</b> sends <code>MISSION_SET_CURRENT</code> for the selected mission sequence from <code>seq</code> or <code>msg.payload.seq</code>. The vehicle confirms by broadcasting <code>MISSION_CURRENT</code>; the mission sequence must match. Whether selection starts or resumes execution depends on the vehicle's current mode. The protocol provides no reset or jump-count semantics, and this node does not report mission progress.</p>
-  <p>Set <code>msg.payload === false</code> to suppress. Status records are plain objects on output 1; they are not refused if wired into another action input — chain control is silence on output 0.</p>
 </script>

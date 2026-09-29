@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl35-tab",
     "name": "Gimbal manager lab (sysid 31 / 14570)",
-    "info": "Dedicated Copter-4.7.0 SITL sysid 31 with --gimbal + servo mount.\nConnection: bind 0.0.0.0:14570 → remote 127.0.0.1:14571.\n\nMeasured firmware behaviour:\n- gimbal aim path=manager (GIMBAL_MANAGER_SET_PITCHYAW) has no MAVLink acknowledgement — delivery must be send (not confirm).\n- Status output reports result succeeded with detail \"sent (unconfirmed)\".\n\nHarness fires the inject; verdict debug name: manager status.",
+    "info": "Dedicated Copter-4.7.0 SITL sysid 31 with --gimbal + servo mount.\nConnection: bind 0.0.0.0:14570 → remote 127.0.0.1:14571.\n\nMeasured firmware behaviour:\n- gimbal aim path=manager (GIMBAL_MANAGER_SET_PITCHYAW) has no MAVLink acknowledgement — delivery must be send (not confirm).\n- Status output reports result sent with detail \"sent (unconfirmed)\".\n\nHarness fires the inject; verdict debug name: manager status.",
     "x": 280,
     "y": 40,
     "wires": []

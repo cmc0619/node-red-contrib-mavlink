@@ -4,8 +4,8 @@ Every node reads its setup from the edit box. Some of those fields can also be
 set at run time, by the message that comes in. This page lists which ones, for
 every node.
 
-Audit date: **2026-09-12**, against `main` at 0.7.0. Read from the code, not
-from the help text.
+Audit date: **2026-09-27**, against the code after the R-series review fixes.
+Read from the code, not from the help text.
 
 ## The rule
 
@@ -45,27 +45,42 @@ Four nodes take no input at all, so nothing can be set by message: **Connection*
 **Vehicle Profile**, **Local Identity**, and **In**.
 
 Three take the whole payload as their data rather than merging fields:
-**Out**, **Build**, and **System** on its upload and restore work.
+**Out**, **Build**, and **System** on its upload and restore work. Out and
+Build also read keys at the message root, beside `msg.payload`.
 
 | node | send in `msg.payload` | edit box only |
 |---|---|---|
-| **Build** | any field of the message (merged one key at a time) | Message, Tier, Band, Repeat, Dialect, Connection, Vehicle |
-| **Command** | `1`–`7` (the params), `mode` (a mode name), `target.sysid`, `target.compid`, `identityId` | Mode, Preset, Advanced command, Send as, Frame, Unconfirmed, Completion timeout |
+| **Build** | any field of the message (merged one key at a time); at the message root, `msg.band`, `msg.target` and `msg.identityId` (Send tier) | Message, Tier, Band, Repeat, Dialect, Connection, Vehicle |
+| **Command** | `1`–`7` (the params), `mode` (a mode name), `target.sysid`, `target.compid`, `identityId`; at the message root, `msg.mavFrame` | Mode, Preset, Advanced command, Send as, Unconfirmed, Completion timeout |
 | **Fan-out** | `message`, `targets`, `selection`, `delivery`, `executionMode`, `stopOnError`, `intervalMs`, `timeoutMs`, `maxRetries`, `concurrency`, `identityId` | Connection |
 | **Formation** | `sysids`, `headingDeg`, `pitchDeg`, `anchor` | Shape, Spacing, Promote leader, Leader, Change mode |
 | **Health** | `health` (the verb), `ttl_s` | Identity, Connection |
 | **Mission** | `items`, `seq`, `missionType`, `target.*`, `identityId` | Operation |
-| **Move** | 23 named fields, plus `position`, `velocity`, `accel`, `rateHz`, `ttlMs`, `timeBootMs`, `action: "stop"`, `target.*`, `identityId` | Action |
-| **Out** | `message`, or the whole payload as the message | Band, Connection |
-| **Param** | `action`, `paramId`, `paramIndex`, `value`, `paramType`, `paramEncoding`, `firmware`, `target.*`, `identityId` | Lookup |
+| **Move** | 23 named fields, plus `position`, `velocity`, `accel`, `rateHz` and `ttlMs` (Stream), `timeBootMs` (Build and Send), `action: "stop"`, `target.*`, `identityId` | Action |
+| **Out** | the message, in one of three shapes (below); at the message root, `msg.topic`, `msg.band`, `msg.target`, `msg.identityId` | Band, Connection |
+| **Param** | `action`, `paramId`, `paramIndex`, `value`, `paramType`, `paramEncoding`, `firmware` (the encoding's firmware rung), `target.*`, `identityId` | Lookup |
 | **Payload** | `topic`, `verb`, `path`, `values`, `sendAs`, `mavFrame`, `target.*`, `identityId` | — |
-| **State** | `sysid`, `compid` | Mode, Events, Connection |
-| **System** | `id`, `size`, `paramEncoding`, `path`, `target.*`, `identityId`, plus the file or param data as the whole payload | Service, Operation, Sections |
+| **State** | `sysid`, `compid` (Snapshot mode only; a Feed reads neither) | Mode, Events, Connection |
+| **System** | `id`, `size`, `paramEncoding` (parameter backup and restore alike), `path`, `target.*`, `identityId`, plus the file or restore bundle as the whole payload; at the message root, `msg.path` | Service, Operation, Sections |
 
-Move's 23 named fields are: `altRef`, `reference`, `speed`, `radius`,
-`changeMode`, `heading`, `turnRate`, `direction`, `relative`, `roll`, `pitch`,
-`rollRate`, `pitchRate`, `thrust`, `stickX`, `stickY`, `stickZ`, `stickR`,
-`buttons`, `throttle`, `speedType`, `yaw`, `yawRate`.
+Move's 23 named fields are: `altRef` (`home`, `msl`, `terrain`), `reference`
+(`world`, `body`, `offset`), `speed`, `radius`, `changeMode`, `heading`,
+`turnRate`, `direction`, `relative`, `roll`, `pitch`, `rollRate`, `pitchRate`,
+`thrust`, `stickX`, `stickY`, `stickZ`, `stickR`, `buttons`, `throttle`,
+`speedType`, `yaw`, `yawRate`. The Move help lists which action reads each.
+
+Out reads its message in this order, and the first that applies wins:
+
+1. the Build-tier envelope `{message: {name, fields}, …}`;
+2. the topic shape: a `msg.topic` that is present is the message name and
+   `msg.payload` its fields — what In emits, so In → Out forwards as received.
+   A stock Inject sends `topic: ""`, which selects this shape; clear or delete
+   `msg.topic` to use the next one;
+3. `{name, fields}` as the whole payload.
+
+Field names are the dialect's own snake_case (`target_system`, not
+`targetSystem`), as In delivers them; any other spelling is not in the
+message, and the send fails with `invalid packet`.
 
 ## Name traps
 
@@ -79,9 +94,10 @@ not sit in `msg.payload` at all.
 | Payload | Frame | `msg.payload.mavFrame` |
 | Command | Frame | `msg.mavFrame` (not in payload) |
 | Out, Build | Band | `msg.band` (not in payload) |
+| Out, Build | Target, Identity | `msg.target` / `msg.identityId` (not in payload) |
 | State | Target sysid / compid | `msg.payload.sysid` / `.compid` (flat) |
 | all other nodes | Target sysid / compid | `msg.payload.target.sysid` / `.compid` |
-| all nodes | Identity | `msg.payload.identityId` |
+| all nodes but Out and Build | Identity | `msg.payload.identityId` |
 
 System splits its Path two ways. List and download read `msg.payload.path`.
 Upload, backup and restore read `msg.path`, because the payload holds the file
@@ -106,26 +122,26 @@ saved field behind it is dropped. There is no way to set just one part.
 - **Move `action`.** `msg.payload.action` is not a way to pick the Action. Only
   the word `"stop"` is read, and it halts a stream. Any other value is ignored
   and the boxed Action still runs.
-- **Move `yawRate` on the goto command path.** That path reads the payload key
-  on its own and never falls back to the boxed Yaw rate. A saved value is
-  dropped. The stream, steer and attitude paths do fall back. This looks like a
-  bug, not a choice.
-- **Move on Stream delivery** ignores `speed`, `radius`, `changeMode` and
-  `yawRate`. They belong to the command path only.
+- **Move `yawRate`** is read by Steer and Attitude only. Go to has no yaw-rate
+  field on either path, so the key is ignored there.
+- **Move Go to on Stream delivery** ignores `speed`, `radius` and `changeMode`.
+  They belong to the command path only.
+- **State `sysid` / `compid`** filter a Snapshot. A Feed ignores them.
 - **Payload `values`** swaps the whole slot set. It does not merge.
 - **Build const fields** win over the payload. A field the dialect fixes cannot
   be set by message.
-- **Dead boxes.** `lookup` on Param and `firmware` on Mission are saved by the
-  editor and never read at run time.
+- **Dead box.** `lookup` on Param is saved by the editor, which uses it to
+  show the name or the index field, and is never read at run time.
 
 ## Where the help text stands
 
 Node help does not cover this well.
 
-- Move names about 15 of its 23 keys. The Turn and Steer fields, among them
-  `heading`, `turnRate`, `throttle`, `stickX` and `buttons`, are not written
-  down anywhere but here.
-- Command says only that `msg.payload` can override values. It names none.
-- Most other nodes name one or two keys, or none.
+- Build, Command, Fan-out, Health, Mission, Move, Out, Param, Payload and
+  System help each has an Inputs section naming the keys it reads; Move lists
+  all of its keys there. Formation and State still name theirs in prose.
+- Command names its payload overrides (`1`–`7`, `target`, `identityId`,
+  `mode`) and the root `msg.mavFrame`.
+- Out lists its three shapes and the root keys.
 
 No test pins this surface. If you change it, change this page too.

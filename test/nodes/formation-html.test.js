@@ -26,10 +26,22 @@ test('spacing validator is the only guard: finite and > 0, blank red — with th
   assert.equal(validate.call({}, 10), true);
   assert.equal(validate.call({}, '10'), true, 'numeric strings pass (text input)');
   assert.equal(validate.call({}, 0.5), true, 'sub-metre spacing is a legitimate distance');
-  assert.match(String(validate.call({}, 0)), /> 0/, '0 stacks every vehicle on one point — a commanded collision');
-  assert.match(String(validate.call({}, -5)), /> 0/, 'negative spacing silently mirrors the pattern');
-  assert.match(String(validate.call({}, '')), /> 0/, 'blank must not silently become 0');
-  assert.match(String(validate.call({}, 'abc')), /> 0/, 'non-numeric text reds');
+  assert.match(String(validate.call({}, 0)), /positive number of metres/, '0 stacks every vehicle on one point — a commanded collision');
+  assert.match(String(validate.call({}, -5)), /positive number of metres/, 'negative spacing silently mirrors the pattern');
+  assert.match(String(validate.call({}, '')), /positive number of metres/, 'blank must not silently become 0');
+  assert.match(String(validate.call({}, 'abc')), /positive number of metres/, 'non-numeric text reds');
+});
+
+test('leader: a required SysID 1–255 on a leader anchor, ignored on a fixed one (R68)', () => {
+  const { leader } = loadNodeDefaults('mavlink-formation');
+  assert.equal(leader.validate.length, 2, 'a reason-returning validator declares (v, opt) — §14');
+  const onLeader = (v) => leader.validate.call({ anchorMode: 'leader' }, v, {});
+  assert.equal(onLeader(1), true);
+  assert.equal(onLeader('255'), true);
+  assert.match(String(onLeader('')), /needs the leader's SysID/, 'blank reds on a leader anchor');
+  assert.match(String(onLeader(0)), /between 1 and 255/, 'sysid 0 is broadcast, not a leader');
+  assert.match(String(onLeader(1.5)), /between 1 and 255/);
+  assert.equal(leader.validate.call({ anchorMode: 'fixed' }, '', {}), true, 'the hidden row does not block a fixed anchor');
 });
 
 test('sysids validator reds a blank entry from a stray comma, not just an out-of-range one (mavlink-audit-20260905 #17)', () => {

@@ -6,8 +6,7 @@ const { dialectFromConnection } = require('../lib/addressing/dialect');
 const {
   makeStatusRecord,
   applyActionStatus,
-  shouldSuppress,
-  failInput,
+  onActionInput,
 } = require('../lib/delivery');
 
 module.exports = function registerMavlinkState(RED) {
@@ -40,37 +39,29 @@ module.exports = function registerMavlinkState(RED) {
       default: break; // This space intentionally left blank (§5)
     }
 
-    node.on('input', (msg, send, done) => {
-      try {
-        if (shouldSuppress(msg)) {
-          done();
-          return;
+    onActionInput(node, (msg, send, done) => {
+      switch (config.mode) {
+        case 'snapshot': {
+          const payload = msg.payload;
+          const peers = snapshotPeers(connectionNode.peerTable, {
+            sysid: firstDefined(payload.sysid, config.targetSystem),
+            compid: firstDefined(payload.compid, config.targetComponent),
+          }, modes);
+          applyActionStatus(node, 'ok', `${peers.length} peer(s)`);
+          send([
+            { payload: peers },
+            makeStatusRecord(node.type, {
+              result: 'succeeded',
+              detail: 'snapshot',
+              count: peers.length,
+              crcFailures: connectionNode.crcFailureCount(),
+            }),
+          ]);
+          break;
         }
-        switch (config.mode) {
-          case 'snapshot': {
-            const payload = msg.payload;
-            const peers = snapshotPeers(connectionNode.peerTable, {
-              sysid: firstDefined(payload.sysid, config.targetSystem),
-              compid: firstDefined(payload.compid, config.targetComponent),
-            }, modes);
-            applyActionStatus(node, 'ok', `${peers.length} peer(s)`);
-            send([
-              { payload: peers },
-              makeStatusRecord(node.type, {
-                result: 'succeeded',
-                detail: 'snapshot',
-                count: peers.length,
-                crcFailures: connectionNode.crcFailureCount(),
-              }),
-            ]);
-            break;
-          }
-          default: break; // This space intentionally left blank (§5)
-        }
-        done();
-      } catch (err) {
-        failInput(node, send, err, done);
+        default: break; // This space intentionally left blank (§5)
       }
+      done();
     });
 
     node.on('close', (done) => {
