@@ -72,9 +72,10 @@ Move's 23 named fields are: `altRef` (`home`, `msl`, `terrain`), `reference`
 Out reads its message in this order, and the first that applies wins:
 
 1. the Build-tier envelope `{message: {name, fields}, …}`;
-2. the topic shape: a non-blank `msg.topic` is the message name and
-   `msg.payload` its fields — what In emits, so In → Out forwards as received;
-   a blank `msg.topic` (a stock Inject sends `""`) counts as absent;
+2. the topic shape: a `msg.topic` that is present is the message name and
+   `msg.payload` its fields — what In emits, so In → Out forwards as received.
+   A stock Inject sends `topic: ""`, which selects this shape; clear or delete
+   `msg.topic` to use the next one;
 3. `{name, fields}` as the whole payload.
 
 Field names are the dialect's own snake_case (`target_system`, not
