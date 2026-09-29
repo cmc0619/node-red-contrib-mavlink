@@ -117,12 +117,14 @@ module.exports = function registerMavlinkPayload(RED) {
             default: break; // This space intentionally left blank (§5)
           }
           // falls through
-        case 'send': {
+        case 'send':
           connectionNode.send(builtCmd.message, { band: BAND.CONTROL, target, identityId });
-          const detail = builtCmd.confirmation === 'command_ack' ? 'sent' : 'sent (unconfirmed)';
-          completeResult(node, send, 'sent', detail, builtCmd);
+          applyActionStatus(node, 'ok', 'sent');
+          send([
+            { payload: builtCmd.message },
+            makeStatusRecord(node.type, { result: 'sent', confirmation: builtCmd.confirmation }),
+          ]);
           break;
-        }
         default: break; // This space intentionally left blank (§5)
       }
       done();
@@ -181,11 +183,3 @@ module.exports = function registerMavlinkPayload(RED) {
 
   RED.nodes.registerType('mavlink-payload', MavlinkPayloadNode);
 };
-
-function completeResult(node, send, result, detail, built) {
-  applyActionStatus(node, 'ok', detail);
-  send([
-    { payload: { result, message: built.message } },
-    makeStatusRecord(node.type, { result, detail, confirmation: built.confirmation }),
-  ]);
-}

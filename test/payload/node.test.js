@@ -412,7 +412,7 @@ test('mavlink-payload explicit config value wins over Vehicle Profile', () => {
   assert.equal(sent[0].payload.fields.target_component, 100);
 });
 
-test('mavlink-payload gimbal manager setpoint stays unconfirmed even on the confirm tier', () => {
+test('mavlink-payload gimbal manager setpoint is sent with no ACK wait even on the confirm tier', () => {
   const conn = connStub();
   const RED = redStub({ conn });
   require('../../nodes/mavlink-payload')(RED);
@@ -435,7 +435,8 @@ test('mavlink-payload gimbal manager setpoint stays unconfirmed even on the conf
   assert.equal(conn.subs.length, 0, 'no COMMAND_ACK subscription for the manager setpoint');
   assert.equal(conn.sent.length, 1);
   assert.equal(conn.sent[0].message.name, 'GIMBAL_MANAGER_SET_PITCHYAW');
-  assert.equal(sent[1].detail, 'sent (unconfirmed)');
+  assert.equal(sent[1].result, 'sent');
+  assert.equal(sent[0].payload, conn.sent[0].message, 'Continue carries the sent message');
 });
 
 test('mavlink-payload companion identity derives sysid; compid stays config-resolved (compidFromConfig)', () => {

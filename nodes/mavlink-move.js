@@ -113,7 +113,7 @@ module.exports = function registerMavlinkMove(RED) {
         case 'send':
           // Commands ride the Control band, not Streaming.
           connectionNode.send(message, { band: BAND.CONTROL, target, identityId });
-          completeResult(node, send, 'sent', null, { message });
+          completeResult(node, send, 'sent', null, { message }, message);
           return false;
         default: break; // This space intentionally left blank (§5)
       }
@@ -270,7 +270,7 @@ module.exports = function registerMavlinkMove(RED) {
             // No stopStream here: `delivery` is fixed per node, so a
             // send-delivery node can never own a stream.
             connectionNode.send(message, { band: BAND.STREAMING, target, identityId });
-            completeResult(node, send, 'sent', null, { message });
+            completeResult(node, send, 'sent', null, { message }, message);
             break;
           default: break; // This space intentionally left blank (§5)
         }
@@ -505,11 +505,14 @@ function setpointFor(action, payload, config, target, profile) {
  * @param {Function} send
  * @param {string} result  'sent' | 'streaming' | 'stopped'
  * @param {?string} detail  qualifier within the result ('no stream'), or null
- * @param {object} fields  payload/record fields (message, `sent` on stops)
+ * @param {object} fields  record fields (message, `sent` on stops)
+ * @param {*} [payload]  output 0's payload: a Send passes the message it put
+ *   on the wire, as Command, Payload and Param do; the stream outcomes carry
+ *   `{result, ...fields}`
  */
-function completeResult(node, send, result, detail, fields) {
+function completeResult(node, send, result, detail, fields, payload = { result, ...fields }) {
   applyActionStatus(node, 'ok', detail || result);
-  send([{ payload: { result, ...fields } }, makeStatusRecord(node.type, { result, detail, ...fields })]);
+  send([{ payload }, makeStatusRecord(node.type, { result, detail, ...fields })]);
 }
 
 /**
