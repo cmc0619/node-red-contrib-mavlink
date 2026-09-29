@@ -97,9 +97,6 @@
          * Definitions are advisory, not authority: with none loaded this is
          * a plain numeric check, and a parameter absent from the seed
          * is never rejected for being unknown.
-         *
-         * Two parameters, so Node-RED shows the returned reason rather than
-         * coercing it truthy (§14.24).
          */
         validate(v, _opt) {
           // Only PARAM_SET carries param_value, and only a set shows the row.
