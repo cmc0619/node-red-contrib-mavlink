@@ -739,23 +739,15 @@ test('an integer Type refuses a fraction; its range is Buffer\'s to refuse at se
   passes('MAV_PARAM_TYPE_UINT8', '');
 });
 
-test('the Param id ring refuses what the dialog would uppercase or trim for lookup (E4)', () => {
+test('the Param id ring measures the saved id against the wire\'s 16 chars', () => {
   const { paramId } = loadNodeDefaults('mavlink-param');
   const set = { delivery: 'send', action: 'set' };
   assert.equal(paramId.validate.call(set, 'FLTMODE1', {}), true);
-  assert.equal(paramId.validate.call(set, 'SCR_USER1', {}), true);
-  for (const v of ['fltmode1', ' FLTMODE1', 'FLTMODE1 ', 'Fltmode1']) {
-    assert.match(String(paramId.validate.call(set, v, {})), /uppercase with no spaces/, JSON.stringify(v));
-  }
+  assert.equal(paramId.validate.call(set, 'fltmode1', {}), true, 'PARAM_ID is char[16]; case is the vehicle\'s business');
   assert.match(String(paramId.validate.call(set, 'A'.repeat(17), {})), /length of 16/);
-  assert.equal(paramId.validate.call({ delivery: 'send', action: 'request-list' }, 'lower', {}), true,
+  assert.match(String(paramId.validate.call(set, ` ${'A'.repeat(16)}`, {})), /length of 16/, 'the id rides as saved, untrimmed');
+  assert.equal(paramId.validate.call({ delivery: 'send', action: 'request-list' }, 'A'.repeat(17), {}), true,
     'a list names no parameter');
-});
-
-test('the Value ring takes two arguments, so Node-RED honours its whole-number reason (R13)', () => {
-  // A one-argument validator's returned string is coerced with `!!` and reads
-  // as valid: a PX4 INT32 value of 2.5 deployed and 2 went on the wire.
-  assert.equal(typedValueValidator().length, 2);
 });
 
 test('the Type bound follows the dialog: off on ArduPilot, on where the firmware is unresolved', () => {

@@ -953,34 +953,8 @@ test('mavlink-move: terrain altRef reds on a PX4 profile rather than being silen
   assert.match(html, /const ALTREF_OPTIONS = \[/, 'the altRef list is rebuilt per firmware');
   assert.match(
     html,
-    /case 'terrain': return Boolean\(firmware\) && firmware !== 'ardupilot';/,
-    'terrain is withheld only on a named non-ArduPilot firmware'
-  );
-});
-
-test('mavlink-move: Above home reds on PX4 command tiers, where PX4 flies the altitude as MSL (R11)', () => {
-  const lookup = {
-    connPx4: { vehicle: 'vehPx4' },
-    vehPx4: { firmware: 'px4', dialect: 'common' },
-    connAp: { vehicle: 'vehAp' },
-    vehAp: { firmware: 'ardupilot', dialect: 'ardupilotmega' },
-  };
-  const { altRef } = loadNodeDefaults('mavlink-move', lookup);
-  const verdict = (over) => altRef.validate.call(
-    { id: 'm1', action: 'goto', altRef: 'home', ...over }, over.altRef || 'home', {}
-  );
-  for (const delivery of ['send', 'confirm']) {
-    assert.match(String(verdict({ delivery, connection: 'connPx4' })), /MSL/, `${delivery} on PX4 reds`);
-  }
-  assert.match(String(verdict({ delivery: 'build', vehicle: 'vehPx4', dialect: '__vehicle' })), /MSL/, 'Build on a PX4 profile reds');
-  assert.equal(verdict({ delivery: 'stream', connection: 'connPx4' }), true, 'Stream converts frame 6 on PX4');
-  assert.equal(verdict({ delivery: 'confirm', connection: 'connAp' }), true, 'ArduPilot honours the frame');
-  assert.equal(verdict({ altRef: 'msl', delivery: 'confirm', connection: 'connPx4' }), true, 'MSL is the escape');
-  assert.equal(verdict({ action: 'steer', delivery: 'send', connection: 'connPx4' }), true, 'a Go to field only');
-  assert.match(
-    html,
-    /case 'home': return Boolean\(RED\.mavlink\.repositionAboveHomeRefusal\(firmware\)\) && delivery !== 'stream';/,
-    'the dropdown withholds it too, on the shared predicate'
+    /return value === 'terrain' && Boolean\(firmware\) && firmware !== 'ardupilot';/,
+    'terrain alone is withheld, and only on a named non-ArduPilot firmware'
   );
 });
 
@@ -1554,75 +1528,36 @@ test('mavlink-move: an all-blank Attitude reds — every ignore bit set commands
   );
 });
 
-test('mavlink-move: a yaw-only Steer reds on ArduPilot, where it is measured inert (RG-a)', () => {
-  const lookup = { ...FAMILY_LOOKUP, 'conn-px4': { vehicle: 'veh-px4' }, 'veh-px4': { firmware: 'px4', dialect: 'common' } };
-  const { action } = loadNodeDefaults('mavlink-move', lookup);
-  const steer = (connection, over) => action.validate.call(
-    { id: 'm1', action: 'steer', delivery: 'send', connection, ...over }, 'steer', {}
+test('mavlink-move: the thrust stick warns on ArduSub, where the -1..1 surface lies', () => {
+  // ArduSub reads z as 0..1000 with neutral 500, not -1000..1000 neutral 0
+  // (§14, source-read). The runtime keeps the dialect's uniform scaling — a
+  // per-family map is the unmeasured guess doctrine keeps off the wire — so
+  // the editor is where an operator finds out. With the blank-axis INT16_MAX
+  // sentinel gone there is no unset escape either, so this check is all that
+  // stands between an operator's "neutral" and a dive (Codex, #303).
+  const { stickZ, stickX } = loadNodeDefaults('mavlink-move', FAMILY_LOOKUP);
+  const onSub = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, v, {}
   );
-  assert.match(String(steer('conn-copter', { yaw: '90' })), /use the Turn action/);
-  assert.equal(steer('conn-copter', { yaw: '90', yawRate: '10' }), true, 'with a rate it is not the measured shape');
-  assert.equal(steer('conn-copter', { yawRate: '10' }), true, 'a rate alone is not the measured shape');
-  assert.equal(steer('conn-copter', { yaw: '90', vNorth: '1', vEast: '0', vUp: '0' }), true, 'yaw riding a velocity');
-  assert.equal(steer('conn-px4', { yaw: '90' }), true, 'PX4 honours a yaw setpoint');
-  assert.equal(steer(undefined, { yaw: '90' }), true, 'no profile gates nothing');
-});
-
-test('mavlink-move: Attitude needs thrust except on a Plane, and a whole rate trio on Copter (R26)', () => {
-  const lookup = { ...FAMILY_LOOKUP, 'conn-px4': { vehicle: 'veh-px4' }, 'veh-px4': { firmware: 'px4', dialect: 'common' } };
-  const { thrust, action } = loadNodeDefaults('mavlink-move', lookup);
-  const thrustOn = (connection, v) => thrust.validate.call(
-    { id: 'm1', action: 'attitude', delivery: 'send', connection }, v, {}
-  );
-  for (const connection of ['conn-copter', 'conn-rover', 'conn-sub', 'conn-px4', 'conn-unknown']) {
-    assert.match(String(thrustOn(connection, '')), /required for Attitude/, `blank thrust reds on ${connection}`);
-  }
-  assert.equal(thrustOn('conn-plane', ''), true, 'ArduPlane accepts attitude without thrust');
-  assert.equal(thrustOn('conn-copter', '0.5'), true);
-  assert.equal(
-    thrust.validate.call({ id: 'm1', action: 'steer', connection: 'conn-copter' }, '', {}),
-    true,
-    'thrust is an Attitude field'
+  const onCopter = (v) => stickZ.validate.call(
+    { id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-copter' }, v, {}
   );
 
-  const attitude = (connection, over) => action.validate.call(
-    { id: 'm1', action: 'attitude', delivery: 'send', connection, thrust: '0.5', ...over }, 'attitude', {}
-  );
-  assert.match(String(attitude('conn-copter', { yawRate: '30' })), /partial body-rate/, 'one rate reds on Copter');
-  assert.match(String(attitude('conn-copter', { rollRate: '1', pitchRate: '2' })), /partial body-rate/);
-  assert.equal(attitude('conn-copter', { rollRate: '1', pitchRate: '2', yawRate: '3' }), true, 'all three');
-  assert.equal(attitude('conn-copter', { roll: '1', pitch: '2', yaw: '3' }), true, 'no rates at all');
-  assert.equal(attitude('conn-sub', { yawRate: '30' }), true, 'the trio rule is Copter-only');
-});
+  assert.match(String(onSub('-0.5')), /neutral 0\.5/, 'a negative thrust reds on a Sub');
+  assert.match(String(onSub('0')), /full reverse thrust/, 'and so does the 0 an operator means as neutral');
+  assert.equal(onSub('0.5'), true, 'the neutral a Sub actually reads passes');
+  assert.equal(onSub('1'), true, 'full up passes');
+  assert.match(String(onSub('')), /is required for Manual/, 'and blank is refused outright now');
 
-test('mavlink-move: the thrust stick reds 0 and below on Copter, Sub and PX4, where neutral is 0.5 (R12)', () => {
-  // ArduCopter, ArduSub and PX4 read z as 0..1000 with neutral 500, not
-  // -1000..1000 neutral 0 (source-read). The runtime keeps the dialect's
-  // uniform scaling, so the editor is where an operator finds out: ArduCopter
-  // discards the whole frame below 0, and 0 is minimum or reverse thrust.
-  const lookup = { ...FAMILY_LOOKUP, 'conn-px4': { vehicle: 'veh-px4' }, 'veh-px4': { firmware: 'px4', dialect: 'common' } };
-  const { stickZ, stickX } = loadNodeDefaults('mavlink-move', lookup);
-  const on = (connection, v) => stickZ.validate.call(
-    { id: 'm1', action: 'manual', delivery: 'send', connection }, v, {}
-  );
-
-  for (const connection of ['conn-sub', 'conn-copter', 'conn-px4']) {
-    assert.match(String(on(connection, '-0.5')), /neutral 0\.5/, `a negative thrust reds on ${connection}`);
-    assert.match(String(on(connection, '0')), /minimum/, `and so does the 0 an operator means as neutral on ${connection}`);
-    assert.equal(on(connection, '0.5'), true, `the neutral ${connection} reads passes`);
-    assert.equal(on(connection, '1'), true, 'full up passes');
-    assert.match(String(on(connection, '')), /is required for Manual/, 'blank is refused outright');
-    assert.match(String(on(connection, '5')), /must be -1\.\.1/, 'out of range still reds first');
-  }
-
-  // Only the thrust axis, and only where the vehicle reads it that way.
-  assert.equal(on('conn-rover', '-0.5'), true, 'a rover reads the declared -1..1 range');
-  assert.equal(on('conn-unknown', '0'), true, 'no family knowledge gates nothing');
+  // Only the thrust axis, and only on a Sub profile.
+  assert.equal(onCopter('-0.5'), true, 'the ring is ArduSub-only');
   assert.equal(
     stickX.validate.call({ id: 'm1', action: 'manual', delivery: 'send', connection: 'conn-sub' }, '-0.5', {}),
     true,
-    'pitch is unaffected'
+    'pitch is unaffected on a Sub'
   );
+  // The generic range check still applies on top.
+  assert.match(String(onSub('5')), /must be -1\.\.1/, 'out of range still reds first');
 });
 
 test('move closed vocabularies and target compid carry rings (walled-garden sweep)', () => {

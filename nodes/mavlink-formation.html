@@ -75,22 +75,10 @@
             || 'must be a longitude within ±180°'),
       },
       // alt is required whenever set as the fixed anchor: a blank altitude
-      // must not become 0 — that commands a descent to home level. A sphere,
-      // or any pitched shape, puts slots below the anchor (the lowest sphere
-      // slot at alt − spacing), so there the anchor must be at least one
-      // spacing above home or a vehicle is commanded below it.
+      // must not become 0 — that commands a descent to home level.
       alt: {
         value: '',
-        validate: whenAnchorMode('fixed', function (v, _opt) {
-          if (!finiteRequired(v)) return 'needs an altitude — blank would ride as ground level';
-          const shape = RED.mavlink.liveOr(this, '#node-input-shape', this.shape);
-          const pitch = Number(RED.mavlink.liveOr(this, '#node-input-pitchDeg', this.pitchDeg, '0'));
-          const spacing = Number(RED.mavlink.liveOr(this, '#node-input-spacing', this.spacing));
-          if ((shape === 'sphere' || pitch !== 0) && Number(v) < spacing) {
-            return 'must be at least the spacing on a sphere or pitched shape — a lower slot would sit below home';
-          }
-          return true;
-        }),
+        validate: whenAnchorMode('fixed', (v, _opt) => finiteRequired(v) || 'needs an altitude — blank would ride as ground level'),
       },
       /**
        * Blank means "the leader's heading", so a fixed anchor — no leader to
@@ -191,10 +179,8 @@
   frame). Slot 0 sits on the anchor altitude; planar shapes keep every
   follower level with it. <b>Sphere</b> places followers on a Fibonacci lattice
   of radius = spacing, so their altitudes differ (<code>alt − ned.down</code>).
-  With a fixed anchor on a sphere or a pitched shape, the dialog requires the
-  anchor altitude to be at least the spacing; a larger pitched pattern can
-  reach lower still, so pick an anchor high enough that its lowest slot stays
-  clear of the ground.</p>
+  Pick an anchor high enough that the lowest sphere slot stays clear of the
+  ground.</p>
   <h3>Heading and pitch</h3>
   <p>Heading yaws the pattern in the horizontal plane (0 = north). A fixed
   anchor requires one. If blank, a leader anchor uses the leader's reported

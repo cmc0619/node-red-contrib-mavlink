@@ -191,7 +191,7 @@ test('mavlink-param confirm set fails loud when its echo never comes, and releas
       (m) => { out = m; },
       () => {
         assert.equal(out[0], null, 'output 0 must not fire on a failure');
-        assert.equal(out[1].result, 'failed');
+        assert.equal(out[1].result, 'unconfirmed');
         assert.match(out[1].reason, /stalled at param FOO/);
         assert.equal(conn.activeCount(), 0, 'the subscription is torn down');
         resolve();
@@ -673,7 +673,7 @@ test('confirm set re-sends PARAM_SET when its echo times out', { timeout: 1000 }
   assert.deepEqual(retries.map((m) => m[1].retry), [1, 2, 3]);
   const terminal = outs.at(-1);
   assert.equal(terminal[0], null);
-  assert.equal(terminal[1].result, 'failed');
+  assert.equal(terminal[1].result, 'unconfirmed');
   assert.match(terminal[1].reason, /stalled at param FOO after 3 retries/);
   assert.equal(doneErr, undefined, 'action failure halts via badge + output 1, not done(err)');
   assert.equal(conn.activeCount(), 0, 'subscription torn down');

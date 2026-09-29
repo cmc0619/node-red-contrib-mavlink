@@ -1088,7 +1088,7 @@ function verdictFrom(profile, summary, log) {
     const crossedTimedOut = summary.debug.some(
       (d) =>
         /ap wrong status/i.test(d.tag) &&
-        d.result === 'failed' &&
+        d.result === 'unconfirmed' &&
         /stalled at param/i.test(d.excerpt || '')
     );
     if (apSet && px4Set && crossedTimedOut) {
@@ -1280,7 +1280,7 @@ function verdictFrom(profile, summary, log) {
     const echoTimedOut = summary.debug.some(
       (d) =>
         /unknown set status/i.test(d.tag) &&
-        d.result === 'failed' &&
+        d.result === 'unconfirmed' &&
         /stalled at param/i.test(d.excerpt || '')
     );
     if (knownOk && echoTimedOut) {

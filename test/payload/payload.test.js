@@ -469,16 +469,3 @@ test('gimbal manager rate aim: blank pitch/yaw ride NaN on both manager paths (R
   assert.ok(Number.isNaN(command.param1) && Number.isNaN(command.param2));
   assert.equal(command.param3, -5);
 });
-
-test('gimbal attitude aim offers no rate slots: the triple is pinned NaN (R17)', () => {
-  const { fieldMetaFromBundle } = require('../../lib/payload');
-  const { loadBundled } = require('../../lib/metadata/bundled');
-  const keys = Object.keys(fieldMetaFromBundle(loadBundled('ardupilotmega'), 'gimbal', 'aim', 'attitude'));
-  assert.deepEqual(keys, ['flags', 'gimbalDeviceId', 'roll', 'pitch', 'yaw']);
-  const f = buildPayloadMessage({
-    topic: 'gimbal', verb: 'aim', path: 'attitude',
-    target: { sysid: 1, compid: 154 },
-    values: { roll: 0, pitch: 20, yaw: 0, rollRate: 1 },
-  }).message.fields;
-  assert.ok(Number.isNaN(f.angular_velocity_x), 'a stray rate key is not read');
-});

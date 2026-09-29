@@ -298,7 +298,7 @@ test('restore round-trips bytewise and c-cast saved values sequentially', async 
   }
 });
 
-test('restore waits for a matching echo and preserves confirmed prefix on failure', async () => {
+test('restore waits for a matching echo and preserves confirmed prefix when unconfirmed', async () => {
   const params = [
     { paramId: 'A', paramType: 6, value: 1 },
     { paramId: 'B', paramType: 6, value: 2 },
@@ -314,7 +314,7 @@ test('restore waits for a matching echo and preserves confirmed prefix on failur
   clock.flush();
   const outcome = await done;
 
-  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.result, 'unconfirmed');
   assert.equal(outcome.phase, 'aborted');
   assert.equal(outcome.restored, 1);
   assert.equal(outcome.paramId, 'B');
@@ -349,7 +349,7 @@ test('restore retries only the current parameter with a bounded ceiling', async 
   clock.flush();
   const outcome = await done;
 
-  assert.equal(outcome.result, 'failed');
+  assert.equal(outcome.result, 'unconfirmed');
   assert.equal(stub.sentNames().filter((name) => name === 'PARAM_SET').length, 3);
   assert.equal(outcome.restored, 0);
   assert.equal(outcome.paramId, 'A');
