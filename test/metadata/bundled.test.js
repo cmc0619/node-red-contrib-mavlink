@@ -14,7 +14,6 @@ const {
   seedSources,
   setCompiledCacheDir,
   clearCompiledCache,
-  seedStamp,
 } = require('../../lib/metadata/bundled');
 
 const CORE = [
@@ -36,12 +35,11 @@ test('seed ships as a stamp-named gzip blob pointed at by active.json', () => {
   const active = JSON.parse(fs.readFileSync(path.join(seedDir, 'active.json'), 'utf8'));
   assert.match(active.file, /^mavlink-\d{4}-\d{2}-\d{2}-[0-9a-f]+\.seed\.gz$/);
   assert.ok(fs.existsSync(path.join(seedDir, active.file)), 'the named blob ships');
-  assert.equal(active.stamp, seedStamp());
   const manifest = readManifest();
+  assert.equal(active.stamp, manifest.stamp);
   assert.equal(manifest.license, 'MIT');
   assert.ok(manifest.commit && manifest.commit.length >= 7);
   assert.ok(manifest.stamp);
-  assert.equal(seedStamp(), manifest.stamp);
   assert.ok(manifest.dialects.length >= CORE.length);
 });
 

@@ -7,7 +7,7 @@
       // mavlink-in is wire-only (no Build tier): the bound Connection's Vehicle
       // Profile is the sole catalog source (§6). No connection / no profile
       // resolves to an empty catalog — never a silent `ardupilotmega`.
-      RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+      RED.mavlink.loadCatalog('mavlink/build/messages', _msgCatalog, cb, {
         isBuild: false,
         listKey: 'messages'
       });
@@ -91,18 +91,12 @@
             return String(v).split(',').every((token) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) || 'must be comma-separated field names';
           },
         },
-        fieldName:   {
-          value: '',
-          validate(v, _opt) {
-            if (RED.mavlink.isBlank(v)) return true;
-            return /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(v))
-              || 'must be a single field name';
-          },
-        },
+        // Blank, or one field name: the runtime compares the name as saved.
+        fieldName:   { value: '', validate: RED.validators.regex(/^([A-Za-z_][A-Za-z0-9_]*)?$/) },
         fieldValue:  { value: '' },
         rateLimit:   {
           value: '0',
-          validate(v) {
+          validate(v, _opt) {
             // Blank/number = global Hz; otherwise comma NAME=Hz pairs, with an
             // optional bare Hz default among them. Every token must be
             // *complete*: an empty token (a stray comma) or an empty value
@@ -112,17 +106,23 @@
             // checks have to come before the numeric one.
             const raw = String(v === undefined || v === null ? '' : v).trim();
             if (!raw) return true;
-            return raw.split(',').every((token) => {
+            const complete = raw.split(',').every((token) => {
               const part = token.trim();
               if (!part) return false;
               const eq = part.indexOf('=');
               const name = eq === -1 ? '' : part.slice(0, eq).trim();
               const value = eq === -1 ? part : part.slice(eq + 1).trim();
-              if (eq !== -1 && !name) return false;
+              /**
+               * The runtime matches the name against the decoded message
+               * name, which is always capitals (`attitude=2` would match
+               * nothing and leave ATTITUDE unthrottled).
+               */
+              if (eq !== -1 && !/^[A-Z][A-Z0-9_]*$/.test(name)) return false;
               if (!value) return false;
               const hz = Number(value);
               return Number.isFinite(hz) && hz >= 0;
             });
+            return complete || 'must be a Hz number, or comma-separated MESSAGE_NAME=Hz pairs (names in capitals)';
           },
         },
       },
@@ -268,7 +268,9 @@
     <dt>topic <span class="property-type">string</span></dt>
     <dd>Message name, e.g. <code>HEARTBEAT</code>. With <b>Show unknown ids</b> ticked, a message id the bound Vehicle Profile's dialect does not carry also arrives, as <code>UNKNOWN_&lt;id&gt;</code> with <code>payload = {msgid, payload}</code> (raw bytes) — usually a sign the vehicle speaks a newer or different dialect than the profile. Such frames cannot be CRC-checked (the checksum seed lives in the message definition), so treat their contents as diagnostic.</dd>
     <dt>payload <span class="property-type">object</span></dt>
-    <dd>Decoded field values keyed by field name (snake_case).</dd>
+    <dd>Decoded field values keyed by the dialect's field names (mostly snake_case). 64-bit
+      fields (<code>uint64_t</code>, <code>int64_t</code>) arrive as BigInt, which
+      <code>JSON.stringify</code> refuses — convert them before a JSON path.</dd>
     <dt>sysid <span class="property-type">number</span></dt>
     <dd>Source system id.</dd>
     <dt>compid <span class="property-type">number</span></dt>
@@ -309,8 +311,8 @@
   from the previous delivery for the same (message, sysid, compid) tuple.
   <b>Compare fields</b> restricts the comparison to the listed fields (comma
   separated). Blank compares every field <i>except</i> the timestamps
-  (<code>time_boot_ms</code>, <code>time_usec</code>, <code>time_unix_usec</code>,
-  <code>timestamp</code>), which advance on every frame and would otherwise make
+  (<code>time_boot_ms</code>, <code>time_boot_us</code>, <code>time_usec</code>,
+  <code>time_unix_usec</code>, <code>timestamp</code>, <code>uptime</code>), which advance on every frame and would otherwise make
   every message look changed and pass the whole stream. Naming a timestamp in
   <b>Compare fields</b> compares it verbatim, so the clock is reachable when you
   actually want it — and a message whose only fields are timestamps delivers
@@ -318,11 +320,13 @@
   message does not have compares as absent on every frame.</p>
   <p><b>Field</b>: pass only messages where the named field exists — and, when
   a value is given, equals it (compared as strings, so enums and 64-bit values
-  work naturally). Example: <code>base_mode</code> = <code>217</code>.</p>
+  work naturally). Example: <code>base_mode</code> = <code>217</code>. The name is matched
+  exactly as the dialect spells it, case included, so a misspelt field passes nothing.</p>
   <p><b>Rate limit</b>: maximum messages per second per (message, sysid, compid)
   tuple; 0 means unlimited. Either one Hz number for everything, or comma
   <code>NAME=Hz</code> pairs — <code>ATTITUDE=2, GLOBAL_POSITION_INT=1</code> —
-  with an optional bare number among them as the default for unlisted names.
+  with an optional bare number among them as the default for unlisted names. Names are
+  message names in capitals, as they arrive in <code>msg.topic</code>.
   Every token must be complete — a stray comma or an empty value
   (<code>ATTITUDE=</code>) is rejected in the editor, so a typo cannot quietly
   remove a limit. The editor validates the shape; the runtime trusts the saved

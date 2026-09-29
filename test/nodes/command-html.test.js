@@ -49,7 +49,7 @@ test('advanced command is a MAV_CMD <select>, not a free-form number (§6/§9)',
   );
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/command\/commands['"]/,
     'dialect MAV_CMD list uses shared loadCatalog'
   );
   assert.match(html, /function buildAdvancedDropdown/, 'async load re-applies the saved command');
@@ -77,7 +77,7 @@ test('advanced catalog load ignores stale responses and keeps the in-progress se
   // Stale-response protection lives in RED.mavlink.loadCatalog.
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
   // One request sequence per call site: a shared sequence would let one
@@ -207,7 +207,7 @@ test('preset rows render through the Advanced catalog path', () => {
   const renderer = sliceBetween('function presetParamInput', 'function refreshParamFields');
 
   assert.ok(!/loadEnumsCatalog/.test(html), 'no separate preset enum fetch — enums ride the commands catalog');
-  assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/, 'message ids load via shared loadCatalog');
+  assert.match(html, /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/build\/messages['"]/, 'message ids load via shared loadCatalog');
   assert.match(presetBlock, /catalogParamByIndex\(catalog, commandId, spec\.index\)/, 'each row merges the catalog param spec');
   assert.match(presetBlock, /\{ \.\.\.catalogParamByIndex/, 'curation keys override, omitted keys inherit');
   assert.match(presetBlock, /presetParamInput\(merged, catalog\.enums \|\| \{\}, commandId\)/, 'rows render with catalog enums');
@@ -267,17 +267,6 @@ test('mavlink-command target sysid/compid use "(profile default)" wording', () =
   );
 });
 
-test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
-  // Dialect catalogs go through loadCatalog (adminApiUrl inside the helper);
-  // presets still call adminApiUrl directly.
-  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'dialect catalogs use shared loadCatalog');
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'remaining admin fetches use adminApiUrl');
-  assert.ok(
-    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
-    'bare absolute /mavlink getJSON paths must be gone'
-  );
-});
-
 test('identity default is declared (vehicle comes from the shared helper)', () => {
   assert.match(
     html,
@@ -329,16 +318,16 @@ test('command catalog targeting delegates to the shared loader (no local copy)',
   // (proven in mavlink-editor-resource.test.js). Command must call it, not paste.
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/command\/commands['"]/,
     'commands catalog uses shared loadCatalog'
   );
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/build\/messages['"]/,
     'messages catalog uses shared loadCatalog'
   );
   assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
-  assert.doesNotMatch(html, /\$\.getJSON\(\s*RED\.mavlink\.adminApiUrl\(\s*['"]\/mavlink\/(build\/messages|command\/commands)/,
+  assert.doesNotMatch(html, /\$\.getJSON\(\s*['"]mavlink\/(build\/messages|command\/commands)/,
     'no hand-rolled dialect-catalog getJSON');
   assert.doesNotMatch(html, /ardupilotmega/, 'catalog target resolution must not hardcode ardupilotmega');
 });

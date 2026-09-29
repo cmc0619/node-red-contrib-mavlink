@@ -35,7 +35,7 @@ test('message filters are a list of dialect <select> rows, not free-form text (Â
 test('message filter loads dialect messages from build/messages catalog', () => {
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"]/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/build\/messages['"]/,
     'dialect message catalog uses shared loadCatalog'
   );
   assert.match(html, /function paintRow/, 'rows are painted from catalog entries');
@@ -50,11 +50,11 @@ test('message filter resolves dialect from the Connection vehicle graph (wire-on
   // silent ardupilotmega. Skeleton proven in mavlink-editor-resource.test.js.
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/build\/messages['"][\s\S]*isBuild:\s*false/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/build\/messages['"][\s\S]*isBuild:\s*false/,
     'catalog load uses the shared wire-tier isBuild:false override'
   );
   assert.doesNotMatch(html, /function resolveCatalogTarget/, 'no local catalog resolver copy');
-  assert.doesNotMatch(html, /\$\.getJSON\(\s*RED\.mavlink\.adminApiUrl/, 'no hand-rolled catalog getJSON');
+  assert.doesNotMatch(html, /\$\.getJSON\(\s*['"]mavlink\/(build|command)/, 'no hand-rolled catalog getJSON');
   assert.doesNotMatch(html, /dialect\s*=\s*['"]ardupilotmega['"]/, 'no invented default dialect');
 });
 
@@ -144,19 +144,22 @@ test('changedFields red-rings tokens that can never name a decoded field â€” onl
   );
 });
 
+test('rateLimit: a Hz number or complete MESSAGE_NAME=Hz pairs; a lower-case name reds', () => {
+  const { rateLimit } = loadNodeDefaults('mavlink-in');
+  assert.equal(rateLimit.validate.length, 2);
+  for (const ok of ['', '0', '2.5', 'ATTITUDE=2', 'ATTITUDE=2, GLOBAL_POSITION_INT=1, 5']) {
+    assert.equal(rateLimit.validate.call({}, ok, {}), true, ok);
+  }
+  for (const bad of ['attitude=2', 'Attitude=2', 'ATTITUDE=', '=2', 'ATTITUDE=2,', '-1', 'ATTITUDE=x']) {
+    assert.match(String(rateLimit.validate.call({}, bad, {})), /MESSAGE_NAME=Hz/, bad);
+  }
+});
+
 test('fieldName red-rings anything but a single field name; blank = any', () => {
   const { fieldName } = loadNodeDefaults('mavlink-in');
   assert.equal(fieldName.validate.length, 2);
   assert.equal(fieldName.validate.call({}, '', {}), true, 'blank disables the predicate');
   assert.equal(fieldName.validate.call({}, 'base_mode', {}), true);
-  assert.match(String(fieldName.validate.call({}, 'base_mode, custom_mode', {})), /single field name/);
-  assert.match(String(fieldName.validate.call({}, ' base_mode', {})), /single field name/, 'padding reds; the runtime does not trim');
-});
-
-test('admin catalog fetches go through shared loadCatalog (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.loadCatalog\(/, 'catalog fetches use shared loadCatalog');
-  assert.ok(
-    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
-    'bare absolute /mavlink getJSON paths must be gone'
-  );
+  assert.match(String(fieldName.validate.call({}, 'base_mode, custom_mode', {})), /does not match/);
+  assert.match(String(fieldName.validate.call({}, ' base_mode', {})), /does not match/, 'padding reds; the runtime does not trim');
 });

@@ -286,7 +286,7 @@
         if (sel.topic !== 'gimbal' || isBuild() || !connection) return;
 
         $.getJSON(
-          RED.mavlink.adminApiUrl('/mavlink/gimbal-managers'),
+          'mavlink/gimbal-managers',
           { connection },
           (data) => {
             if (seq !== deviceSeq) return;
@@ -347,7 +347,7 @@
         // into `values` — and `mode` / `action` are shared keys whose enums
         // differ per device (mavlink-audit-20260905 #13).
         notice('Loading parameters…');
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/payload/field-tips'), query, (data) => {
+        $.getJSON('mavlink/payload/field-tips', query, (data) => {
           if (seq !== fieldsSeq) return;
           renderFields(data);
           applyCarrier(data);

@@ -445,7 +445,7 @@
         // Cache under the key this request was built from, not whatever the
         // fields say when it lands.
         const key = target.key;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/param/defs'), target.query, (data) => {
+        $.getJSON('mavlink/param/defs', target.query, (data) => {
           const defs = data.defs || {};
           _paramDefsByKey[key] = defs;
           // The dialog paints only the target it now shows: a response for a

@@ -15,24 +15,15 @@ test('resolveCatalogSource prefers a deployed vehicle bundle', () => {
     },
   };
   const source = resolveCatalogSource(RED, { vehicle: 'v1' });
-  assert.equal(source.kind, 'bundle');
   assert.equal(source.dialect, 'custom');
   assert.equal(source.bundle, bundle);
 });
 
-test('resolveCatalogSource refuses missing vehicle without inventing a dialect', () => {
+test('resolveCatalogSource answers null for an undeployed vehicle without inventing a dialect', () => {
   const RED = { nodes: { getNode: () => null } };
-  const source = resolveCatalogSource(RED, { vehicle: 'gone' });
-  assert.equal(source.kind, 'error');
-  assert.equal(source.status, 404);
-  assert.equal(source.body.commands, undefined);
-});
-
-test('resolveCatalogSource soft mode returns a notice for undeployed vehicle', () => {
-  const RED = { nodes: { getNode: () => null } };
-  const source = resolveCatalogSource(RED, { vehicle: 'gone' }, { soft: true });
-  assert.equal(source.kind, 'empty');
-  assert.match(source.notice, /not deployed/i);
+  assert.equal(resolveCatalogSource(RED, { vehicle: 'gone' }), null);
+  assert.equal(resolveCatalogSource(RED, { vehicle: 'gone', dialect: 'common' }).dialect, 'common',
+    'an explicit ?dialect= beside it still resolves');
 });
 
 test('registerDialectCatalogRoute serves a deployed profile and a bundled dialect through one builder', () => {
@@ -71,4 +62,13 @@ test('registerDialectCatalogRoute serves a deployed profile and a bundled dialec
   };
   handler({ query: { dialect: 'common' } }, resDialect);
   assert.deepEqual(resDialect.body, { via: 'bundle', dialect: 'common', ok: true });
+
+  const resGone = {
+    statusCode: 200,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; },
+  };
+  handler({ query: { vehicle: 'gone' } }, resGone);
+  assert.equal(resGone.statusCode, 404, 'an undeployed profile is a 404, never a guessed dialect');
+  assert.ok(resGone.body.dialects.includes('common'), 'the 404 lists the bundled dialects');
 });

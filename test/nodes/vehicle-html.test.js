@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { loadNodeDefaults } = require('./html-assert');
+const { assertChangeHandlerContains, loadNodeDefaults } = require('./html-assert');
 
 const html = fs.readFileSync(
   path.join(__dirname, '..', '..', 'nodes', 'mavlink-vehicle.html'),
@@ -22,6 +22,12 @@ test('dialect and dialectRevision are the persisted library picks', () => {
   assert.match(html, /dialectRevision:\s*\{\s*value:\s*'seed'/);
   assert.match(html, /id="node-config-input-dialect"/);
   assert.match(html, /id="node-config-input-dialectRevision"/);
+});
+
+test('a Firmware change that swaps the dialect runs the dialect change handler (revisions, components, CompIDs)', () => {
+  assertChangeHandlerContains(html, '$firmware', "$dialect.val(want).trigger('change')");
+  assertChangeHandlerContains(html, '$dialect', 'populateComponents()');
+  assertChangeHandlerContains(html, '$dialect', 'reloadCompIds()');
 });
 
 test('dialect and revision are the only dialect inputs the editor offers', () => {
@@ -83,7 +89,7 @@ test('the param defs URL is a dialog input the Update button reads', () => {
 test('parameter definitions use an explicit profile-keyed Update workflow', () => {
   assert.match(html, /id="mav-param-defs-update"[^>]*>Update<\/button>/);
   assert.match(html, /id="mav-param-defs-status"/);
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/param\/defs\/update['"]\)/);
+  assert.match(html, /['"]mavlink\/param\/defs\/update['"]/);
   assert.match(html, /method:\s*'POST'/);
   assert.match(html, /vehicle:\s*node\.id/);
   assert.match(html, /const url = \$\('#node-config-input-paramDefsUrl'\)\.val\(\)\.trim\(\)/);
@@ -96,8 +102,8 @@ test('parameter definitions use an explicit profile-keyed Update workflow', () =
 });
 
 test('the XML-catalog admin endpoints are wired under mavlink/xml-catalog', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog['"]\)/, 'list endpoint');
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/xml-catalog\/update['"]\)/, 'update endpoint');
+  assert.match(html, /['"]mavlink\/xml-catalog['"]/, 'list endpoint');
+  assert.match(html, /['"]mavlink\/xml-catalog\/update['"]/, 'update endpoint');
 });
 
 test('the catalog update action is present', () => {
@@ -107,23 +113,6 @@ test('the catalog update action is present', () => {
 test('update posts JSON to the update endpoint', () => {
   assert.match(html, /method:\s*'POST'/);
   assert.match(html, /contentType:\s*'application\/json'/);
-});
-
-test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
-  // No local wrapper: the old one fell back to the unprefixed path when
-  // RED.mavlink was absent, which cannot happen (local-identity loads the
-  // resource first, package.json) and would have produced a wrong URL rather
-  // than a loud failure if it did.
-  assert.ok(!/function mavlinkAdminUrl/.test(html), 'no local admin-url wrapper');
-  assert.match(html, /RED\.mavlink\.adminApiUrl/, 'vehicle calls the shared adminApiUrl helper directly');
-  assert.ok(
-    !/\$\.getJSON\(\s*['"]mavlink\//.test(html),
-    'bare relative mavlink getJSON paths must be gone'
-  );
-  assert.ok(
-    !/url:\s*['"]mavlink\//.test(html),
-    'bare relative mavlink ajax url paths must be gone'
-  );
 });
 
 test('the component-dialect picker is a plain multi-select synced to a hidden field', () => {

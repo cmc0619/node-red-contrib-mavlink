@@ -42,14 +42,14 @@
     }
 
     function loadMessagesCatalog(cb) {
-      RED.mavlink.loadCatalog('/mavlink/build/messages', _msgCatalog, cb, {
+      RED.mavlink.loadCatalog('mavlink/build/messages', _msgCatalog, cb, {
         isBuild: buildTierIsBuild(),
         listKey: 'messages'
       });
     }
 
     function loadCommandsCatalog(cb) {
-      RED.mavlink.loadCatalog('/mavlink/command/commands', _cmdCatalog, cb, {
+      RED.mavlink.loadCatalog('mavlink/command/commands', _cmdCatalog, cb, {
         isBuild: buildTierIsBuild(),
         listKey: 'commands'
       });

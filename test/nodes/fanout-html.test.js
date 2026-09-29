@@ -80,14 +80,6 @@ test('firmware filter is a small select (ArduPilot/PX4)', () => {
   assert.match(html, /<option value="px4">PX4<\/option>/);
 });
 
-test('admin catalog fetches go through the shared loaders (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.loadEnumsCatalog\(/, 'catalog fetches use the shared enums loader');
-  assert.ok(
-    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
-    'bare absolute /mavlink getJSON paths must be gone'
-  );
-});
-
 test('identity defaults to empty string and refreshIdentitySelect uses gcs+custom filter (§6)', () => {
   assert.match(
     html,

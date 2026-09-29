@@ -8,10 +8,13 @@
 
 <script type="text/javascript">
   (function () {
-  // Serial baud rates, as strings because that is what a <select> saves. A
-  // closed list, not a suggestion list: the standard rates are a fixed
-  // vocabulary, so nothing outside them needs to stay typeable.
-  const SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'];
+  /**
+   * Serial baud rates, as strings because that is what a <select> saves:
+   * ArduPilot's SERIALn_BAUD table (AP_SerialManager.cpp @Values) from 9600
+   * up, 1.5 and 2 Mbaud included for companion UARTs.
+   */
+  const SERIAL_BAUDS = ['9600', '19200', '38400', '57600', '111100', '115200', '230400', '256000',
+    '460800', '500000', '921600', '1500000', '2000000'];
 
   // Remote host and port are a pair — both blank (listen-only) or both set.
   // The runtime trusts this: a half-configured remote never deploys, so the
@@ -112,10 +115,19 @@
         if (!RED.mavlink.isBlank(v)) return true;
         return 'bind host is required — 0.0.0.0 means all interfaces';
       } },
+      /**
+       * A TCP client (remote host set; the pair ring owns the port) dials out
+       * and never binds a port, so a blank bind port is its correct state.
+       * Sibling read as remoteHost's below.
+       */
       bindPort: { value: 14550, validate(v, opt) {
         const mode = RED.mavlink.liveOr(this, '#node-config-input-mode', this.mode, 'udp');
         if (mode === 'serial') return true;
-        if (RED.mavlink.isBlank(v)) return 'bind port is required for UDP/TCP';
+        if (RED.mavlink.isBlank(v)) {
+          const $host = RED.mavlink.ownDialogField(this, '#node-config-input-remoteHost');
+          if (mode === 'tcp' && !RED.mavlink.isBlank($host ? $host.val() : this.remoteHost)) return true;
+          return 'bind port is required for UDP and a TCP server';
+        }
         return RED.mavlink.validateIntRange(1, 65535).call(this, v, opt);
       } },
       // Sibling reads go through ownDialogField, not `live || saved` (the
@@ -244,23 +256,15 @@
       } },
       acceptInvalid: { value: false },
       // The signature block carries the link id as one byte on the wire.
-      linkId: { value: 0, validate(v, _opt) {
-        const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
-        if (Number.isInteger(n) && n >= 0 && n <= 255) return true;
-        return 'the signing link id is a byte — 0 to 255';
-      } },
+      linkId: { value: 0, required: true, validate: RED.mavlink.validateUint8(0) },
       // The runtime sweeps on these as saved (§0), so the editor owns the
       // 5000/15000 defaults and blank reds; a set value must be a positive
       // interval, or staleness silently never fires.
-      staleMs: { value: 5000, validate(v, opt) {
-        if (RED.mavlink.isBlank(v)) return 'stale threshold is required';
-        return RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
-      } },
+      staleMs: { value: 5000, validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
       // Cross-field (the dependency-between-fields case AGENTS.md names): a
       // peer must go stale before it expires, or the sweep drops it with the
       // stale event never fired. Read live through liveOr.
       expireMs: { value: 15000, validate(v, opt) {
-        if (RED.mavlink.isBlank(v)) return 'expire threshold is required';
         const shape = RED.mavlink.validateAtLeast(1, { integer: true }).call(this, v, opt);
         if (shape !== true) return shape;
         const staleMs = Number(RED.mavlink.liveOr(this, '#node-config-input-staleMs', this.staleMs, ''));
@@ -399,7 +403,7 @@
       function fillSerialPorts() {
         if (portsRequested) return;
         portsRequested = true;
-        $.getJSON(RED.mavlink.adminApiUrl('/mavlink/serial-ports'), (data) => {
+        $.getJSON('mavlink/serial-ports', (data) => {
           const $list = $('#mav-conn-serial-ports').empty();
           ((data?.ports) || []).forEach((port) => {
             $('<option></option>').val(port.path).text(port.manufacturer || '').appendTo($list);
@@ -510,7 +514,7 @@
   <div class="form-row">
     <label for="node-config-input-signOutbound">&nbsp;</label>
     <input type="checkbox" id="node-config-input-signOutbound" style="display:inline-block; width:auto; vertical-align:top;" />
-    <span>Sign outbound (requires a passphrase, or the connection fails closed)</span>
+    <span>Sign outbound (requires a passphrase or raw key)</span>
   </div>
   <div class="form-row">
     <label for="node-config-input-acceptInvalid">&nbsp;</label>
@@ -556,7 +560,8 @@
   <h3>Transport</h3>
   <p><b>UDP</b>, <b>TCP</b>, and <b>serial</b> share the same driver-side scheduling
   contract. UDP binds a local port and may set an optional remote default target.
-  TCP with a remote host/port is a client; with only bind settings it is a server.
+  TCP with a remote host/port is a client, which dials out and needs no bind
+  port; with only bind settings it is a server.
   Serial opens a device path (optional <code>serialport</code> dependency) at the
   configured baud; peer-table endpoints are that path. The path box suggests the
   host's detected ports when that dependency is installed, and still accepts any
@@ -615,9 +620,19 @@
   checked and do not advance replay state. With a signing key, inbound
   signatures are verified and unsigned traffic is rejected, including
   <code>RADIO_STATUS</code>. <i>Accept invalid signatures</i> is a separate
-  recovery override whose admitted traffic is untrusted and advisory only. The
-  passphrase is stored in Node-RED encrypted credentials, never in exported
-  flow JSON.</p>
+  recovery override whose admitted traffic is untrusted and advisory only.</p>
+  <p>The key is a <b>Passphrase</b> or a <b>Raw key</b> of 64 hex characters (the
+  32-byte secret itself) — one or the other, never both. <b>Sign outbound</b>
+  needs one of them. Both are stored in Node-RED encrypted credentials, never in
+  exported flow JSON, so an imported flow arrives without its key: until one is
+  entered, a Connection that signs outbound drops every frame it would send (the
+  log says <code>serialize failed</code>) while its badge still reads connected.
+  <b>Link ID</b> (0–255) is the link byte written into every signature.</p>
+
+  <h3>Peers</h3>
+  <p>A peer component not heard from for <b>Stale (ms)</b> is marked stale; one not heard
+  from for <b>Expire (ms)</b> is dropped from the peer table. Expire must be
+  longer than Stale, so a peer always goes stale before it is dropped.</p>
 
   <h3>Disable</h3>
   <p>Disabling constructs no runtime at all — no listening or timers — since

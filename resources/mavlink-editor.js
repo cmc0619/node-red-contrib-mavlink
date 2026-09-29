@@ -3,10 +3,11 @@
  *
  * Node-RED serves this file at
  * `resources/@cmc0619/node-red-contrib-mavlink/mavlink-editor.js` (DESIGN.md §6,
- * https://nodered.org/docs/creating-nodes/resources). Each node HTML loads it
- * with a relative `<script src>`; Node-RED's `appendConfig` defers every inline
- * node script until this external script's `onload` fires, so `RED.mavlink.*`
- * is defined before any `registerType` runs.
+ * https://nodered.org/docs/creating-nodes/resources). Only
+ * `mavlink-local-identity.html` loads it, with a relative `<script src>`, and
+ * package.json lists that node first: Node-RED's `appendConfig` defers every
+ * later inline node script until this external script's `onload` fires, so
+ * `RED.mavlink.*` is defined before any `registerType` runs (§14.32).
  *
  * This is the browser (editor) half of the toolkit. It owns the config-node
  * picker, the enum/dialect catalog helpers, the role × tier matrix source
@@ -23,7 +24,7 @@
   /**
    * Shared enum option label. Server catalogs should already include labels,
    * but local/generated entries use the same §6 NAME (value) format
-   * (Node twin: `lib/metadata/commands-list.js` `enumOptionLabel`).
+   * (Node twin: `lib/metadata/commands-list.js` `commandLabel`).
    *
    * @param {{name: string, value: number|string}} entry
    * @returns {string}
@@ -53,12 +54,16 @@
 
   /**
    * Outbound queue band picker options (DESIGN.md §7). Editor-side copy of
-   * `lib/connection/bands` names — browser HTML cannot require() the module.
-   * Labels are Title Case (`Emergency (0)`), not screaming-snake enum names.
+   * `lib/connection/bands` names — browser HTML cannot require() the module —
+   * pinned to `BAND_NAME` by drift test. Labels are Title Case
+   * (`Emergency (0)`), not screaming-snake enum names.
+   *
+   * Liveness (1) is not offered: that band keeps one frame per identity for
+   * the Connection's own HEARTBEAT, so any other frame queued there is
+   * replaced by the next heartbeat.
    */
   RED.mavlink.BAND_OPTIONS = [
     { value: '0', label: 'Emergency (0)' },
-    { value: '1', label: 'Liveness (1)' },
     { value: '2', label: 'Control (2)' },
     { value: '3', label: 'Streaming (3)' },
     { value: '4', label: 'Bulk (4)' },
@@ -196,19 +201,16 @@
    * @param {string|number|null} [opts.saved]  saved wire value
    * @param {string} [opts.title]  hover text (the XML description)
    * @param {string} [opts.className]  class the collector scrapes
+   * @param {string|number} [opts.trueValue]  wire value when ticked; omitted,
+   *   it is the TRUE entry's, which every such caller has proven present with
+   *   {@link RED.mavlink.isFalseTrueEnum}
    * @returns {jQuery} an `<input type="checkbox">` carrying data-kind="boolean"
    */
   RED.mavlink.booleanEnumInput = function (entries, opts) {
     opts = opts || {};
-    let trueValue = opts.trueValue !== undefined ? String(opts.trueValue) : null;
-    if (trueValue === null) {
-      let trueEntry = null;
-      for (let i = 0; i < entries.length; i++) {
-        const name = entries[i] && entries[i].name ? entries[i].name : '';
-        if (isTrueName(name)) trueEntry = entries[i];
-      }
-      trueValue = trueEntry ? String(trueEntry.value) : '1';
-    }
+    const trueValue = String(opts.trueValue !== undefined
+      ? opts.trueValue
+      : entries.find((entry) => isTrueName(entry.name)).value);
     const saved = opts.saved;
     const checked = saved !== undefined && saved !== null && saved !== ''
       && String(saved) === trueValue;
@@ -606,20 +608,6 @@
   }
 
   /**
-   * Config-node id from an editor property or a deployed Connection's frozen
-   * `vehicle` snapshot (`{ id, targetSystem, … }`).
-   *
-   * @param {string|{id?: string}|null|undefined} ref
-   * @returns {string}
-   */
-  RED.mavlink.vehicleIdFrom = function (ref) {
-    if (!ref) return '';
-    if (typeof ref === 'string') return ref;
-    if (typeof ref === 'object' && typeof ref.id === 'string') return ref.id;
-    return '';
-  };
-
-  /**
    * Vehicle / dialect query for admin catalog routes (enums, field-tips, …).
    *
    * A thin remainder over {@link RED.mavlink.resolveCatalogTarget}, which owns
@@ -634,7 +622,7 @@
    *   has a Build delivery but no dialect row, so it always resolves by wire)
    * @returns {Object<string, string>}
    */
-  function currentEnumQuery(names, opts) {
+  RED.mavlink.currentCatalogQuery = function (names, opts) {
     const target = RED.mavlink.resolveCatalogTarget(
       opts && typeof opts.isBuild === 'boolean' ? { isBuild: opts.isBuild } : undefined
     );
@@ -655,7 +643,7 @@
     }
     addEnumNames(query, names);
     return query;
-  }
+  };
 
   function addEnumNames(query, names) {
     if (Array.isArray(names) && names.length) {
@@ -664,7 +652,6 @@
       query.names = names.trim();
     }
   }
-  RED.mavlink.currentCatalogQuery = currentEnumQuery;
 
   /**
    * Resolve which Vehicle / dialect the editor catalogs (messages, commands,
@@ -694,7 +681,7 @@
    *   the delivery/tier selector value === 'build' decides.
    * @returns {{key: string, query: object|null, dialect: string, vehicleId: string,
    *   firmware: string, vehicleFamily: string, isBuild: boolean}} `isBuild`
-   *   reports which branch answered, so thin remainders (`currentEnumQuery`'s
+   *   reports which branch answered, so thin remainders (`currentCatalogQuery`'s
    *   config-dialog fallback) need not re-detect the tier.
    */
   RED.mavlink.resolveCatalogTarget = function (opts) {
@@ -790,24 +777,10 @@
     // Wire tier: the connection's bound Vehicle Profile is the catalog source.
     const connectionId = read('connection', connectionSelector);
     if (connectionId) {
-      const conn = RED.nodes.node(connectionId);
-      const vehicleRef = RED.mavlink.vehicleIdFrom(conn?.vehicle);
-      if (vehicleRef) return forProfile(vehicleRef);
+      const vehicleId = RED.nodes.node(connectionId)?.vehicle;
+      if (vehicleId) return forProfile(vehicleId);
     }
     return empty();
-  };
-
-  /**
-   * Build an admin API URL under Node-RED's configured httpAdminRoot.
-   * Absolute `/mavlink/...` paths 404 when the editor is mounted at e.g. `/red`.
-   *
-   * @param {string} path  absolute-looking path, e.g. `/mavlink/enums`
-   * @returns {string}
-   */
-  RED.mavlink.adminApiUrl = function (path) {
-    let root = (RED.settings?.httpAdminRoot) || '/';
-    if (root.slice(-1) !== '/') root += '/';
-    return root + String(path || '').replace(/^\//, '');
   };
 
   /**
@@ -856,7 +829,7 @@
       $select.val(saved);
     }
 
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/dialects'), (data) => {
+    $.getJSON('mavlink/dialects', (data) => {
       finish((data?.dialects) || []);
     }).fail(() => {
       finish([]);
@@ -878,7 +851,7 @@
    */
   RED.mavlink.loadEnumsCatalog = function (names, cb, token, opts) {
     opts = opts || {};
-    const query = currentEnumQuery(names, opts);
+    const query = RED.mavlink.currentCatalogQuery(names, opts);
     if (!query.dialect && !query.vehicle && opts.dialect) {
       query.dialect = opts.dialect;
       addEnumNames(query, names);
@@ -890,7 +863,7 @@
       }
       return;
     }
-    $.getJSON(RED.mavlink.adminApiUrl('/mavlink/enums'), query, (data) => {
+    $.getJSON('mavlink/enums', query, (data) => {
       if (token?.cancelled) return;
       cb({
         dialect: data.dialect,
@@ -1193,10 +1166,6 @@
    */
   RED.mavlink.fillCompIdSelect = function ($select, entries, opts) {
     opts = opts || {};
-    if (!opts.suggest) {
-      RED.mavlink.fillEnumSelect($select, entries, opts);
-      return;
-    }
     const split = RED.mavlink.splitCompIdsByTopic(entries, opts.suggest);
     if (!split.suggested.length) {
       RED.mavlink.fillEnumSelect($select, entries, opts);
@@ -1307,8 +1276,9 @@
    * Caller owns only its request sequence: `{ seq: 0 }`. The catalog travels
    * through the callback.
    *
-   * @param {string} endpoint  admin path (`/mavlink/build/messages` or
-   *   `/mavlink/command/commands`)
+   * @param {string} endpoint  relative admin path (`mavlink/build/messages` or
+   *   `mavlink/command/commands`). Relative on purpose: Node-RED's ajaxSetup
+   *   prefixes the admin root and adds the auth token only to relative URLs.
    * @param {{value: object|null, seq: number}} state
    * @param {function(object):void} cb
    * @param {object} [opts]
@@ -1348,7 +1318,7 @@
       return;
     }
 
-    $.getJSON(RED.mavlink.adminApiUrl(endpoint), target.query, (data) => {
+    $.getJSON(endpoint, target.query, (data) => {
       if (seq !== state.seq) return;
       cb(fromData(data || {}));
     }).fail((_xhr, _status, err) => {
@@ -1743,6 +1713,22 @@
   };
 
   /**
+   * A finite number above zero — an interval or lease the runtime arms its
+   * timer with as saved. Blank reds: `Number('')` is 0, an already-expired
+   * timer, and the field's `value:` is where its default lives.
+   *
+   * @param {string} unit  named in the reason, e.g. `'milliseconds'`
+   * @returns {function(*, object=): true|string}
+   */
+  RED.mavlink.validatePositive = function (unit) {
+    return function (v, _opt) {
+      const n = RED.mavlink.isBlank(v) ? NaN : Number(v);
+      if (Number.isFinite(n) && n > 0) return true;
+      return `must be a positive number of ${unit}`;
+    };
+  };
+
+  /**
    * The two fields every node that waits on an acknowledgement carries —
    * Command, Payload, Param, Fan-out, Formation, Move — spread into each
    * dialog's `defaults` so the six cannot drift. `timeoutMs`: whole
@@ -1760,6 +1746,9 @@
    * spread these descriptors with their own `value` — a mission step, a
    * transfer step and a parameter stream are not a command ack, and their
    * windows are theirs.
+   *
+   * One field, one name: where the pair is an ack window, every dialog labels
+   * it `ACK timeout` (ms) and `Max retries`.
    *
    * `shown(node)` says whether the two rows are on screen in the dialog's
    * live state — the tiers that actually wait. A row the operator cannot
@@ -1940,21 +1929,6 @@
   };
 
   /**
-   * Shared Build-tier dialect / vehicle / firmware default descriptors and
-   * validators for `registerType({ defaults })`. Every Build-tier builder
-   * gets the same rule: dialect required on Build; the Vehicle Profile is
-   * required only when the dialect is the `__vehicle` escape; and — for
-   * Param / Mission — Firmware is required when a concrete non-empty dialect
-   * is chosen (the Firmware XOR against the Vehicle Profile escape, §6).
-   *
-   * Merge the result into the node's `defaults` object (Object.assign).
-   *
-   * @param {object} [opts]
-   * @param {'delivery'|'tier'} [opts.modeField='delivery']  Build node uses tier
-   * @param {boolean} [opts.withFirmware]  add the Param/Mission Firmware field
-   * @returns {object} default descriptors to merge into registerType defaults
-   */
-  /**
    * The `connection` default descriptor: required on the wire tiers,
    * meaningless on Build. Shared by the tier senders (via
    * buildTierDialectDefaults) and Fan-out, which has no dialect field.
@@ -1994,6 +1968,21 @@
     };
   };
 
+  /**
+   * Shared Build-tier dialect / vehicle / firmware default descriptors and
+   * validators for `registerType({ defaults })`. Every Build-tier builder
+   * gets the same rule: dialect required on Build; the Vehicle Profile is
+   * required only when the dialect is the `__vehicle` escape; and — for
+   * Param / Mission — Firmware is required when a concrete non-empty dialect
+   * is chosen (the Firmware XOR against the Vehicle Profile escape, §6).
+   *
+   * Merge the result into the node's `defaults` object (Object.assign).
+   *
+   * @param {object} [opts]
+   * @param {'delivery'|'tier'} [opts.modeField='delivery']  Build node uses tier
+   * @param {boolean} [opts.withFirmware]  add the Param/Mission Firmware field
+   * @returns {object} default descriptors to merge into registerType defaults
+   */
   RED.mavlink.buildTierDialectDefaults = function (opts) {
     opts = opts || {};
     const modeField = opts.modeField || 'delivery';

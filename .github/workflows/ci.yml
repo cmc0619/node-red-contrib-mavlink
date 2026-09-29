@@ -16,16 +16,14 @@ concurrency:
 
 jobs:
   quality:
-    name: Quality (${{ matrix.os }}, Node ${{ matrix.node_version }})
-    runs-on: ${{ matrix.os }}
+    name: Quality (Node ${{ matrix.node_version }})
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            node_version: 20.19.0
-          - os: ubuntu-latest
-            node_version: 22.13.0
+          - node_version: 20.19.0
+          - node_version: 22.13.0
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,14 +49,13 @@ jobs:
       # known moderate xml2js chain is accepted in SECURITY.md — gating on those
       # would mean a permanently red job nobody reads (#106).
       - name: Audit shipped dependencies
-        if: matrix.os == 'ubuntu-latest'
         run: npm audit --omit=dev --audit-level=high
 
       - name: Package contents
         run: npm pack --dry-run
 
       - name: Node-RED package validation
-        if: matrix.node_version == '22.13.0' && matrix.os == 'ubuntu-latest'
+        if: matrix.node_version == '22.13.0'
         run: npm run validate:node-red
 
   package-install:

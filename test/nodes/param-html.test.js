@@ -21,16 +21,8 @@ test('param defs load from the mavlink/param/defs admin route', () => {
   assert.match(html, /function loadParamDefs/, 'param defs loader exists');
   assert.match(
     html,
-    /RED\.mavlink\.adminApiUrl\(['"]\/mavlink\/param\/defs['"]\)/,
+    /\$\.getJSON\('mavlink\/param\/defs'/,
     'param defs catalog is loaded from admin API'
-  );
-});
-
-test('admin catalog fetches use adminApiUrl (httpAdminRoot-safe)', () => {
-  assert.match(html, /RED\.mavlink\.adminApiUrl\(/, 'admin fetches must use adminApiUrl');
-  assert.ok(
-    !/\$\.getJSON\(\s*['"]\/mavlink\//.test(html),
-    'bare absolute /mavlink getJSON paths must be gone'
   );
 });
 

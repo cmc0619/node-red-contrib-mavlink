@@ -145,7 +145,7 @@ test('deployed Vehicle Profile serves requested enums from its own bundle', () =
   const res = mockRes();
 
   handlers.get('/mavlink/enums').handler(
-    { query: { vehicle: 'veh1', names: 'CUSTOM_ENUM' } },
+    { query: { vehicle: 'veh1', names: 'MAV_TYPE,CUSTOM_ENUM' } },
     res
   );
 

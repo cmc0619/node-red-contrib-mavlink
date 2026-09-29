@@ -162,7 +162,7 @@
         }
 
         function loadLibrary(done) {
-          $.getJSON(RED.mavlink.adminApiUrl('/mavlink/xml-catalog'))
+          $.getJSON('mavlink/xml-catalog')
             .done((data) => {
               library = (data?.dialects) || [];
               $status.text(library.length ? '' : 'Dialect library empty — Update catalog when online.');
@@ -205,8 +205,7 @@
         $firmware.on('change', () => {
           const want = FIRMWARE_DIALECT[$firmware.val()];
           if (want && $dialect.find(`option[value="${want}"]`).length) {
-            $dialect.val(want);
-            populateRevisions('seed');
+            $dialect.val(want).trigger('change');
           }
           suggestParamDefsUrl();
         });
@@ -221,7 +220,7 @@
           e.preventDefault();
           $status.text('Downloading MAVLink XML from mavlink/mavlink...');
           $.ajax({
-            url: RED.mavlink.adminApiUrl('/mavlink/xml-catalog/update'),
+            url: 'mavlink/xml-catalog/update',
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({})
@@ -250,7 +249,7 @@
           e.preventDefault();
           $status.text('Rebuilding compiled dialects...');
           $.ajax({
-            url: RED.mavlink.adminApiUrl('/mavlink/dialect-cache/rebuild'),
+            url: 'mavlink/dialect-cache/rebuild',
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({})
@@ -275,7 +274,7 @@
           $update.prop('disabled', true);
           $paramDefsStatus.text('Downloading parameter definitions...');
           $.ajax({
-            url: RED.mavlink.adminApiUrl('/mavlink/param/defs/update'),
+            url: 'mavlink/param/defs/update',
             method: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({ vehicle: node.id, url })
@@ -419,8 +418,13 @@
       takes every document's parameter names but none of their bounds or
       choice lists, since the documents disagree on those.</li>
     <li><b>Firmware</b> — ArduPilot or PX4 (suggests a dialect).</li>
-    <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers.</li>
-    <li><b>Dialect / Version</b> — Advanced: seed or a downloaded snapshot date.</li>
-    <li><b>Param defs URL</b> — pre-filled from firmware and vehicle; used when you click Update to refresh this profile's local definitions.</li>
+    <li><b>Dialect / Version</b> — the dialect, and the seed or a downloaded snapshot date to
+      compile it from.</li>
+    <li><b>Components</b> — further dialects compiled into the same profile; dialects the
+      chosen one already includes are not offered.</li>
+    <li><b>Target SysID / CompID</b> — defaults blank palette fields inherit on wire tiers. A
+      Companion identity sends as this SysID.</li>
+    <li><b>Param defs URL</b> (Advanced) — pre-filled from firmware and vehicle; used when you
+      click Update to refresh this profile's local definitions.</li>
   </ul>
 </script>

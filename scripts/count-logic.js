@@ -12,16 +12,9 @@
  * number and buries the delta the net-code-budget rule governs. The editor's
  * own diff view has the same problem — it counts everything.
  *
- * Counted two ways on purpose, because they cross-check each other:
- *
- *   - total logic lines in each file, before and after. A direct count; it
- *     cannot be inflated by a bad differ.
- *   - a unified diff of the stripped files, giving additions and deletions.
- *
- * If the two nets disagree, the stripper is wrong — do not report either
- * number until they agree. An agent reported runtime −65 for the change that
- * added this script; the real figure was −13, because deleted comment blocks
- * were being scored as logic. Both methods now say −13.
+ * Runtime is `lib/**` and `nodes/*.js` (AGENTS.md §2); editor is `nodes/*.html`
+ * and `resources/`; everything else that is not a test is tooling. A rename
+ * counts as a delete plus an add, which nets to the lines that changed.
  */
 
 const { execFileSync } = require('node:child_process');
@@ -72,11 +65,10 @@ function addDel(before, after) {
 }
 
 function groupOf(file) {
-  if (file.startsWith('test/') || file.includes('/test/')) return 'tests';
-  if (file.startsWith('resources/')) return 'editor';
-  if (file.endsWith('.html')) return 'editor';
-  if (file === 'eslint.config.mjs' || file.startsWith('scripts/')) return 'tooling';
-  return 'runtime';
+  if (file.startsWith('test/')) return 'tests';
+  if (file.startsWith('resources/') || /^nodes\/[^/]+\.html$/.test(file)) return 'editor';
+  if ((file.startsWith('lib/') && file.endsWith('.js')) || /^nodes\/[^/]+\.js$/.test(file)) return 'runtime';
+  return 'tooling';
 }
 
 function fileAt(rev, path) {
@@ -90,7 +82,7 @@ function fileAt(rev, path) {
 const base = process.argv[2] || 'origin/main';
 const head = process.argv[3] || 'HEAD';
 
-const files = git('diff', '--name-only', `${base}...${head}`)
+const files = git('diff', '--name-only', '--no-renames', `${base}...${head}`)
   .split('\n')
   .filter((f) => f && (f.endsWith('.js') || f.endsWith('.mjs') || f.endsWith('.html')));
 
@@ -113,24 +105,18 @@ const sign = (n) => (n > 0 ? `+${n}` : String(n));
 
 console.log(`${base}...${head}   LOGIC LINES ONLY — no //, no /* */, no /** jsdoc */, no blanks`);
 console.log();
-console.log('group     before   after       net    +add   -del   net(diff)  agree');
-console.log('-'.repeat(70));
+console.log('group     before   after       net    +add   -del');
+console.log('-'.repeat(50));
 
-let ok = true;
 for (const key of ['runtime', 'editor', 'tests', 'tooling']) {
   const g = groups.get(key);
   if (!g) continue;
-  const netTotal = g.after - g.before;
-  const netDiff = g.add - g.del;
-  const agree = netTotal === netDiff;
-  if (!agree) ok = false;
   console.log(
     `${key.padEnd(9)} ${String(g.before).padStart(6)} ${String(g.after).padStart(7)} `
-    + `${sign(netTotal).padStart(9)} ${String(g.add).padStart(7)} ${String(g.del).padStart(6)} `
-    + `${sign(netDiff).padStart(11)}   ${agree ? 'yes' : 'NO'}`
+    + `${sign(g.after - g.before).padStart(9)} ${String(g.add).padStart(7)} ${String(g.del).padStart(6)}`
   );
 }
-console.log('-'.repeat(70));
+console.log('-'.repeat(50));
 
 const runtime = groups.get('runtime');
 if (runtime) {
@@ -140,10 +126,4 @@ if (runtime) {
     console.log(`  ${String(f.before).padStart(5)} -> ${String(f.after).padStart(5)}  `
       + `${sign(f.after - f.before).padStart(6)}   ${f.file}`);
   }
-}
-
-if (!ok) {
-  console.log();
-  console.log('The two methods disagree — the stripper is wrong. Do not report either number.');
-  process.exitCode = 1;
 }

@@ -24,8 +24,11 @@ npm run generate-seed
 node scripts/generate-seed.js --source-dir /path/to/mavlink
 ```
 
-A weekly GitHub Action (`.github/workflows/refresh-mavlink-seed.yml`) refreshes
-from `mavlink/mavlink` and opens a PR when the stamp moves.
+The **Refresh MAVLink seed** GitHub Action (`.github/workflows/refresh-mavlink-seed.yml`)
+runs on demand (`workflow_dispatch`, optional `ref`): it regenerates from
+`mavlink/mavlink`, runs the full test suite against the fresh seed, and commits the
+result straight to the branch it ran on. The stamp is the fetch date plus the commit,
+so a run on a later day writes a new blob even when upstream has not moved.
 
 ---
 
@@ -35,7 +38,7 @@ The same shape, a second payload:
 
 ```text
 seed/params-active.json                       → { "file": "param-defs-YYYY-MM-DD-<hash>.seed.gz", "stamp": …, "sources": […] }
-seed/param-defs-2026-08-05-c86294e.seed.gz    → gunzip → JSON, firmware → vehicle → { ID: def }
+seed/param-defs-2026-08-13-522aed3.seed.gz    → gunzip → JSON, firmware → vehicle → { ID: def }
 ```
 
 Runtime reads the pointer, gunzips once on first lookup, and keys on the Vehicle

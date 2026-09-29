@@ -197,8 +197,8 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
     };
   };
   $.responses = {
-    '/mavlink/dialects': { dialects: ['ardupilotmega', 'common'] },
-    '/mavlink/enums': {
+    'mavlink/dialects': { dialects: ['ardupilotmega', 'common'] },
+    'mavlink/enums': {
       dialect: 'common',
       enums: {
         MAV_COMPONENT: [
@@ -211,7 +211,6 @@ function loadHelpers(initialValues = {}, nodeLookup = {}) {
 
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: {
         node(id) {
@@ -288,7 +287,7 @@ test('populateDialectSelect loads dialects, appends vehicle escape, and keeps em
   context.RED.mavlink.populateDialectSelect(select, {});
 
   assert.deepEqual(plain(context.$.lastRequest), {
-    url: '/mavlink/dialects',
+    url: 'mavlink/dialects',
   });
   assert.deepEqual(
     select.options.map((option) => ({ value: option.value, label: option.label })),
@@ -410,7 +409,7 @@ test('loadEnumsCatalog calls the shared enum route with a catalog source and com
   });
 
   assert.deepEqual(plain(context.$.lastRequest), {
-    url: '/mavlink/enums',
+    url: 'mavlink/enums',
     query: { dialect: 'common', names: 'MAV_TYPE,MAV_COMPONENT' },
   });
   assert.equal(payload.dialect, 'common');
@@ -475,7 +474,7 @@ test('currentCatalogQuery on wire tiers keeps the connection profile behavior', 
     '#node-input-dialect': 'development',
     '#node-input-vehicle': 'stale-vehicle',
   }, {
-    'connection-1': { vehicle: { id: 'vehicle-1' } },
+    'connection-1': { vehicle: 'vehicle-1' },
     'vehicle-1': { dialect: 'ardupilotmega' },
     'stale-vehicle': { dialect: 'common' },
   });
@@ -519,7 +518,7 @@ test('loadEnumsCatalog accepts an explicit dialect override for Local Identity',
   }, { cancelled: false }, { dialect: 'common' });
 
   assert.deepEqual(plain(context.$.lastRequest), {
-    url: '/mavlink/enums',
+    url: 'mavlink/enums',
     query: { dialect: 'common', names: 'MAV_TYPE' },
   });
   assert.equal(payload.dialect, 'common');
@@ -629,7 +628,7 @@ test('companion reshapes the rows: SysID hidden, CompID still shown', () => {
   // Driven, not matched. The fake records visibility now, so the §6 reshape
   // is asserted from behaviour: the derived field goes, the choice stays.
   const context = loadHelpers({ '#node-config-input-role': 'companion' });
-  context.$.responses['/mavlink/enums'] = {
+  context.$.responses['mavlink/enums'] = {
     dialect: 'common',
     enums: {
       MAV_COMPONENT: [
@@ -733,7 +732,7 @@ test('the role floats its own components to the top of the CompID select', () =>
   // source. This is the reachable staleness case — a response arriving after
   // the dialog closed — and it is why no sequence counter is needed on top.
   const ctx = loadHelpers({ '#node-config-input-role': 'gcs' });
-  ctx.$.responses['/mavlink/enums'] = {
+  ctx.$.responses['mavlink/enums'] = {
     dialect: 'common',
     enums: {
       MAV_COMPONENT: [
@@ -787,12 +786,6 @@ test('identity oneditprepare seeds CompID before async enum catalog', () => {
   assert.match(resourceScript, /\$select\.trigger\('change'\)/);
 });
 
-test('adminApiUrl respects a non-root httpAdminRoot', () => {
-  const context = loadHelpers();
-  context.RED.settings.httpAdminRoot = '/red';
-  assert.equal(context.RED.mavlink.adminApiUrl('/mavlink/enums'), '/red/mavlink/enums');
-});
-
 test('loadEnumsCatalog ignores responses after the dialog token is cancelled', () => {
   const context = loadHelpers();
   let calls = 0;
@@ -837,7 +830,7 @@ test('reopening a companion never retypes its saved CompID', () => {
   // the pre-1.0 rule forbids. The dialog shows what was saved, in both cases.
   for (const saved of [190, 192]) {
     const context = loadHelpers({ '#node-config-input-role': 'companion' });
-    context.$.responses['/mavlink/enums'] = {
+    context.$.responses['mavlink/enums'] = {
       dialect: 'common',
       enums: {
         MAV_COMPONENT: [

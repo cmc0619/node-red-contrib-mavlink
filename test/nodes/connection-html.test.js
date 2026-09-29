@@ -465,6 +465,10 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'tcp' }, '70000', {})), portReason);
   // Serial hides the control, so a stale value must not red what cannot be seen.
   assert.equal(defaults.bindPort.validate.call({ id: 'c1', mode: 'serial' }, '', {}), true);
+  // A TCP client dials out and binds no port; UDP and a TCP server listen on it.
+  assert.equal(defaults.bindPort.validate.call({ id: 'c1', mode: 'tcp', remoteHost: '10.0.0.2' }, '', {}), true);
+  assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'tcp' }, '', {})), /required/);
+  assert.match(String(defaults.bindPort.validate.call({ id: 'c1', mode: 'udp', remoteHost: '10.0.0.2' }, '', {})), /required/);
 
   assert.equal(defaults.bindHost.validate.call({ id: 'c1', mode: 'udp' }, '0.0.0.0', {}), true);
   assert.match(
@@ -497,6 +501,10 @@ test('transport numeric fields carry range rings; bind host is required for IP m
   assert.equal(defaults.broadcastPort.validate.call({ id: 'c1', mode: 'serial' }, '0', {}), true);
 
   assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, '57600', {}), true);
+  // ArduPilot's SERIALn_BAUD rates a companion UART runs at.
+  for (const baud of ['111100', '256000', '500000', '1500000', '2000000']) {
+    assert.equal(defaults.baudRate.validate.call({ id: 'c1', mode: 'serial' }, baud, {}), true, baud);
+  }
   // Closed list: a rate off it reds, whether it is nonsense or merely a real
   // baud the dropdown does not offer.
   assert.match(
@@ -517,15 +525,15 @@ test('link id is a wire byte; peer-freshness thresholds are required positive in
   // it to the wire as saved, so out-of-range would truncate silently.
   assert.equal(defaults.linkId.validate.call({ id: 'c1' }, '0', {}), true);
   assert.equal(defaults.linkId.validate.call({ id: 'c1' }, '255', {}), true);
-  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '256', {})), /byte — 0 to 255/);
-  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '', {})), /byte — 0 to 255/);
+  assert.match(String(defaults.linkId.validate.call({ id: 'c1' }, '256', {})), /between 0 and 255/);
+  assert.equal(defaults.linkId.required, true, 'blank reds through the built-in required ring');
 
   assert.equal(defaults.staleMs.value, 5000);
   assert.equal(defaults.expireMs.value, 15000);
   for (const field of ['staleMs', 'expireMs']) {
     assert.match(
       String(defaults[field].validate.call({ id: 'c1' }, '', {})),
-      /required/,
+      /whole number >= 1/,
       `${field} blank reds — the editor owns the default the runtime sweeps on`
     );
     assert.equal(defaults[field].validate.call({ id: 'c1', staleMs: 1000 }, '5000', {}), true);

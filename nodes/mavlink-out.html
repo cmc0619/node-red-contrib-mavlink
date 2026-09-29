@@ -51,16 +51,30 @@
   <h3>Inputs</h3>
   <dl class="message-properties">
     <dt>payload <span class="property-type">object</span></dt>
-    <dd>The message to send. Accepted shapes:
-      <ul>
-        <li><code>{ name, fields }</code> — decoded-shape message with wire-ready field values.</li>
+    <dd>The message to send, read in this order — the first that applies wins:
+      <ol>
         <li>Build-tier envelope from <b>mavlink-build</b>: <code>{ message: { name, fields }, … }</code>.</li>
-      </ul>
+        <li>Topic shape: a <code>msg.topic</code> that is present is the message name and
+          <code>msg.payload</code> is its fields — what <b>mavlink-in</b> emits, so In → Out
+          forwards a message as received.</li>
+        <li><code>{ name, fields }</code> — decoded-shape message with wire-ready field values.
+          A stock Inject sends <code>topic: ""</code>, which selects the topic shape; clear or delete
+          <code>msg.topic</code> to use this one.</li>
+      </ol>
+      Field names are the dialect's own, as <b>mavlink-in</b> delivers them (<code>target_system</code>,
+      not <code>targetSystem</code>); a field under any other spelling is not in the message and the
+      send fails with <code>invalid packet</code>.
     </dd>
+    <dt class="optional">topic <span class="property-type">string</span></dt>
+    <dd>Message name for the topic shape above.</dd>
     <dt class="optional">band <span class="property-type">number</span></dt>
-    <dd>Queue band (0–4). Overrides the node default.</dd>
+    <dd>Queue band: 0 Emergency, 2 Control, 3 Streaming, 4 Bulk. Overrides the node default.
+      Band 1 (Liveness) holds one frame per identity for the Connection's own HEARTBEAT, so any
+      other frame sent there is replaced by the next heartbeat.</dd>
     <dt class="optional">target <span class="property-type">object</span></dt>
-    <dd><code>{ sysid, compid }</code> destination. Uses connection default when absent.</dd>
+    <dd><code>{ sysid, compid }</code> — which peer the frame is routed to (its learned endpoint;
+      sysid 0 or compid 0 fans out). It does not fill the message's own <code>target_*</code> fields.
+      Absent, the frame goes out on the Connection's configured remote.</dd>
     <dt class="optional">identityId <span class="property-type">string</span></dt>
     <dd>Local identity override. Must be bound to the connection.</dd>
   </dl>
@@ -71,5 +85,5 @@
   </ol>
   <h3>Details</h3>
   <p>Set <code>msg.payload = false</code> to suppress the node silently.</p>
-  <p>Output 0 continues only on success. Output 1 carries a plain status record on every terminal outcome — there is no miswire refusal if status is wired back into an action input.</p>
+  <p>Continue fires only on success. Status carries a plain status record on every terminal outcome — there is no miswire refusal if status is wired back into an action input.</p>
 </script>

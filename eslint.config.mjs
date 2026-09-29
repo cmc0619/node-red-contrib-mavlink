@@ -258,7 +258,6 @@ export default [
       'lib/param/index.js',
       'nodes/**/*.js',
     ],
-    ignores: ['lib/**/test/**'],
     rules: {
       'no-restricted-syntax': ['error', {
         selector: 'ThrowStatement > NewExpression[callee.name=/Error$/]',

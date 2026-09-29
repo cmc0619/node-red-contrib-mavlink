@@ -58,7 +58,6 @@ function loadResource(values = {}, nodeLookup = {}, opts = {}) {
   };
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: {
         node(id) {
@@ -139,7 +138,7 @@ test('resolveCatalogTarget wire tier: the connection bound profile is the catalo
   const { RED } = loadResource(
     { '#node-input-connection': 'connection-1' },
     {
-      'connection-1': { vehicle: { id: 'vehicle-1' } },
+      'connection-1': { vehicle: 'vehicle-1' },
       'vehicle-1': { dialect: 'common' },
     }
   );
@@ -175,7 +174,7 @@ test('resolveCatalogTarget surfaces the wire profile firmware (Mission type gati
   const { RED } = loadResource(
     { '#node-input-delivery': 'confirm', '#node-input-connection': 'connection-1' },
     {
-      'connection-1': { vehicle: { id: 'vehicle-1', targetSystem: 1 } },
+      'connection-1': { vehicle: 'vehicle-1' },
       'vehicle-1': { dialect: 'ardupilotmega', firmware: 'ardupilot', vehicleFamily: 'copter' },
     }
   );
@@ -479,7 +478,7 @@ test('loadCatalog empty target returns without fetching', () => {
   );
   const state = { seq: 0 };
   const got = [];
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
     listKey: 'messages',
   });
@@ -503,11 +502,11 @@ test('loadCatalog fetches for every nonempty call', () => {
   );
   const state = { seq: 0 };
   const got = [];
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
     listKey: 'messages',
   });
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(c), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(c), {
     isBuild: true,
     listKey: 'messages',
   });
@@ -534,12 +533,12 @@ test('loadCatalog seq-guard drops a stale success', () => {
   );
   const state = { seq: 0 };
   const got = [];
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(['a', c]), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(['a', c]), {
     isBuild: true,
     listKey: 'messages',
   });
   values['#node-input-dialect'] = 'ardupilotmega';
-  RED.mavlink.loadCatalog('/mavlink/build/messages', state, (c) => got.push(['b', c]), {
+  RED.mavlink.loadCatalog('mavlink/build/messages', state, (c) => got.push(['b', c]), {
     isBuild: true,
     listKey: 'messages',
   });
@@ -584,7 +583,6 @@ function loadVerbResource(values) {
   $.getJSON = () => ({ fail() { return this; } });
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: { node() { return null; } },
     },
@@ -668,7 +666,7 @@ test('missingEnumOptionLabel is the single #N (not in dialect) wording', () => {
 test('ensureSavedEnumOption appends only when the value is absent', () => {
   const options = [];
   const context = {
-    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    RED: { mavlink: {}, nodes: { node() { return null; } } },
     $: null,
   };
   const $select = {
@@ -884,13 +882,24 @@ test('refreshIdentitySelect reads the live connection and forwards rolesAllowed'
 
 // ── BAND_OPTIONS + companion target visibility ───────────────────────────────
 
-test('BAND_OPTIONS lists the five §7 queue bands once', () => {
+test('BAND_OPTIONS mirrors lib/connection/bands, every band but Liveness', () => {
   const { RED } = loadResource();
-  assert.deepEqual(
-    plain(RED.mavlink.BAND_OPTIONS.map((o) => o.value)),
-    ['0', '1', '2', '3', '4']
-  );
-  assert.equal(RED.mavlink.BAND_OPTIONS[2].label, 'Control (2)');
+  const { BAND, BAND_NAME } = require('../../lib/connection/bands');
+  const expected = BAND_NAME
+    .map((name, band) => ({ value: String(band), label: `${name[0].toUpperCase()}${name.slice(1)} (${band})` }))
+    .filter((opt) => Number(opt.value) !== BAND.LIVENESS);
+  assert.deepEqual(plain(RED.mavlink.BAND_OPTIONS), expected);
+});
+
+test('the editor custom-mode table mirrors lib/vehicle/modes AP_MODE_ENUMS', () => {
+  const { AP_MODE_ENUMS, DO_SET_MODE } = require('../../lib/vehicle/modes');
+  const literal = resourceScript.match(/const CUSTOM_MODE_ENUMS = (\{[\s\S]*?\});/)[1];
+  assert.deepEqual(plain(vm.runInNewContext(`(${literal})`)), AP_MODE_ENUMS);
+  const { RED } = loadResource();
+  for (const [family, enumName] of Object.entries(AP_MODE_ENUMS)) {
+    RED.mavlink.resolveCatalogTarget = () => ({ firmware: 'ardupilot', vehicleFamily: family });
+    assert.equal(RED.mavlink.customModeEnum(DO_SET_MODE, 2), enumName, family);
+  }
 });
 
 test('fillBandSelect rebuilds options and restores the saved band', () => {
@@ -908,7 +917,7 @@ test('fillBandSelect rebuilds options and restores the saved band', () => {
     },
   };
   const context = {
-    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node() { return null; } } },
+    RED: { mavlink: {}, nodes: { node() { return null; } } },
     $(html) {
       if (typeof html === 'string' && html.startsWith('<option')) {
         const opt = { _val: '', _text: '' };
@@ -922,7 +931,7 @@ test('fillBandSelect rebuilds options and restores the saved band', () => {
   };
   vm.runInNewContext(resourceScript, context);
   context.RED.mavlink.fillBandSelect($select, '3');
-  assert.equal(options.length, 5);
+  assert.equal(options.length, 4);
   assert.equal(options[0].text, 'Emergency (0)');
   assert.equal(selected, '3');
 });
@@ -931,7 +940,6 @@ test('applyCompanionTargetVisibility hides both rows for wire companion', () => 
   const toggles = {};
   const context = {
     RED: {
-      settings: { httpAdminRoot: '/' },
       mavlink: {},
       nodes: {
         node(id) {
@@ -1550,7 +1558,7 @@ test('px4ModeEntries answers only for DO_SET_MODE param2 on a PX4 profile', () =
   const px4 = loadResource(
     { '#node-input-connection': 'conn-1' },
     {
-      'conn-1': { vehicle: { id: 'veh-1' } },
+      'conn-1': { vehicle: 'veh-1' },
       'veh-1': { dialect: 'common', firmware: 'px4' },
     }
   ).RED;
@@ -1563,7 +1571,7 @@ test('px4ModeEntries answers only for DO_SET_MODE param2 on a PX4 profile', () =
   const ap = loadResource(
     { '#node-input-connection': 'conn-1' },
     {
-      'conn-1': { vehicle: { id: 'veh-1' } },
+      'conn-1': { vehicle: 'veh-1' },
       'veh-1': { dialect: 'ardupilotmega', firmware: 'ardupilot', vehicleFamily: 'copter' },
     }
   ).RED;
@@ -1643,7 +1651,7 @@ test('fillEnumSelect: preferLive decides which value survives a refill', () => {
    */
   function refill(live, saved, preferLive) {
     const { $ } = makeDom({ '#sel': live });
-    const context = { RED: { settings: { httpAdminRoot: '/' } }, $ };
+    const context = { RED: {}, $ };
     installEditorHelpers(context);
     const $sel = $('#sel');
     context.RED.mavlink.fillEnumSelect($sel, ENTRIES, {
@@ -1758,7 +1766,7 @@ function selectHarness(live) {
   }
   $.getJSON = () => ({ fail() { return this; } });
   const context = {
-    RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node: () => null } },
+    RED: { mavlink: {}, nodes: { node: () => null } },
     $,
     console,
     setTimeout,
@@ -1903,7 +1911,7 @@ function dependentHarness(selects) {
     };
     return wrapped;
   }
-  const context = { RED: { settings: { httpAdminRoot: '/' }, mavlink: {}, nodes: { node: () => null } }, $, console, setTimeout };
+  const context = { RED: { mavlink: {}, nodes: { node: () => null } }, $, console, setTimeout };
   context.window = context;
   vm.runInNewContext(resourceScript, context);
   const enabled = (selector) => els[selector].options.filter((o) => !o.disabled).map((o) => o.value);
@@ -1940,4 +1948,34 @@ test('dependentSelect repairs an illegal saved value on open, and chains through
   RED.mavlink.dependentSelect('#sel', ['#exec', '#delivery'],
     (e, d) => (e === 'broadcast' ? ['all'] : d === 'build' ? ['list'] : null));
   assert.equal(els['#sel'].value, 'list', 'Build holds the list');
+});
+
+// ── validatePositive ─────────────────────────────────────────────────────────
+
+test('validatePositive: a finite number above zero; blank, zero, negative and junk red with the unit', () => {
+  const { RED } = loadResource();
+  const v = RED.mavlink.validatePositive('seconds');
+  assert.equal(v.length, 2);
+  assert.equal(v('0.5', {}), true);
+  assert.equal(v(5, {}), true);
+  for (const bad of ['', ' ', '0', '-1', 'abc', 'Infinity', undefined]) {
+    assert.equal(v(bad, {}), 'must be a positive number of seconds', JSON.stringify(bad));
+  }
+});
+
+// ── admin URLs ───────────────────────────────────────────────────────────────
+
+test('no editor admin URL starts with "/": Node-RED prefixes the admin root and adds the auth token only to relative URLs', () => {
+  const nodesDir = path.join(__dirname, '..', '..', 'nodes');
+  const sources = [['resources/mavlink-editor.js', resourceScript]].concat(
+    fs.readdirSync(nodesDir).filter((f) => f.endsWith('.html'))
+      .map((f) => [`nodes/${f}`, fs.readFileSync(path.join(nodesDir, f), 'utf8')])
+  );
+  let relative = 0;
+  for (const [name, src] of sources) {
+    assert.doesNotMatch(src, /['"`]\/mavlink\//, `${name} carries an absolute /mavlink/ URL`);
+    assert.doesNotMatch(src, /adminApiUrl|httpAdminRoot/, `${name} rebuilds the admin root by hand`);
+    relative += (src.match(/['"`]mavlink\//g) || []).length;
+  }
+  assert.ok(relative >= 16, `the editor's admin calls are all relative (found ${relative})`);
 });

@@ -164,8 +164,7 @@ test('shared applyFieldTitle / applyFieldUnits / applyFieldMeta helpers live on 
 test('Payload catalogQuery reuses shared currentCatalogQuery', () => {
   const html = readHtml('mavlink-payload');
   assert.match(html, /RED\.mavlink\.currentCatalogQuery/);
-  assert.match(resourceScript, /RED\.mavlink\.currentCatalogQuery\s*=\s*currentEnumQuery/);
-  assert.match(resourceScript, /RED\.mavlink\.vehicleIdFrom\s*=\s*function/);
+  assert.match(resourceScript, /RED\.mavlink\.currentCatalogQuery\s*=\s*function/);
 });
 
 test('Payload editor keeps no field or enum table of its own (§6)', () => {
@@ -244,7 +243,7 @@ test('Command catalog state keeps only its request sequences', () => {
   const html = readHtml('mavlink-command');
   assert.match(
     html,
-    /RED\.mavlink\.loadCatalog\(\s*['"]\/mavlink\/command\/commands['"]/,
+    /RED\.mavlink\.loadCatalog\(\s*['"]mavlink\/command\/commands['"]/,
     'commands catalog uses the shared loader'
   );
   // Per call site, so concurrent fetches from different sites cannot outdate

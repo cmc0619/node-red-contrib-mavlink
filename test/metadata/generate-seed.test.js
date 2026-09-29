@@ -7,7 +7,8 @@ const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
 
-const { writeSeed, seedFileName } = require('../../scripts/generate-seed');
+const { execFileSync } = require('child_process');
+const { writeSeed, seedFileName, loadFromSourceDir } = require('../../scripts/generate-seed');
 
 const GOOD_MINIMAL = `<?xml version="1.0"?>
 <mavlink>
@@ -113,6 +114,24 @@ test('writeSeed leaves the previous blob untouched when any selectable root fail
   assert.deepEqual(fs.readFileSync(first.seedFile), beforeBlob);
   assert.equal(fs.readFileSync(path.join(seedDir, 'active.json'), 'utf8'), beforeActive);
   assert.ok(!fs.existsSync(path.join(seedDir, seedFileName('2026-07-28-bbb2222'))));
+});
+
+test('--source-dir resolves the commit when the checkout has packed its refs', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mav-seed-src-'));
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'test');
+  fs.mkdirSync(path.join(dir, 'message_definitions', 'v1.0'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'message_definitions', 'v1.0', 'minimal.xml'), GOOD_MINIMAL);
+  git('add', '-A');
+  git('commit', '-q', '-m', 'seed');
+  git('pack-refs', '--all');
+
+  const { commit, commitDate, files } = loadFromSourceDir(dir);
+  assert.equal(commit, git('rev-parse', 'HEAD'));
+  assert.ok(commitDate, 'the commit date resolves from the same commit');
+  assert.deepEqual(Object.keys(files), ['minimal.xml']);
 });
 
 test('writeSeed removes older stamped blobs when a new one succeeds', () => {
