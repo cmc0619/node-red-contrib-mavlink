@@ -59,6 +59,10 @@ const COMMANDS_CATALOG = {
 function makeHarness() {
   const requests = [];
   let registry = new Map();
+  /** The rendered param controls the operator has typed into (`.param-input`). */
+  let liveInputs = [];
+  /** `saved` handed to paramControl per param index, last render wins. */
+  const renderedSaved = {};
 
   function dead() {
     const d = {};
@@ -153,6 +157,12 @@ function makeHarness() {
 
   function $(sel) {
     if (sel && typeof sel === 'object') return sel;
+    if (sel === '.param-input') {
+      return {
+        length: liveInputs.length,
+        each(fn) { liveInputs.forEach((it, i) => fn.call(it, i, it)); return this; },
+      };
+    }
     if (typeof sel === 'string' && sel.charAt(0) === '<') {
       return makeEl(/^<(\w+)/.exec(sel)[1]);
     }
@@ -198,7 +208,10 @@ function makeHarness() {
     applyBuildTierRowVisibility() {},
     applyCompanionTargetVisibility() {},
     bindSelectTitleSync() {},
-    paramControl: () => $('<input></input>'),
+    paramControl(spec, enums, opts) {
+      renderedSaved[spec.index] = opts.saved;
+      return $('<input></input>');
+    },
     formRow: () => $('<div></div>'),
   });
 
@@ -229,7 +242,26 @@ function makeHarness() {
 
   const forUrl = (fragment) => requests.filter((r) => r.url.includes(fragment));
 
-  return { $, openDialog, forUrl };
+  /** The operator types into the rendered form: `{ index: value }`. */
+  function typeParams(values) {
+    liveInputs = Object.entries(values).map(([idx, v]) => ({
+      attr: (name) => (name === 'data-idx' ? idx : undefined),
+      val: () => v,
+    }));
+  }
+
+  /** Answer every commands-catalog request, including ones the answers start. */
+  function drainCatalog() {
+    for (let i = 0; i < requests.length; i++) {
+      const req = requests[i];
+      if (req.url.includes('mavlink/command/commands') && !req.answered) {
+        req.answered = true;
+        req.ok(COMMANDS_CATALOG);
+      }
+    }
+  }
+
+  return { $, openDialog, forUrl, typeParams, renderedSaved, drainCatalog };
 }
 
 function commandNode(over) {
@@ -307,4 +339,21 @@ test('a saved Complete tier survives a failed presets fetch', () => {
   h.forUrl('mavlink/command/presets')[0].fail();
   h.forUrl('mavlink/command/commands').forEach((req) => req.ok(COMMANDS_CATALOG));
   assert.equal(h.$('#node-input-delivery').val(), 'complete');
+});
+
+test('param edits typed this session survive a re-render (Delivery change)', () => {
+  const h = makeHarness();
+  const node = commandNode({ preset: 'takeoff', params: JSON.stringify({ 7: 10 }) });
+  h.openDialog(node);
+  h.forUrl('mavlink/command/presets')[0].ok({ groups: PRESET_GROUPS });
+  h.drainCatalog();
+  assert.equal(h.renderedSaved[7], 10, 'the form opens on the saved altitude');
+
+  // The operator types a new altitude and blanks param 1, then changes tier.
+  h.typeParams({ 1: '', 7: '25' });
+  h.$('#node-input-delivery').val('send').trigger('change');
+  h.drainCatalog();
+
+  assert.equal(h.renderedSaved[7], 25, 'the re-rendered form keeps the typed altitude');
+  assert.equal(h.renderedSaved[1], undefined, 'a field blanked this session stays blank');
 });

@@ -563,6 +563,7 @@
        * target's params. Loading state until the callback paints the new form.
        */
       function invalidateRenderedParams() {
+        syncSavedParamsFromDom();
         node._mavParamsRendered = false;
         container.empty().append(
           $('<div class="form-row"><em>Loading command parameters\u2026</em></div>')
@@ -714,6 +715,21 @@
       let savedParams = {};
       try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
       let presetMessagesCatalog = null;
+
+      /**
+       * Merge the rendered form into `savedParams` before a re-render empties
+       * it, so a Connection, Delivery, Dialect or preset change keeps the
+       * values typed this session (Build's syncSavedFieldsFromDom). A blank
+       * field drops its key, matching what Done would save.
+       */
+      function syncSavedParamsFromDom() {
+        if (!node._mavParamsRendered) return;
+        const live = scrapeParamInputs();
+        $('.param-input').each(function () {
+          delete savedParams[Number($(this).attr('data-idx'))];
+        });
+        Object.assign(savedParams, live);
+      }
 
       const $dialect = $('#node-input-dialect');
       // populateDialectSelect re-fires change with the value it already
@@ -898,6 +914,7 @@
       }
 
       function refreshParamFields() {
+        syncSavedParamsFromDom();
         container.empty();
         // True only when a real form (or a legitimate zero-param form) is on
         // screen; oneditsave refuses to scrape placeholders.
