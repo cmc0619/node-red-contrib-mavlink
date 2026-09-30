@@ -774,10 +774,20 @@ test('the Type bound reads the live Type select while the dialog is open', () =>
   assert.match(String(validate.call(saved, '2.5', {})), /whole number for the selected Type/);
 });
 
-test('the dialog offers only the Actions the Delivery tier waits on (false success otherwise)', () => {
+test('the dialog offers only the Actions the Delivery tier waits on, and a saved pair it would not offer reds', () => {
   assert.match(html, /dependentSelect\('#node-input-action', \['#node-input-delivery'\],\s*\(delivery\) => \(\{ confirm: \['read', 'set'\], collect: \['request-list'\] \}\)\[delivery\] \|\| null\)/);
   // Narrowest first: a Delivery change re-picks Read one, which changes nothing on the vehicle.
   assert.match(html, /<select id="node-input-action"><option value="read">[^<]*<\/option><option value="set">[^<]*<\/option><option value="request-list">/);
   const { action } = loadNodeDefaults('mavlink-param');
-  assert.equal(action.validate.call({ delivery: 'collect' }, 'set', {}), true, 'the ring is membership only');
+  const verdict = (delivery, a) => action.validate.call({ delivery, action: a }, a, {});
+  for (const delivery of ['build', 'send']) {
+    for (const a of ['read', 'set', 'request-list']) assert.equal(verdict(delivery, a), true, `${delivery} + ${a}`);
+  }
+  assert.equal(verdict('confirm', 'read'), true);
+  assert.equal(verdict('confirm', 'set'), true);
+  assert.match(String(verdict('confirm', 'request-list')), /echo-confirm waits on Read one or Set one/);
+  assert.equal(verdict('collect', 'request-list'), true);
+  assert.match(String(verdict('collect', 'read')), /collect waits on Request list/);
+  assert.match(String(verdict('collect', 'set')), /collect waits on Request list/,
+    'a saved pair the dialog would not offer reds');
 });
