@@ -47,11 +47,8 @@ const { resolveDeliveryContext } = require('../lib/addressing/delivery-context')
 const PARAM_DEFS_ROUTE = '/mavlink/param/defs';
 const PARAM_DEFS_UPDATE_ROUTE = '/mavlink/param/defs/update';
 
-/** Guard against double-registering the admin route (one per process). */
-let _paramDefsRouteRegistered = false;
-
 module.exports = function registerMavlinkParam(RED) {
-  if (!_paramDefsRouteRegistered && RED.httpAdmin && RED.auth) {
+  if (RED.httpAdmin && RED.auth) {
     RED.httpAdmin.get(
       PARAM_DEFS_ROUTE,
       RED.auth.needsPermission('mavlink.read'),
@@ -142,7 +139,6 @@ module.exports = function registerMavlinkParam(RED) {
         }
       }
     );
-    _paramDefsRouteRegistered = true;
   }
 
   function MavlinkParamNode(config) {

@@ -60,9 +60,7 @@ function captureRoutes(userDir, nodesById = {}) {
     },
   };
 
-  const modulePath = require.resolve('../../nodes/mavlink-param');
-  delete require.cache[modulePath];
-  require(modulePath)(RED);
+  require('../../nodes/mavlink-param')(RED);
   return { routes, permissions };
 }
 
