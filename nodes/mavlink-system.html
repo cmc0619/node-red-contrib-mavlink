@@ -144,14 +144,16 @@
 
         $service.on('change', refreshOperations);
         $operation.on('change', refreshRows);
+        /** Target compid is required here, so "(profile default)" is not offered. */
+        const compIdOpts = { allowEmpty: false };
         $('#node-input-connection').on('change', () => {
           RED.mavlink.refreshIdentitySelect(node);
           refreshRows();
-          RED.mavlink.reloadTargetCompId(node);
+          RED.mavlink.reloadTargetCompId(node, compIdOpts);
         });
         $('#node-input-identity').on('change', refreshRows);
         RED.mavlink.refreshIdentitySelect(node);
-        RED.mavlink.reloadTargetCompId(node);
+        RED.mavlink.reloadTargetCompId(node, compIdOpts);
         refreshOperations();
       },
       oneditsave() {

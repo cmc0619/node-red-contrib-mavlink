@@ -106,6 +106,17 @@ test('companion log download honors the selected component and exact byte length
   assert.deepEqual(outputs.at(-1)[0].payload, Buffer.alloc(90, 5));
 });
 
+test('payload === false suppresses: nothing sent, no output, no error', async () => {
+  const conn = new StubConnection();
+  const Node = loadNode(conn);
+  const node = new Node({ ...BASE, operation: 'list' });
+  const { outputs, err } = await runInput(node, { payload: false });
+
+  assert.equal(err, undefined);
+  assert.equal(outputs.length, 0);
+  assert.equal(conn.sent.length, 0);
+});
+
 test('list confirm returns entries on continue and status on output 1', async () => {
   const conn = new StubConnection();
   conn.onSend((message, deliver) => {

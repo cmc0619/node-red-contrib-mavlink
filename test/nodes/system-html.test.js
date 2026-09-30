@@ -119,3 +119,12 @@ test('mavlink-system companion hides sysid while keeping config compid visible',
     'connection changes refresh companion target visibility'
   );
 });
+
+test('System does not offer "(profile default)" for its required target compid', () => {
+  // targetComponent is required with a floor of 1: a blank option would be
+  // an offered choice the ring then refuses.
+  assert.match(html, /const compIdOpts = \{ allowEmpty: false \};/);
+  assert.equal((html.match(/reloadTargetCompId\(node, compIdOpts\)/g) || []).length, 2,
+    'both reloads pass it');
+  assert.doesNotMatch(html, /reloadTargetCompId\(node\)/, 'no reload offers the blank option');
+});

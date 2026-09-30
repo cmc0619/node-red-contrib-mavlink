@@ -1875,11 +1875,20 @@ function dependentHarness(selects) {
   for (const [selector, spec] of Object.entries(selects)) {
     els[selector] = {
       value: spec.value,
-      options: spec.options.map((value) => ({ value, disabled: false })),
+      options: spec.options.map((value) => ({ value, text: value })),
       handlers: [],
     };
   }
   function $(selector) {
+    if (selector === '<option></option>') {
+      const option = {};
+      const built = {
+        val(v) { option.value = v; return built; },
+        text(t) { option.text = t; return built; },
+        appendTo(target) { target[0].options.push(option); return built; },
+      };
+      return built;
+    }
     const el = els[selector];
     const wrapped = {
       0: el,
@@ -1888,6 +1897,7 @@ function dependentHarness(selects) {
         el.value = v;
         return wrapped;
       },
+      empty() { el.options = []; return wrapped; },
       on(event, fn) { el.handlers.push(fn); return wrapped; },
       trigger() { el.handlers.forEach((fn) => fn()); return wrapped; },
     };
@@ -1896,30 +1906,31 @@ function dependentHarness(selects) {
   const context = { RED: { mavlink: {}, nodes: { node: () => null } }, $, console, setTimeout };
   context.window = context;
   vm.runInNewContext(resourceScript, context);
-  const enabled = (selector) => els[selector].options.filter((o) => !o.disabled).map((o) => o.value);
+  const shown = (selector) => els[selector].options.map((o) => o.value);
   const pick = (selector, value) => { els[selector].value = value; els[selector].handlers.forEach((fn) => fn()); };
-  return { RED: context.RED, els, enabled, pick };
+  return { RED: context.RED, els, shown, pick };
 }
 
-test('dependentSelect greys what the parent rules out and re-picks the first enabled option on a parent change', () => {
-  const { RED, els, enabled, pick } = dependentHarness({
+test('dependentSelect hides what the parent rules out and re-picks the first shown option on a parent change', () => {
+  const { RED, els, shown, pick } = dependentHarness({
     '#delivery': { value: 'send', options: ['build', 'send', 'confirm', 'collect'] },
     '#action': { value: 'set', options: ['read', 'set', 'request-list'] },
   });
   RED.mavlink.dependentSelect('#action', ['#delivery'],
     (d) => ({ confirm: ['read', 'set'], collect: ['request-list'] })[d] || null);
-  assert.deepEqual(enabled('#action'), ['read', 'set', 'request-list'], 'null allows every option');
+  assert.deepEqual(shown('#action'), ['read', 'set', 'request-list'], 'null allows every option');
   assert.equal(els['#action'].value, 'set', 'opening keeps a legal saved value');
 
   pick('#delivery', 'collect');
-  assert.deepEqual(enabled('#action'), ['request-list']);
+  assert.deepEqual(shown('#action'), ['request-list'], 'the others are hidden, not greyed');
   assert.equal(els['#action'].value, 'request-list', 'Set one cannot stay under collect');
 
   pick('#delivery', 'confirm');
-  assert.equal(els['#action'].value, 'read', 'a parent change re-picks the first enabled option');
+  assert.deepEqual(shown('#action'), ['read', 'set']);
+  assert.equal(els['#action'].value, 'read', 'a parent change re-picks the first shown option');
 });
 
-test('dependentSelect repairs an illegal saved value on open, and chains through a child that is also a parent', () => {
+test('dependentSelect opens an illegal saved value on the first shown option, and chains through a child that is also a parent', () => {
   const { RED, els } = dependentHarness({
     '#delivery': { value: 'build', options: ['build', 'send'] },
     '#exec': { value: 'broadcast', options: ['sequential', 'broadcast'] },
@@ -1960,4 +1971,45 @@ test('no editor admin URL starts with "/": Node-RED prefixes the admin root and 
     relative += (src.match(/['"`]mavlink\//g) || []).length;
   }
   assert.ok(relative >= 16, `the editor's admin calls are all relative (found ${relative})`);
+});
+
+// ── reloadCompIdSelect ───────────────────────────────────────────────────────
+
+/** Run one compid reload over a fresh select; returns the fill options used. */
+function compIdFill(opts) {
+  const { RED } = loadResource();
+  const data = {};
+  const $select = {
+    length: 1,
+    data(k, v) { if (v === undefined) return data[k]; data[k] = v; return this; },
+    find: () => ({ length: 0 }),
+    val: () => null,
+  };
+  let used = null;
+  RED.mavlink.loadEnumsCatalog = (names, cb) => cb({ enums: { MAV_COMPONENT: [] } });
+  RED.mavlink.fillCompIdSelect = (_sel, _entries, fillOpts) => { used = fillOpts; };
+  RED.mavlink.reloadCompIdSelect($select, opts);
+  return used;
+}
+
+test('reloadCompIdSelect offers "(profile default)" unless told the compid is required', () => {
+  assert.equal(compIdFill({}).allowEmpty, true, 'the blank option is the default');
+  assert.equal(compIdFill({ allowEmpty: false }).allowEmpty, false, 'a required compid drops it');
+});
+
+// ── syncSavedFromDom ─────────────────────────────────────────────────────────
+
+test('syncSavedFromDom keeps typed values, drops blanked ones, and leaves unrendered keys alone', () => {
+  /** `$(el)` hands an element back as itself: the fake controls carry their own `attr`. */
+  const context = { RED: { mavlink: {}, nodes: { node: () => null } }, $: (el) => el, console, setTimeout };
+  context.window = context;
+  vm.runInNewContext(resourceScript, context);
+  const { RED } = context;
+  const input = (key) => ({ attr: (name) => (name === 'data-idx' ? key : undefined) });
+  const rendered = [input('1'), input('7')];
+  const $inputs = { each(fn) { rendered.forEach((el, i) => fn.call(el, i, el)); return this; } };
+  const saved = { 1: 5, 3: 9, 7: 10 };
+  RED.mavlink.syncSavedFromDom(saved, { 7: 25 }, $inputs, 'data-idx');
+  assert.deepEqual({ ...saved }, { 3: 9, 7: 25 },
+    'typed 7 kept, blanked 1 dropped, param 3 (not rendered) untouched');
 });

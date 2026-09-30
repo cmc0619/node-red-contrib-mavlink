@@ -363,19 +363,9 @@
          */
         function syncSavedFieldsFromDom() {
           const $root = $('#node-input-fields-container');
-          if (!$root.find('.mav-field-input').length) return;
-          const live = collectFieldInputsFromDom($root);
-          // Empty controls are omitted from `live` (save semantics). Delete those
-          // keys from the working snapshot so a rebuild does not restore them.
-          $root.find('.mav-field-input').each(function () {
-            const name = $(this).attr('data-field');
-            if (!name) return;
-            if (Object.prototype.hasOwnProperty.call(live, name)) {
-              savedFields[name] = live[name];
-            } else {
-              delete savedFields[name];
-            }
-          });
+          const $inputs = $root.find('.mav-field-input');
+          if (!$inputs.length) return;
+          RED.mavlink.syncSavedFromDom(savedFields, collectFieldInputsFromDom($root), $inputs, 'data-field');
         }
 
         function commandParamInput(msgName, spec, enums) {

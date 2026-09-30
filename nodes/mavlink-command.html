@@ -563,6 +563,7 @@
        * target's params. Loading state until the callback paints the new form.
        */
       function invalidateRenderedParams() {
+        syncSavedParamsFromDom();
         node._mavParamsRendered = false;
         container.empty().append(
           $('<div class="form-row"><em>Loading command parameters\u2026</em></div>')
@@ -631,7 +632,17 @@
         const mode = $('#node-input-mode').val();
         let hasCompletion = false;
         if (mode === 'preset') {
-          hasCompletion = (findPreset($('#node-input-preset').val()) || {}).completionKey != null;
+          const preset = findPreset($('#node-input-preset').val());
+          /**
+           * Before the preset list lands there is nothing to judge the saved
+           * tier against: keep it. Rebuilding here would drop a saved
+           * Complete to Confirm on every open (presets load async).
+           */
+          if (!preset) {
+            refreshCompletionRow();
+            return;
+          }
+          hasCompletion = preset.completionKey != null;
         }
 
         const curDelivery = $('#node-input-delivery').val();
@@ -701,9 +712,38 @@
       refreshFrameRow();
 
       // ── Param fields ───────────────────────────────────────────────────────
-      let savedParams = {};
-      try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
+      /** The node's saved params: the snapshot a form of its saved command starts from. */
+      function savedSnapshot() {
+        try { return JSON.parse(node.params || '{}'); } catch (_e) { return {}; }
+      }
+      let savedParams = savedSnapshot();
       let presetMessagesCatalog = null;
+
+      /** The command on screen, `mode:command`, or null before its list has loaded. */
+      function currentCommand() {
+        const mode = $('#node-input-mode').val();
+        const command = $(mode === 'advanced' ? '#node-input-advancedCommand' : '#node-input-preset').val();
+        return command ? `${mode}:${command}` : null;
+      }
+      const savedCommand = `${node.mode || 'preset'}:${node.mode === 'advanced' ? node.advancedCommand : node.preset}`;
+      let paramsCommand = savedCommand;
+
+      /**
+       * Before a re-render: a Connection, Delivery or Dialect change keeps the
+       * values typed this session. A different command starts over (§6: pick a
+       * different one, the old fields are gone): from the saved params if it
+       * is the saved command, blank otherwise.
+       */
+      function syncSavedParamsFromDom() {
+        const command = currentCommand();
+        if (command === null) return;
+        if (command !== paramsCommand) {
+          paramsCommand = command;
+          savedParams = command === savedCommand ? savedSnapshot() : {};
+          return;
+        }
+        RED.mavlink.syncSavedFromDom(savedParams, scrapeParamInputs(), $('.param-input'), 'data-idx');
+      }
 
       const $dialect = $('#node-input-dialect');
       // populateDialectSelect re-fires change with the value it already
@@ -888,6 +928,7 @@
       }
 
       function refreshParamFields() {
+        syncSavedParamsFromDom();
         container.empty();
         // True only when a real form (or a legitimate zero-param form) is on
         // screen; oneditsave refuses to scrape placeholders.

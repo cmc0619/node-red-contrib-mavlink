@@ -1180,9 +1180,11 @@
    *
    * Once the select has been filled, an explicit empty selection ("profile
    * default") is preserved; `initialSaved` is used only on the first fill.
+   * `allowEmpty: false` drops the "profile default" option, for a node whose
+   * compid is required.
    *
    * @param {object} $select  jQuery select
-   * @param {{initialSaved?: string|number, emptyLabel?: string}} [opts]
+   * @param {{initialSaved?: string|number, emptyLabel?: string, allowEmpty?: boolean}} [opts]
    */
   RED.mavlink.reloadCompIdSelect = function ($select, opts) {
     opts = opts || {};
@@ -1207,7 +1209,7 @@
         $select,
         ((catalog || {}).enums || {}).MAV_COMPONENT || [],
         {
-          allowEmpty: true,
+          allowEmpty: opts.allowEmpty !== false,
           emptyLabel: opts.emptyLabel || '(profile default)',
           saved,
           suggest: opts.suggest,
@@ -1249,8 +1251,8 @@
    *
    * @param {object} node
    * @param {{field?: string, selector?: string, emptyLabel?: string,
-   *   suggest?: string}} [opts]  `suggest` floats the components a payload
-   *   topic plausibly means to the top of the list.
+   *   suggest?: string, allowEmpty?: boolean}} [opts]  `suggest` floats the
+   *   components a payload topic plausibly means to the top of the list.
    */
   RED.mavlink.reloadTargetCompId = function (node, opts) {
     opts = opts || {};
@@ -1260,6 +1262,7 @@
       initialSaved: node[field],
       emptyLabel: opts.emptyLabel,
       suggest: opts.suggest,
+      allowEmpty: opts.allowEmpty,
     });
   };
 
@@ -1753,9 +1756,7 @@
    * @returns {object} the `timeoutMs` and `maxRetries` descriptors
    */
   RED.mavlink.ackDefaults = function (shown) {
-    const whenShown = (validate) => function (v, opt) {
-      return shown(this) ? validate.call(this, v, opt) : true;
-    };
+    const whenShown = (validate) => RED.mavlink.whenShown(shown, validate);
     const retryBudget = function (v, opt) {
       const floor = RED.mavlink.validateAtLeast(0, { integer: true }).call(this, v, opt);
       return floor === true ? RED.mavlink.validateIntRange(0, 255).call(this, v, opt) : floor;
@@ -1763,6 +1764,22 @@
     return {
       timeoutMs: { value: 2000, validate: whenShown(RED.mavlink.validateAtLeast(1, { integer: true })) },
       maxRetries: { value: 3, validate: whenShown(retryBudget) },
+    };
+  };
+
+  /**
+   * A validator that reds only while its row is on screen. `shown(node)`
+   * reads the dialog's live state; a row the operator cannot see never reds,
+   * so a value cleared on one tier cannot red a node that has since moved to
+   * a tier that never reads it.
+   *
+   * @param {function(object): boolean} shown
+   * @param {function(*, object): (boolean|string)} validate
+   * @returns {function(*, object): (boolean|string)}
+   */
+  RED.mavlink.whenShown = function (shown, validate) {
+    return function (v, opt) {
+      return shown(this) ? validate.call(this, v, opt) : true;
     };
   };
 
@@ -2152,12 +2169,29 @@
   };
 
   /**
+   * Merge a rendered form's live values into a dialog's working snapshot
+   * before a re-render empties the form, so a selection change keeps what
+   * was typed this session. `live` is the form's own scrape, the values Done
+   * would save; a control it omits (left blank) drops its key.
+   *
+   * @param {object} saved  the working snapshot, mutated
+   * @param {object} live  the scrape of the rendered controls
+   * @param {jQuery} $inputs  the rendered controls
+   * @param {string} keyAttr  the attribute that names each control's key
+   */
+  RED.mavlink.syncSavedFromDom = function (saved, live, $inputs, keyAttr) {
+    $inputs.each(function () { delete saved[$(this).attr(keyAttr)]; });
+    Object.assign(saved, live);
+  };
+
+  /**
    * A `<select>` whose legal options depend on other selects. `allowed` gets
    * the parents' values and returns the legal option values, or null for all
-   * of them; the rest are greyed out. A parent change re-picks the first
-   * enabled option, so options are listed narrowest first. Opening the
-   * dialog keeps the saved value unless it is greyed out. The re-pick fires
-   * `change`, so a select can be both a child and a parent.
+   * of them; the rest are hidden. A parent change re-picks the first shown
+   * option, so options are listed narrowest first. Opening the dialog keeps
+   * the saved value unless it is hidden, and then defaults to the first shown
+   * option. The re-pick fires `change`, so a select can be both a child and a
+   * parent.
    *
    * @param {string} child  jQuery selector for the dependent `<select>`
    * @param {string[]} parents  jQuery selectors for the selects it depends on
@@ -2165,13 +2199,18 @@
    */
   RED.mavlink.dependentSelect = function (child, parents, allowed) {
     const $child = $(child);
+    /** The markup's options, captured once: each apply shows only the allowed ones. */
+    const all = Array.from($child[0].options).map((option) => [option.value, option.text]);
     function apply(reset) {
       const ok = allowed(...parents.map((parent) => $(parent).val()));
-      const options = Array.from($child[0].options);
-      options.forEach((option) => { option.disabled = Boolean(ok) && ok.indexOf(option.value) === -1; });
-      const current = options.find((option) => option.value === $child.val());
-      if (!reset && current && !current.disabled) return;
-      $child.val(options.find((option) => !option.disabled).value).trigger('change');
+      const kept = $child.val();
+      /** A parent change starts over: with no live value, the rebuild lands on the first shown option. */
+      if (reset) $child.val(null);
+      const value = RED.mavlink.refreshOptionSelect({
+        select: child,
+        options: ok ? all.filter(([option]) => ok.indexOf(option) !== -1) : all,
+      });
+      if (reset || value !== kept) $child.trigger('change');
     }
     parents.forEach((parent) => $(parent).on('change', () => apply(true)));
     apply(false);
