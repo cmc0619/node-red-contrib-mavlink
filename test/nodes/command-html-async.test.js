@@ -357,3 +357,23 @@ test('param edits typed this session survive a re-render (Delivery change)', () 
   assert.equal(h.renderedSaved[7], 25, 'the re-rendered form keeps the typed altitude');
   assert.equal(h.renderedSaved[1], undefined, 'a field blanked this session stays blank');
 });
+
+test('a different command starts over; returning to the saved one brings its saved params back', () => {
+  const h = makeHarness();
+  const groups = [{
+    group: 'flight',
+    presets: [{ id: 'takeoff', name: 'Takeoff', commandId: 22 }, { id: 'land', name: 'Land', commandId: 21 }],
+  }];
+  h.openDialog(commandNode({ preset: 'takeoff', params: JSON.stringify({ 7: 10 }) }));
+  h.forUrl('mavlink/command/presets')[0].ok({ groups });
+  h.drainCatalog();
+  h.typeParams({ 7: '25' });
+
+  h.$('#node-input-preset').val('land').trigger('change');
+  h.drainCatalog();
+  assert.equal(h.renderedSaved[7], undefined, 'Takeoff\'s altitude does not carry into Land\'s param 7');
+
+  h.$('#node-input-preset').val('takeoff').trigger('change');
+  h.drainCatalog();
+  assert.equal(h.renderedSaved[7], 10, 'back on the saved command, its saved params return');
+});

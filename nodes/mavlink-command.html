@@ -712,12 +712,36 @@
       refreshFrameRow();
 
       // ── Param fields ───────────────────────────────────────────────────────
-      let savedParams = {};
-      try { savedParams = JSON.parse(node.params || '{}'); } catch (_e) {}
+      /** The node's saved params: the snapshot a form of its saved command starts from. */
+      function savedSnapshot() {
+        try { return JSON.parse(node.params || '{}'); } catch (_e) { return {}; }
+      }
+      let savedParams = savedSnapshot();
       let presetMessagesCatalog = null;
 
-      /** Keep this session's edits across a Connection, Delivery, Dialect or preset re-render. */
+      /** The command on screen, `mode:command`, or null before its list has loaded. */
+      function currentCommand() {
+        const mode = $('#node-input-mode').val();
+        const command = $(mode === 'advanced' ? '#node-input-advancedCommand' : '#node-input-preset').val();
+        return command ? `${mode}:${command}` : null;
+      }
+      const savedCommand = `${node.mode || 'preset'}:${node.mode === 'advanced' ? node.advancedCommand : node.preset}`;
+      let paramsCommand = savedCommand;
+
+      /**
+       * Before a re-render: a Connection, Delivery or Dialect change keeps the
+       * values typed this session. A different command starts over (§6: pick a
+       * different one, the old fields are gone): from the saved params if it
+       * is the saved command, blank otherwise.
+       */
       function syncSavedParamsFromDom() {
+        const command = currentCommand();
+        if (command === null) return;
+        if (command !== paramsCommand) {
+          paramsCommand = command;
+          savedParams = command === savedCommand ? savedSnapshot() : {};
+          return;
+        }
         RED.mavlink.syncSavedFromDom(savedParams, scrapeParamInputs(), $('.param-input'), 'data-idx');
       }
 
