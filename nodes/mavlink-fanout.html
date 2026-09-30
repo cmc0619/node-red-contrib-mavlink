@@ -45,13 +45,22 @@
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator(IDENTITY_ROLES) },
       selectionMode: {
         // 'list' — the delivery default is Build, and Build requires the list,
-        // so a fresh node must not be born invalid behind a greyed dropdown.
+        // so a fresh node must not be born invalid behind a hidden option.
         value: 'list',
-        // Membership (§5's editor half: the runtime dispatches this token
-        // with affirmative cases only). The dialog holds Build to the explicit
-        // list (dependentSelect in oneditprepare), which is what lets
-        // `connection` above share the standard blank-on-Build rule.
-        validate: RED.mavlink.oneOf(['all', 'list', 'filter']),
+        /**
+         * Membership first (§5's editor half: the runtime dispatches this
+         * token with affirmative cases only). Then the Build rule: Build emits
+         * to a downstream mavlink-out, so the Connection's only remaining job
+         * is the member directory, and an explicit list is the one selection
+         * that does not need it. The dialog offers only the list on Build
+         * (dependentSelect in oneditprepare); a saved selection it would not
+         * offer reds here. Requiring the list on Build is what lets
+         * `connection` above share the standard blank-on-Build rule.
+         */
+        validate: RED.mavlink.oneOf(['all', 'list', 'filter'], function (v, _opt) {
+          if (RED.mavlink.liveOr(this, '#node-input-delivery', this.delivery) !== 'build') return true;
+          return v === 'list' || 'must be an explicit sysid list on Build';
+        }),
       },
       members: {
         // One row per member: {sysid, north?, east?, up?, patch?}. Offsets are
