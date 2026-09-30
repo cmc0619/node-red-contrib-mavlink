@@ -8,6 +8,11 @@
     return RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) === 'confirm';
   }
 
+  /** Sequential execution, read live: the Interval and Concurrency rows need it. */
+  function sequentialRun(node) {
+    return RED.mavlink.liveOr(node, '#node-input-executionMode', node.executionMode) === 'sequential';
+  }
+
   function currentMembers() {
     const members = [];
     $('#mav-fanout-members').editableList('items').each(function () {
@@ -126,13 +131,25 @@
       armedFilter: { value: '', validate: RED.mavlink.oneOf(['', 'true', 'false']) },
       /** Membership (§5's editor half, as on selectionMode). */
       executionMode: { value: 'sequential', validate: RED.mavlink.oneOf(['sequential', 'broadcast']) },
+      /**
+       * Milliseconds >= 0: the input's min="0" is not enforced on save, and a
+       * saved negative paces nothing. Both rings follow their rows, which
+       * refreshVisibility shows only where the value is read.
+       */
       intervalMs: {
         value: 100,
-        // Milliseconds >= 0: the input's min="0" is not enforced on save, and
-        // a saved negative paces nothing.
-        validate: RED.mavlink.validateAtLeast(0, { integer: true }),
+        validate: RED.mavlink.whenShown(
+          (node) => sequentialRun(node) && RED.mavlink.liveOr(node, '#node-input-delivery', node.delivery) !== 'build',
+          RED.mavlink.validateAtLeast(0, { integer: true })
+        ),
       },
-      concurrency: { value: 1, validate: RED.mavlink.validateAtLeast(1, { integer: true }) },
+      concurrency: {
+        value: 1,
+        validate: RED.mavlink.whenShown(
+          (node) => sequentialRun(node) && confirmTier(node),
+          RED.mavlink.validateAtLeast(1, { integer: true })
+        ),
+      },
       stopOnError: { value: false },
       delivery: { value: 'build', validate: RED.mavlink.oneOf(['build', 'send', 'confirm']) },
       // Timeout and Retries exist on Send & confirm alone, the tier that waits;
@@ -140,8 +157,7 @@
       // Retries re-send a silent member, so a broadcast (one packet, never
       // re-sent) hides that row too.
       ...RED.mavlink.ackDefaults(confirmTier),
-      maxRetries: RED.mavlink.ackDefaults((node) => confirmTier(node)
-        && RED.mavlink.liveOr(node, '#node-input-executionMode', node.executionMode) === 'sequential').maxRetries,
+      maxRetries: RED.mavlink.ackDefaults((node) => confirmTier(node) && sequentialRun(node)).maxRetries,
     },
     inputs: 1,
     outputs: 2,

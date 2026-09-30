@@ -260,13 +260,19 @@ test('intervalMs and maxRetries: blank reds, present values carry range red ring
   // The shared ack fields ring on Send & confirm, the tier whose rows show;
   // Retries only on sequential, since a broadcast is never re-sent.
   const confirm = { delivery: 'confirm', executionMode: 'sequential' };
+  // Interval shows on a sequential run of any wire tier.
+  const paced = { delivery: 'send', executionMode: 'sequential' };
 
-  assert.match(String(interval.call({}, '', {})), />= 0/, 'blank interval reds');
-  assert.equal(interval.call({}, 0, {}), true, '0 is a legitimate no-pause interval');
-  assert.equal(interval.call({}, 250, {}), true);
-  assert.match(String(interval.call({}, -100, {})), />= 0/, 'negative pacing reds');
-  assert.match(String(interval.call({}, 'abc', {})), />= 0/);
-  assert.match(String(interval.call({}, 0.5, {})), /whole number/, 'a fraction would run the timer at 1 ms');
+  assert.match(String(interval.call(paced, '', {})), />= 0/, 'blank interval reds');
+  assert.equal(interval.call(paced, 0, {}), true, '0 is a legitimate no-pause interval');
+  assert.equal(interval.call(paced, 250, {}), true);
+  assert.match(String(interval.call(paced, -100, {})), />= 0/, 'negative pacing reds');
+  assert.match(String(interval.call(paced, 'abc', {})), />= 0/);
+  assert.match(String(interval.call(paced, 0.5, {})), /whole number/, 'a fraction would run the timer at 1 ms');
+  assert.equal(interval.call({ delivery: 'build', executionMode: 'sequential' }, '', {}), true,
+    'hidden on Build, so a blank never reds there');
+  assert.equal(interval.call({ delivery: 'send', executionMode: 'broadcast' }, '', {}), true,
+    'hidden on a broadcast, so a blank never reds there');
 
   assert.match(String(retries.call(confirm, '', {})), />= 0/, 'blank retries reds');
   assert.equal(retries.call(confirm, 0, {}), true);
@@ -370,8 +376,12 @@ test('fan-out filter vocabularies carry rings; blank stays "Any" (walled-garden 
 
 test('fan-out numeric validators declare two args and render reasons (§14.24)', () => {
   const defaults = loadNodeDefaults('mavlink-fanout');
-  assert.equal(defaults.concurrency.validate.length, 2);
-  assert.match(String(defaults.concurrency.validate.call({}, 0, {})), />= 1/);
+  const concurrency = defaults.concurrency.validate;
+  assert.equal(concurrency.length, 2);
+  assert.match(String(concurrency.call({ delivery: 'confirm', executionMode: 'sequential' }, 0, {})), />= 1/);
+  assert.equal(concurrency.call({ delivery: 'send', executionMode: 'sequential' }, '', {}), true,
+    'Concurrency shows on a sequential confirm only, so a hidden blank never reds');
+  assert.equal(concurrency.call({ delivery: 'confirm', executionMode: 'broadcast' }, '', {}), true);
   assert.equal(defaults.timeoutMs.validate.length, 2);
   assert.match(String(defaults.timeoutMs.validate.call({ delivery: 'confirm' }, 0, {})), />= 1/);
 });

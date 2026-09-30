@@ -1753,9 +1753,7 @@
    * @returns {object} the `timeoutMs` and `maxRetries` descriptors
    */
   RED.mavlink.ackDefaults = function (shown) {
-    const whenShown = (validate) => function (v, opt) {
-      return shown(this) ? validate.call(this, v, opt) : true;
-    };
+    const whenShown = (validate) => RED.mavlink.whenShown(shown, validate);
     const retryBudget = function (v, opt) {
       const floor = RED.mavlink.validateAtLeast(0, { integer: true }).call(this, v, opt);
       return floor === true ? RED.mavlink.validateIntRange(0, 255).call(this, v, opt) : floor;
@@ -1763,6 +1761,22 @@
     return {
       timeoutMs: { value: 2000, validate: whenShown(RED.mavlink.validateAtLeast(1, { integer: true })) },
       maxRetries: { value: 3, validate: whenShown(retryBudget) },
+    };
+  };
+
+  /**
+   * A validator that reds only while its row is on screen. `shown(node)`
+   * reads the dialog's live state; a row the operator cannot see never reds,
+   * so a value cleared on one tier cannot red a node that has since moved to
+   * a tier that never reads it.
+   *
+   * @param {function(object): boolean} shown
+   * @param {function(*, object): (boolean|string)} validate
+   * @returns {function(*, object): (boolean|string)}
+   */
+  RED.mavlink.whenShown = function (shown, validate) {
+    return function (v, opt) {
+      return shown(this) ? validate.call(this, v, opt) : true;
     };
   };
 
