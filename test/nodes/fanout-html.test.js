@@ -230,20 +230,15 @@ test('addItem syncs the mirror so an untouched new row cannot dodge validation',
     'addItem must sync the mirror before the new row can reach oneditsave unvalidated');
 });
 
-test('selectionMode and executionMode red on membership, and selectionMode on the Build rule', () => {
+test('selectionMode and executionMode red on membership only (§5)', () => {
   // §5's editor half: the runtime dispatches these tokens with affirmative
   // cases only, so a hand-edited stray must red at deploy — the audit's
   // `{mode: "lits"}` shape, on the config surface the editor owns.
   const defaults = loadNodeDefaults('mavlink-fanout');
   const sel = defaults.selectionMode.validate;
   const exec = defaults.executionMode.validate;
-  for (const mode of ['all', 'list', 'filter']) assert.equal(sel.call({ delivery: 'send' }, mode, {}), true, mode);
-  assert.match(String(sel.call({ delivery: 'send' }, 'lits', {})), /must be one of/);
-  assert.match(String(sel.call({ delivery: 'build' }, 'nonsense', {})), /must be one of/,
-    'membership reds before the Build rule is consulted');
-  assert.equal(sel.call({ delivery: 'build' }, 'list', {}), true);
-  assert.match(String(sel.call({ delivery: 'build' }, 'all', {})), /explicit sysid list on Build/,
-    'a saved selection the dialog would not offer on Build reds');
+  for (const mode of ['all', 'list', 'filter']) assert.equal(sel.call({}, mode, {}), true, mode);
+  assert.match(String(sel.call({}, 'lits', {})), /must be one of/);
   for (const mode of ['sequential', 'broadcast']) assert.equal(exec.call({}, mode, {}), true, mode);
   assert.match(String(exec.call({}, 'parallel', {})), /must be one of/);
 });
@@ -253,7 +248,7 @@ test('the dialog offers only legal pairs: Build takes Sequential and the list, B
   assert.match(html, /dependentSelect\('#node-input-selectionMode', \['#node-input-executionMode', '#node-input-delivery'\],\s*\(exec, delivery\) => \(exec === 'broadcast' \? \['all'\] : delivery === 'build' \? \['list'\] : null\)\)/);
   // Narrowest first: leaving Broadcast re-picks the list, never the fleet.
   assert.match(html, /<select id="node-input-selectionMode"><option value="list">[^<]*<\/option><option value="filter">[^<]*<\/option><option value="all">/);
-  assert.doesNotMatch(html, /beforeBroadcast|Broadcast needs the "All" selection/);
+  assert.doesNotMatch(html, /beforeBroadcast|Broadcast needs the "All" selection|explicit sysid list on Build/);
 });
 
 test('intervalMs and maxRetries: blank reds, present values carry range red rings', () => {
