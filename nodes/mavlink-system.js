@@ -24,15 +24,15 @@ function registerMavlinkSystem(RED) {
     const connAtDeploy = RED.nodes.getNode(config.connection);
     const inFlight = delivery.inFlightTracker();
 
-    node.on('input', async (msg, send, done) => {
+    /**
+     * The shared preamble handles suppression; the catch stays here so a
+     * failure record names the service and operation, as every System
+     * record does.
+     */
+    delivery.onActionInput(node, async (msg, send, done) => {
       const service = config.service;
       const operation = config.operation;
       try {
-        if (delivery.shouldSuppress(msg)) {
-          done();
-          return;
-        }
-
         const payload = msg.payload;
         const { connectionNode: connNode, profile, target, identityId } =
           resolveDeliveryContext(RED, {
