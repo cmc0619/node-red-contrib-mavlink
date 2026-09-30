@@ -21,7 +21,16 @@
       "mcp__github__unsubscribe_pr_activity",
       "mcp__Claude_Code_Remote__subscribe_pr_activity",
       "mcp__Claude_Code_Remote__unsubscribe_pr_activity",
-      "mcp__Claude_Code_Remote__send_later"
+      "mcp__Claude_Code_Remote__send_later",
+      "mcp__Mem0__add_memory",
+      "mcp__Mem0__search_memories",
+      "mcp__Mem0__get_memories",
+      "mcp__Mem0__get_memory",
+      "mcp__Mem0__update_memory",
+      "mcp__Mem0__delete_memory",
+      "mcp__Mem0__list_entities",
+      "mcp__Mem0__list_events",
+      "mcp__Mem0__get_event_status"
     ]
   },
   "hooks": {
