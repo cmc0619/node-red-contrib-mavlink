@@ -2174,8 +2174,8 @@
    * of them; the rest are hidden. A parent change re-picks the first shown
    * option, so options are listed narrowest first. Opening the dialog keeps
    * the saved value unless it is hidden, and then defaults to the first shown
-   * option; the field's own red ring is what flags such a saved value. The
-   * re-pick fires `change`, so a select can be both a child and a parent.
+   * option. The re-pick fires `change`, so a select can be both a child and a
+   * parent.
    *
    * @param {string} child  jQuery selector for the dependent `<select>`
    * @param {string[]} parents  jQuery selectors for the selects it depends on

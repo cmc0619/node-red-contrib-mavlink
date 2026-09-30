@@ -45,7 +45,7 @@
       identity: { value: '', type: 'mavlink-local-identity', validate: RED.mavlink.identityOverrideValidator(IDENTITY_ROLES) },
       selectionMode: {
         // 'list' — the delivery default is Build, and Build requires the list,
-        // so a fresh node must not be born invalid behind a greyed dropdown.
+        // so a fresh node must not be born invalid behind a hidden option.
         value: 'list',
         // Membership (§5's editor half: the runtime dispatches this token
         // with affirmative cases only). The dialog holds Build to the explicit
