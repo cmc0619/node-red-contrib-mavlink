@@ -137,20 +137,17 @@ module.exports = function registerMavlinkConnection(RED) {
     if (node.disabled) {
       node.status({ fill: 'grey', shape: 'ring', text: 'disabled' });
       node.subscribe = () => () => {};
-      node.send = () => {
-        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a send on a disabled link is an operational failure at send time
+      /** A send or health assertion on a disabled link fails at the call. */
+      const refuseDisabled = () => {
+        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a call on a disabled link is an operational failure at call time
         throw new Error(
           'mavlink-connection: connection disabled — enable it in the connection config and redeploy'
         );
       };
+      node.send = refuseDisabled;
       node.resolveSourceIds = () => null;
       node.peerTable = new PeerTable({});
-      node.assertHealth = () => {
-        // eslint-disable-next-line no-restricted-syntax -- §0 rule 3: a health assertion on a disabled link is an operational failure at assertion time
-        throw new Error(
-          'mavlink-connection: connection disabled — enable it in the connection config and redeploy'
-        );
-      };
+      node.assertHealth = refuseDisabled;
       node.onHealthExpired = () => () => {};
       node.crcFailureCount = () => 0;
       return;
