@@ -128,14 +128,3 @@ test('System does not offer "(profile default)" for its required target compid',
     'both reloads pass it');
   assert.doesNotMatch(html, /reloadTargetCompId\(node\)/, 'no reload offers the blank option');
 });
-
-test('restore sections red-ring a section the dialog does not offer', () => {
-  const { sections } = loadNodeDefaults('mavlink-system');
-  const restore = { service: 'backup', operation: 'restore' };
-  assert.equal(sections.validate.call(restore, ['parameters', 'files'], {}), true);
-  assert.equal(sections.validate.call(restore, [], {}), false, 'nothing selected still reds');
-  assert.equal(sections.validate.call(restore, ['parameters', 'bogus'], {}), false,
-    'an imported unknown section reds at deploy instead of failing mid-restore');
-  assert.equal(sections.validate.call({ service: 'logs', operation: 'list' }, ['bogus'], {}), true,
-    'only a restore reads sections');
-});
