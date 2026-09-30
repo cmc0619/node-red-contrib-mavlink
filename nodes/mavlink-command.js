@@ -161,7 +161,8 @@ module.exports = function registerMavlinkCommand(RED) {
      * param1 gains MAV_MODE_FLAG_CUSTOM_MODE_ENABLED — without it the
      * autopilot ignores the custom mode (the preset's help text) — OR-ed into
      * whatever base-mode flags were already supplied. An unresolvable name is
-     * NaN in param2: loud at the wire choke, never a silent mode 0.
+     * NaN in param2, never a mode 0 the operator did not name. param2 is a
+     * float, so NaN is sent (DESIGN.md §14.152 records what vehicles do).
      *
      * @param {Object<number, number>} userParams  mergeParams output, mutated
      * @param {*} payload
