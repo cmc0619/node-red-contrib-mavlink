@@ -193,3 +193,60 @@ test('firmware and vehicle family red on membership (walled-garden sweep)', () =
   }
   assert.match(String(defaults.vehicleFamily.validate.call({}, 'submarine', {})), /must be one of/);
 });
+
+/**
+ * Run the dialog's real populateRevisions (and dialectRow) over a fake
+ * select: the library, the saved node, and the live dialect are the inputs.
+ */
+function revisionsPicker(library, node, liveDialect) {
+  const src = (name) => {
+    const start = html.indexOf(`function ${name}(`);
+    assert.notEqual(start, -1, `${name} not found`);
+    let depth = 0;
+    for (let i = html.indexOf('{', start); i < html.length; i++) {
+      if (html[i] === '{') depth++;
+      if (html[i] === '}' && --depth === 0) return html.slice(start, i + 1);
+    }
+    throw new Error(`${name} is unterminated`);
+  };
+  let options = [];
+  let value = null;
+  const $revision = {
+    empty() { options = []; return this; },
+    find(sel) {
+      const v = /^option\[value="(.*)"\]$/.exec(sel)[1];
+      return { length: options.some((o) => o.value === v) ? 1 : 0 };
+    },
+    val(v) { if (v === undefined) return value; value = v; return this; },
+  };
+  const $ = () => {
+    const o = { value: undefined, label: '' };
+    const w = {
+      val(v) { o.value = v; return w; },
+      text(t) { o.label = t; return w; },
+      attr() { return w; },
+      appendTo() { options.push(o); return w; },
+    };
+    return w;
+  };
+  const $dialect = { val: () => liveDialect };
+  const populate = new Function('$', '$revision', '$dialect', 'library', 'node',
+    `${src('dialectRow')}\n${src('populateRevisions')}\nreturn populateRevisions;`
+  )($, $revision, $dialect, library, node);
+  return { populate, options: () => options, value: () => value };
+}
+
+test('a saved dialect revision the library lacks survives open-and-save', () => {
+  const library = [{ name: 'common', versions: [{ id: 'seed', label: 'Seed (shipped)' }] }];
+  const node = { dialect: 'common', dialectRevision: 'rev-2025' };
+
+  const open = revisionsPicker(library, node, 'common');
+  open.populate(node.dialectRevision);
+  assert.equal(open.value(), 'rev-2025', 'the saved snapshot is still what Done saves');
+  assert.ok(open.options().some((o) => o.label === 'rev-2025 (not in library)'), 'and it says why');
+
+  const changed = revisionsPicker(library, node, 'ardupilotmega');
+  changed.populate('seed');
+  assert.equal(changed.value(), 'seed', 'a dialect change still starts from the seed');
+  assert.ok(!changed.options().some((o) => /not in library/.test(o.label)));
+});

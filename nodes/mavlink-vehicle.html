@@ -154,6 +154,15 @@
               .appendTo($revision);
           });
           const want = prefer || 'seed';
+          /**
+           * The saved revision stays selectable when the library no longer
+           * offers it (as the Components picker's picks do): falling back to
+           * another snapshot would change what the profile compiles on Done.
+           */
+          if (!$revision.find(`option[value="${want}"]`).length
+            && want === node.dialectRevision && $dialect.val() === node.dialect) {
+            $('<option>').val(want).text(`${want} (not in library)`).appendTo($revision);
+          }
           if ($revision.find(`option[value="${want}"]`).length) {
             $revision.val(want);
           } else {
