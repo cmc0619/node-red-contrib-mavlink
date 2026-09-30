@@ -1996,3 +1996,20 @@ test('reloadCompIdSelect offers "(profile default)" unless told the compid is re
   assert.equal(compIdFill({}).allowEmpty, true, 'the blank option is the default');
   assert.equal(compIdFill({ allowEmpty: false }).allowEmpty, false, 'a required compid drops it');
 });
+
+// ── syncSavedFromDom ─────────────────────────────────────────────────────────
+
+test('syncSavedFromDom keeps typed values, drops blanked ones, and leaves unrendered keys alone', () => {
+  /** `$(el)` hands an element back as itself: the fake controls carry their own `attr`. */
+  const context = { RED: { mavlink: {}, nodes: { node: () => null } }, $: (el) => el, console, setTimeout };
+  context.window = context;
+  vm.runInNewContext(resourceScript, context);
+  const { RED } = context;
+  const input = (key) => ({ attr: (name) => (name === 'data-idx' ? key : undefined) });
+  const rendered = [input('1'), input('7')];
+  const $inputs = { each(fn) { rendered.forEach((el, i) => fn.call(el, i, el)); return this; } };
+  const saved = { 1: 5, 3: 9, 7: 10 };
+  RED.mavlink.syncSavedFromDom(saved, { 7: 25 }, $inputs, 'data-idx');
+  assert.deepEqual({ ...saved }, { 3: 9, 7: 25 },
+    'typed 7 kept, blanked 1 dropped, param 3 (not rendered) untouched');
+});

@@ -2169,6 +2169,22 @@
   };
 
   /**
+   * Merge a rendered form's live values into a dialog's working snapshot
+   * before a re-render empties the form, so a selection change keeps what
+   * was typed this session. `live` is the form's own scrape, the values Done
+   * would save; a control it omits (left blank) drops its key.
+   *
+   * @param {object} saved  the working snapshot, mutated
+   * @param {object} live  the scrape of the rendered controls
+   * @param {jQuery} $inputs  the rendered controls
+   * @param {string} keyAttr  the attribute that names each control's key
+   */
+  RED.mavlink.syncSavedFromDom = function (saved, live, $inputs, keyAttr) {
+    $inputs.each(function () { delete saved[$(this).attr(keyAttr)]; });
+    Object.assign(saved, live);
+  };
+
+  /**
    * A `<select>` whose legal options depend on other selects. `allowed` gets
    * the parents' values and returns the legal option values, or null for all
    * of them; the rest are hidden. A parent change re-picks the first shown
