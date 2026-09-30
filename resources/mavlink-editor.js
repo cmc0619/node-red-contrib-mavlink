@@ -2187,15 +2187,14 @@
     const all = Array.from($child[0].options).map((option) => [option.value, option.text]);
     function apply(reset) {
       const ok = allowed(...parents.map((parent) => $(parent).val()));
-      const shown = ok ? all.filter(([value]) => ok.indexOf(value) !== -1) : all;
-      const current = $child.val();
-      $child.empty();
-      shown.forEach(([value, label]) => $('<option></option>').val(value).text(label).appendTo($child));
-      if (!reset && shown.some(([value]) => value === current)) {
-        $child.val(current);
-        return;
-      }
-      $child.val(shown[0][0]).trigger('change');
+      const kept = $child.val();
+      /** A parent change starts over: with no live value, the rebuild lands on the first shown option. */
+      if (reset) $child.val(null);
+      const value = RED.mavlink.refreshOptionSelect({
+        select: child,
+        options: ok ? all.filter(([option]) => ok.indexOf(option) !== -1) : all,
+      });
+      if (reset || value !== kept) $child.trigger('change');
     }
     parents.forEach((parent) => $(parent).on('change', () => apply(true)));
     apply(false);
