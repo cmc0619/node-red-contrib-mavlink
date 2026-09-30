@@ -1961,3 +1961,27 @@ test('no editor admin URL starts with "/": Node-RED prefixes the admin root and 
   }
   assert.ok(relative >= 16, `the editor's admin calls are all relative (found ${relative})`);
 });
+
+// ── reloadCompIdSelect ───────────────────────────────────────────────────────
+
+/** Run one compid reload over a fresh select; returns the fill options used. */
+function compIdFill(opts) {
+  const { RED } = loadResource();
+  const data = {};
+  const $select = {
+    length: 1,
+    data(k, v) { if (v === undefined) return data[k]; data[k] = v; return this; },
+    find: () => ({ length: 0 }),
+    val: () => null,
+  };
+  let used = null;
+  RED.mavlink.loadEnumsCatalog = (names, cb) => cb({ enums: { MAV_COMPONENT: [] } });
+  RED.mavlink.fillCompIdSelect = (_sel, _entries, fillOpts) => { used = fillOpts; };
+  RED.mavlink.reloadCompIdSelect($select, opts);
+  return used;
+}
+
+test('reloadCompIdSelect offers "(profile default)" unless told the compid is required', () => {
+  assert.equal(compIdFill({}).allowEmpty, true, 'the blank option is the default');
+  assert.equal(compIdFill({ allowEmpty: false }).allowEmpty, false, 'a required compid drops it');
+});

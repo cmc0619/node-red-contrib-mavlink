@@ -1180,9 +1180,11 @@
    *
    * Once the select has been filled, an explicit empty selection ("profile
    * default") is preserved; `initialSaved` is used only on the first fill.
+   * `allowEmpty: false` drops the "profile default" option, for a node whose
+   * compid is required.
    *
    * @param {object} $select  jQuery select
-   * @param {{initialSaved?: string|number, emptyLabel?: string}} [opts]
+   * @param {{initialSaved?: string|number, emptyLabel?: string, allowEmpty?: boolean}} [opts]
    */
   RED.mavlink.reloadCompIdSelect = function ($select, opts) {
     opts = opts || {};
@@ -1207,7 +1209,7 @@
         $select,
         ((catalog || {}).enums || {}).MAV_COMPONENT || [],
         {
-          allowEmpty: true,
+          allowEmpty: opts.allowEmpty !== false,
           emptyLabel: opts.emptyLabel || '(profile default)',
           saved,
           suggest: opts.suggest,
@@ -1249,8 +1251,8 @@
    *
    * @param {object} node
    * @param {{field?: string, selector?: string, emptyLabel?: string,
-   *   suggest?: string}} [opts]  `suggest` floats the components a payload
-   *   topic plausibly means to the top of the list.
+   *   suggest?: string, allowEmpty?: boolean}} [opts]  `suggest` floats the
+   *   components a payload topic plausibly means to the top of the list.
    */
   RED.mavlink.reloadTargetCompId = function (node, opts) {
     opts = opts || {};
@@ -1260,6 +1262,7 @@
       initialSaved: node[field],
       emptyLabel: opts.emptyLabel,
       suggest: opts.suggest,
+      allowEmpty: opts.allowEmpty,
     });
   };
 
