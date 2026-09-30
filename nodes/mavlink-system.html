@@ -69,7 +69,8 @@
           if (service !== 'backup' || operation !== 'restore') return true;
           // A restore that selects nothing runs no engine. The ring is the
           // only place that can say so before deploy.
-          return Array.isArray(v) && v.length > 0;
+          /** Membership: every pick is a section the multi-select offers. */
+          return Array.isArray(v) && v.length > 0 && v.every((s) => RESTORE_SECTIONS.includes(s));
         },
       },
       paramEncoding: {
