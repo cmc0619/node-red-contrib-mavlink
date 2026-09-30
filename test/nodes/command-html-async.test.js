@@ -216,7 +216,7 @@ function makeHarness() {
   /** Open the dialog for `node` over a fresh form, as the tray does. */
   function openDialog(node) {
     registry = new Map();
-    seedSelect('#node-input-delivery', ['confirm', 'complete', 'send', 'build'], 'confirm');
+    seedSelect('#node-input-delivery', ['confirm', 'complete', 'send', 'build'], node.delivery || 'confirm');
     seedSelect('#node-input-connection', ['', 'conn-1'], 'conn-1');
     seedSelect('#node-input-mode', ['preset', 'advanced'], node.mode);
     seedSelect('#node-input-preset', []);
@@ -281,4 +281,30 @@ test('concurrent catalog fetches from different call sites do not cancel each ot
 
   const sel = h.$('#node-input-advancedCommand');
   assert.equal(sel.val(), '400', 'the saved MAV_CMD is selected from the filled dropdown');
+});
+
+/** Takeoff carries a completion condition, so Complete is a legal tier for it. */
+const COMPLETION_GROUPS = [{
+  group: 'flight',
+  presets: [{ id: 'takeoff', name: 'Takeoff', commandId: 22, completionKey: 'altitude' }],
+}];
+
+test('a saved Complete tier survives the open before and after the presets land', () => {
+  const h = makeHarness();
+  h.openDialog(commandNode({ preset: 'takeoff', delivery: 'complete' }));
+  assert.equal(h.$('#node-input-delivery').val(), 'complete',
+    'with no preset list yet there is nothing to judge the tier against');
+
+  h.forUrl('mavlink/command/presets')[0].ok({ groups: COMPLETION_GROUPS });
+  h.forUrl('mavlink/command/commands').forEach((req) => req.ok(COMMANDS_CATALOG));
+  assert.equal(h.$('#node-input-delivery').val(), 'complete',
+    'the landed preset supports completion, so the saved tier stands');
+});
+
+test('a saved Complete tier survives a failed presets fetch', () => {
+  const h = makeHarness();
+  h.openDialog(commandNode({ preset: 'takeoff', delivery: 'complete' }));
+  h.forUrl('mavlink/command/presets')[0].fail();
+  h.forUrl('mavlink/command/commands').forEach((req) => req.ok(COMMANDS_CATALOG));
+  assert.equal(h.$('#node-input-delivery').val(), 'complete');
 });
