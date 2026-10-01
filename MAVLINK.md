@@ -72,7 +72,8 @@ publishes for it is SAFE_RECOVERY. ArduPilot fills every `mode_name` and sets
 `properties=2` (`MAV_MODE_PROPERTY_NOT_USER_SELECTABLE`).
 
 **Decode.** pymavlink `common` 2.4.49 does not carry msgid 435/436; the capture used
-`dialect='development'`. This tree's seed/catalog has neither message yet.
+`dialect='development'`. This tree's seed carries both (`AVAILABLE_MODES` 435,
+`CURRENT_MODE` 436).
 
 `AVAILABLE_MODES.properties`: 0 none, 1 `ADVANCED`, 2 `NOT_USER_SELECTABLE`, 3 both.
 
