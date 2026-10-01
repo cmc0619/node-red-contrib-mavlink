@@ -397,9 +397,6 @@ test('member expiring mid-run is reported failed while later members continue', 
   assert.match(result.members.find((m) => m.sysid === 2).detail, /expired|stale/);
 });
 
-test('suppress does nothing', () => {
-});
-
 // ── Broadcast guards (§10) ────────────────────────────────────────────────────
 
 test('broadcast reports the whole-link audience regardless of a subset selection', async () => {
