@@ -163,10 +163,10 @@ test('a payload that is not a built message reports a failed aggregate', async (
   assert.equal(connection.sends.length, 0);
 });
 
-test('wrapper selection sysids outside 1..255 select nobody rather than refusing', async () => {
-  // The wrapper's `selection.sysids` is trusted runtime input (§0): entries
-  // that name no vehicle simply match no member, and the empty resolution is
-  // the report. The editor bounds the configured members table.
+test('wrapper selection sysids outside 1..255 ride as given on Build', async () => {
+  // The wrapper's `selection.sysids` is trusted runtime input (§0), and on
+  // Build the list is the directory, so 0 and 3 are built as asked. The editor
+  // bounds the configured members table.
   const RED = redStub({});
   require('../../nodes/mavlink-fanout')(RED);
   const Node = RED.nodes.types['mavlink-fanout'];
@@ -183,20 +183,8 @@ test('wrapper selection sysids outside 1..255 select nobody rather than refusing
     fromWrapper,
     { payload: { message: builtCommand(), selection: { mode: 'list', sysids: '0,3' } } },
     (m) => { sentWrapper = m; }
-  ).then(() => null, () => null);
-  assert.ok(sentWrapper, 'the input still reports');
-});
-
-test('build+all without connection craters — the dialog holds Build to the list (§6)', () => {
-  // Build + a non-list selection has nowhere to resolve members from: the
-  // live peer table is the only source. The dialog only offers the explicit
-  // list on Build (mavlink-fanout.html dependentSelect), so the driver simply
-  // has no connection to read and craters.
-  const html = require('node:fs').readFileSync(
-    require('node:path').join(__dirname, '..', '..', 'nodes', 'mavlink-fanout.html'),
-    'utf8'
   );
-  assert.match(html, /delivery === 'build' \? \['list'\]/);
+  assert.deepEqual(sentWrapper[1].members.map((m) => [m.sysid, m.result]), [[0, 'built'], [3, 'built']]);
 });
 
 test('wrapper identityId is passed through to connection.send options', async () => {

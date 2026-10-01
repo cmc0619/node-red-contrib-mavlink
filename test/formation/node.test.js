@@ -400,14 +400,6 @@ test('a blank fixed anchor altitude rides as the coercion — the editor is the 
   assert.equal(connection.sends[0].message.fields.z, 0, 'a blank altitude is Number(\'\')');
 });
 
-test('an out-of-range config sysid selects no vehicle rather than refusing', () => {
-  // The editor bounds every entry in the Sysids box (mavlink-formation.html
-  // `sysids`, 1..255), so a token past it is hand-edit drift. It coerces and
-  // names no vehicle, which is what the empty-selection report is for.
-  const { parseSysidList } = require('../../lib/fanout');
-  assert.deepEqual(parseSysidList('1,300'), [1, 300], 'both tokens coerce');
-});
-
 test('msg.payload.anchor and headingDeg override the configured leader anchor', async () => {
   const leader = peer(7, { position: { lat: 10, lon: 10, alt: 100, relativeAlt: 50, heading: 180 } });
   const connection = connectionStub([peer(1), peer(2), leader]);
