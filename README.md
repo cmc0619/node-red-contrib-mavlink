@@ -38,7 +38,7 @@ Requires Node.js 20+ and Node-RED 4.0+.
 | `mavlink-payload` | Camera, gimbal, servo, gripper, winch, parachute, relay |
 | `mavlink-state` | Peer table reads and transitions |
 | `mavlink-health` | Assert an identity's health with an expiring lease; a fault stops its HEARTBEAT |
-| `mavlink-mission` | Upload, download, or clear mission/fence/rally |
+| `mavlink-mission` | Upload, download, or clear mission/fence/rally, or set the current mission item |
 | `mavlink-system` | Onboard logs, MAVLink FTP files, and parameter backup/restore |
 | `mavlink-fanout` | Fan-out one action across selected vehicles, with optional per-member offsets |
 | `mavlink-formation` | Position a group into a geometric formation around an anchor |
@@ -77,7 +77,7 @@ Path; upload takes a Buffer from `msg.payload` and reads `msg.path` or the confi
 The path is limited to 239 UTF-8 bytes and cannot contain NUL. FTP `CREATE_FILE` may
 truncate an existing remote file.
 
-**Parameters → Backup** returns parameter-only `{paramId, paramType, value}` records that
+**Parameters → Backup** returns parameter-only `{paramId, paramType, value, index}` records that
 can travel through JSON or File nodes and be wired directly to **Parameters → Restore**.
 Non-finite values use string representations, and Restore reports its confirmed prefix on
 partial failure without rolling back earlier writes. All services preserve input metadata
@@ -86,7 +86,7 @@ from status records. Timeout and retry settings are explicit in the editor.
 
 ## Examples
 
-Importable flows ship with the package — 24 of them, plus 43 more for a live SITL rig. In
+Importable flows ship with the package — 24 of them, plus 44 more for a live SITL rig. In
 the Node-RED editor: **Import → Examples → @cmc0619/node-red-contrib-mavlink**.
 
 A few to start with; every flow is indexed in
