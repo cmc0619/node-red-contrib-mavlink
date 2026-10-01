@@ -95,9 +95,8 @@ const nodeRules = {
   'n/no-missing-require': [
     'error',
     {
-      // `sockopt` is optional and may be absent on unsupported platforms;
-      // `mavlink-mappings` is provided by node-mavlink and resolved at runtime.
-      allowModules: ['sockopt', 'mavlink-mappings'],
+      // `sockopt` is optional and may be absent on unsupported platforms.
+      allowModules: ['sockopt'],
     },
   ],
   'n/no-unsupported-features/es-builtins': 'error',

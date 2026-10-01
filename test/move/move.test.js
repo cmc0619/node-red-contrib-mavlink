@@ -26,6 +26,21 @@ test('position Move flips operator up-positive altitude to NED down-positive exa
   assert.equal(message.fields.type_mask, 2552);
 });
 
+test('acceleration Move flips up-positive accel to NED and masks position and velocity', () => {
+  const message = buildMoveMessage({ frame: 1,
+    mode: 'acceleration',
+    target: { sysid: 2, compid: 1 },
+    accel: { north: 1, east: -2, up: 3 },
+    timeBootMs: 0,
+  });
+
+  assert.equal(message.fields.afx, 1);
+  assert.equal(message.fields.afy, -2);
+  assert.equal(message.fields.afz, -3);
+  // Position (7) + velocity (56) + yaw (1024) + yaw rate (2048) ignored.
+  assert.equal(message.fields.type_mask, 3135);
+});
+
 test('global position Move encodes degrees to degE7 and keeps altitude up-positive', () => {
   const message = buildMoveMessage({
     mode: 'position',

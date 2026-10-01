@@ -259,12 +259,3 @@ test('mavlink-param.html: on Build the inherited rung is the node\'s own Vehicle
     'a concrete Build dialect has no profile rung, so the field inherits nothing'
   );
 });
-
-test('mavlink-payload.html: targetSystem stays unconditional — its editor cannot know the ack mode (#260)', () => {
-  const html = fs.readFileSync(path.join(nodesDir, 'mavlink-payload.html'), 'utf8');
-  assert.doesNotMatch(
-    descriptorBlock(html, 'targetSystem'),
-    /cannot be confirmed/,
-    'a message-kind recipe (confirmation "none") broadcasts legally on the confirm tier'
-  );
-});

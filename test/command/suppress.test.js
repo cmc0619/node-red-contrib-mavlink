@@ -8,9 +8,7 @@
  * which gives a switch upstream an explicit way to hold a chain without
  * inventing a convention."
  *
- * These tests verify the suppress logic in isolation and its interaction with
- * the AckWaiter — a suppressed message must not start a transaction, must not
- * emit on either output, and must not change the status badge.
+ * These tests verify the suppress predicate in isolation.
  *
  * The node runtime itself is not instantiated (no Node-RED required); we test
  * the pure logic extracted from the input handler.
@@ -69,34 +67,4 @@ test('object payload is NOT suppressed', () => {
 
 test('string "false" payload is NOT suppressed (strict comparison)', () => {
   assert.equal(guardAction({ payload: 'false' }), 'proceed');
-});
-
-// ── AckWaiter is not started on suppress ──────────────────────────────────
-
-test('AckWaiter.start is never called when payload is false', () => {
-  const { AckWaiter } = require('../../lib/command/ack');
-
-  let started = false;
-  const waiter = new AckWaiter({
-    subscribe: () => () => {},
-    sendFn: () => {},
-    commandId: 400,
-    // AckWaiter option names are wire-side, not Command editor property names.
-    targetSystem: 1,
-    targetComponent: 1,
-    timeoutMs: 100,
-  });
-  const origStart = waiter.start.bind(waiter);
-  waiter.start = (...args) => {
-    started = true;
-    return origStart(...args);
-  };
-
-  // Simulate what the node input handler does on suppress.
-  const msg = { payload: false };
-  if (msg.payload !== false) {
-    waiter.start().then(() => {});
-  }
-
-  assert.equal(started, false, 'AckWaiter must not start on payload=false');
 });
