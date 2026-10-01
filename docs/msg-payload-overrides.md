@@ -18,6 +18,12 @@ value is used.
 payload[key] === undefined ? config[key] : payload[key]
 ```
 
+A few keys use the blank rule instead (`firstDefined` and `isBlank` in the
+same file): `null` and `""` count as left out, so the saved value is used.
+Those are `target.sysid` and `target.compid` wherever a node takes them,
+State's `sysid` and `compid`, and Formation's `headingDeg` and `pitchDeg`.
+Command's `mode` has no saved value; a blank one names no mode.
+
 There is no merge and no clean-up. What you send is what goes on the wire.
 
 ## What no node lets you change
@@ -97,7 +103,7 @@ not sit in `msg.payload` at all.
 | Out, Build | Target, Identity | `msg.target` / `msg.identityId` (not in payload) |
 | State | Target sysid / compid | `msg.payload.sysid` / `.compid` (flat) |
 | all other nodes | Target sysid / compid | `msg.payload.target.sysid` / `.compid` |
-| all nodes but Out and Build | Identity | `msg.payload.identityId` |
+| Command, Fan-out, Mission, Move, Param, Payload, System | Identity | `msg.payload.identityId` |
 
 System splits its Path two ways. List and download read `msg.payload.path`.
 Upload, backup and restore read `msg.path`, because the payload holds the file
