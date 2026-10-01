@@ -1315,9 +1315,8 @@ test('mavlink-build Send tier: msg.band overrides by presence; absent rides the 
   assert.equal(sent[1].opts.band, 1, 'and rides as given');
 });
 
-test('mavlink-build: close stops the repeat timer', () => {
-  // We can't assert that clearInterval was called without a fake timer,
-  // but we can verify close() completes without error when a timer is active.
+test('mavlink-build: close stops the repeat timer', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
   const RED = makeRED();
   RED.nodes._register('v1', makeVehicleStub());
   require('../../nodes/mavlink-build')(RED);
@@ -1329,12 +1328,14 @@ test('mavlink-build: close stops the repeat timer', () => {
     messageName: 'HEARTBEAT',
     tier: 'build',
     fields: '{}',
-    repeatMs: 60000,  // Long enough to not actually fire in the test.
+    repeatMs: 1000,
   });
 
-  // Should not throw.
+  t.mock.timers.tick(1000);
+  assert.equal(node._sends.length, 1, 'the repeat fires while open');
   node._close();
-  assert.ok(node._closed);
+  t.mock.timers.tick(5000);
+  assert.equal(node._sends.length, 1, 'and never after close');
 });
 
 test('mavlink-build: a repeat badge names the interval (COMMAND-12)', () => {
