@@ -295,10 +295,11 @@ const PROFILE = {
   },
   '19-tcp-connection': {
     restart: 'none',
-    waitMs: 5000,
-    expect: 'TCP template — skip unless SITL TCP exposed',
-    notes: 'default Compose lab is UDP-only; skip without published :5760',
-    skip: true,
+    waitMs: 15000,
+    expect: 'HEARTBEAT over TCP on 127.0.0.1:5760',
+    // Opt-in lab: `docker compose --profile tcp up -d`. Skip when :5760 is dark.
+    notes: 'needs sitl profile tcp (nrc-ap-tcp-1 → host :5760); PX4 TCP is :5770',
+    skip: () => !tcpPortOpen(5760),
   },
   '34-formation-basics': {
     restart: 'ap-fleet',
@@ -438,6 +439,19 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** True when a TCP connect to 127.0.0.1:port succeeds within a short budget. */
+function tcpPortOpen(port, timeoutMs = 400) {
+  const ok = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `const n=require('net');const s=n.connect(${Number(port)},'127.0.0.1',()=>{process.exit(0)});s.on('error',()=>process.exit(1));s.setTimeout(${timeoutMs},()=>process.exit(1));`,
+    ],
+    { timeout: timeoutMs + 500 }
+  );
+  return ok.status === 0;
+}
+
 function sh(cmd, timeoutMs = 15000) {
   const r = spawnSync('bash', ['-c', cmd], {
     encoding: 'utf8',
@@ -526,6 +540,25 @@ function verdictFrom(profile, summary, log) {
   const results = summary.debug.map((d) => d.result).filter(Boolean);
   const expect = profile.expect || '';
 
+  if (/HEARTBEAT over TCP|TCP on 127\.0\.0\.1:5760/i.test(expect)) {
+    // Example 19: Connection mode=tcp to nrc-ap-tcp-1. Continue may carry the
+    // HEARTBEAT message itself (no .result); Status may say sent on the NVF
+    // inject. Proof is a HEARTBEAT debug or mavlink-in excerpt.
+    const hb = summary.debug.some(
+      (d) =>
+        /HEARTBEAT/i.test(d.tag) ||
+        /HEARTBEAT/i.test(d.excerpt || '') ||
+        /messageName:\s*'HEARTBEAT'|name:\s*'HEARTBEAT'/i.test(d.excerpt || '')
+    );
+    const sent = summary.debug.some((d) => d.result === 'sent');
+    if (hb) {
+      return { status: 'PASS', reason: 'HEARTBEAT received over TCP :5760' };
+    }
+    if (sent) {
+      return { status: 'PARTIAL', reason: 'TCP NVF sent but no HEARTBEAT seen yet' };
+    }
+    return { status: 'FAIL', reason: 'no HEARTBEAT on TCP connection' };
+  }
   if (/TEMPORARILY_REJECTED retried|temporarily rejected/i.test(expect)) {
     const retried = summary.debug.some((d) => {
       const retriesMatch = (d.excerpt || '').match(/retries:\s*(\d+)/);
@@ -1796,7 +1829,9 @@ async function runOne(file) {
   const injects = flows.filter((n) => n.type === 'inject');
 
   console.log(`\n=== ${file} (${tab}) ===`);
-  if (profile.skip) {
+  const skip =
+    typeof profile.skip === 'function' ? profile.skip() : Boolean(profile.skip);
+  if (skip) {
     return {
       file,
       tab,

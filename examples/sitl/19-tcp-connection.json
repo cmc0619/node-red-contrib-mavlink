@@ -4,7 +4,7 @@
     "type": "tab",
     "label": "SITL 19 TCP connection template",
     "disabled": false,
-    "info": "Template only: TCP client connection to 127.0.0.1:5760. The default Compose SITL lab is UDP-first and does not publish AP TCP 5760, so harnesses should skip this unless SITL TCP is explicitly exposed.",
+    "info": "TCP client connection to 127.0.0.1:5760 (ArduPilot SERIAL0). Bring up the opt-in lab: cd sitl && docker compose --profile tcp up -d --build (nrc-ap-tcp-1). PX4 TCP (socat bridge) is on :5770 — not this flow. Harness skips when :5760 is closed.",
     "env": []
   },
   {
@@ -12,7 +12,7 @@
     "type": "comment",
     "z": "sitl25-tab",
     "name": "TCP template - requires exposed SITL TCP",
-    "info": "This is a structural TCP example, not a default-lab live flow. It uses Connection mode tcp with remoteHost 127.0.0.1 and remotePort 5760, which requires a SITL setup that exposes TCP on that port. The repository's default Compose lab uses UDP client ports, so skip this file in live SITL harnesses unless you publish TCP deliberately.\n\nThe receive path listens for HEARTBEAT. The inject path sends one NAMED_VALUE_FLOAT if the TCP peer is connected.",
+    "info": "Connection mode=tcp, remoteHost 127.0.0.1, remotePort 5760.\n\nOpt-in Compose profile (not the UDP sitl fleet):\n  cd sitl && docker compose --profile tcp up -d --build\n\nThat starts nrc-ap-tcp-1 (SITL SERIAL0 TCP server on host :5760) and nrc-px4-tcp-11 + socat sidecar (PX4 GCS UDP bridged to host TCP :5770). This flow dials the AP port only.\n\nReceive path: HEARTBEAT. Inject: one NAMED_VALUE_FLOAT when the TCP peer is up. Suite skips when :5760 is not listening.",
     "x": 300,
     "y": 40,
     "wires": []
