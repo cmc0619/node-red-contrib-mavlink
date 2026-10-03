@@ -2,12 +2,16 @@
 # Usage:
 #   docker compose --profile sitl up -d --build
 #   docker compose --profile sitl --profile nodered up -d --build
+#   docker compose --profile tcp up -d --build   # 1 AP TCP + 1 PX4 TCP (see below)
 #
 # Node-RED (host or nodered profile) should bind 0.0.0.0:
 #   AP GCS 14550→14551 | PX4 GCS 14560→14561
 #   AP companion 14540→14541 | PX4 companion 14542→14543
 #   AP payload 14570→14571 (sysid 31; PX4 payload 32 reserved)
 # Vehicles send to the Compose bridge gateway; a 127.0.0.1 bind misses that path.
+#
+# TCP lab (profile tcp): AP SERIAL0 listens on host :5760; PX4 GCS UDP stays
+# localhost inside the container and a socat sidecar publishes host :5770.
 
 x-ap: &ap
   build:
@@ -49,7 +53,7 @@ services:
   # Otherwise Docker creates root-owned bind sources and the unprivileged
   # sitl/px4 users cannot write DataFlash / ulogs.
   prepare-logs:
-    profiles: ["sitl", "mcast"]
+    profiles: ["sitl", "mcast", "tcp"]
     image: busybox:1.36
     container_name: nrc-prepare-logs
     user: "0:0"
@@ -64,7 +68,8 @@ services:
                  px4-11 px4-12 px4-13 px4-14 px4-15 \
                  ap-companion-20 px4-companion-21 \
                  ap-payload-31 \
-                 ap-mcast-41 px4-bcast-42; do
+                 ap-mcast-41 px4-bcast-42 \
+                 ap-tcp-1 px4-tcp-11; do
           mkdir -p "/logs/$$d"
         done
         chmod -R a+rwX /logs
@@ -296,6 +301,63 @@ services:
       - ./scripts/entrypoint-px4.sh:/usr/local/bin/entrypoint-px4.sh:ro
       - ./scripts/resolve-out-host.sh:/usr/local/bin/resolve-out-host.sh:ro
       - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  # ---------------------------------------------------------------------------
+  # TCP lab (profile "tcp") — NOT part of the sitl fleet. Minimal 1 AP + 1 PX4
+  # so example 19 (and a PX4 TCP Connection) can dial from the host.
+  #   AP:  native SITL SERIAL0 TCP server → host 127.0.0.1:5760
+  #   PX4: official image GCS mavlink is UDP-only; socat sidecar bridges
+  #        host TCP :5770 ↔ container UDP 127.0.0.1:18570
+  # Bring up: docker compose --profile tcp up -d --build
+  # Safe alongside the UDP sitl fleet (different published ports).
+  ap-tcp-1:
+    <<: *ap
+    container_name: nrc-ap-tcp-1
+    profiles: ["tcp"]
+    entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-ap-tcp.sh"]
+    environment:
+      SYSID: "1"
+      INSTANCE: "0"
+    ports:
+      - "5760:5760"
+    volumes:
+      - ./logs/ap-tcp-1:/logs
+      - ./params/ap-logging.parm:/params/ap-logging.parm:ro
+      - ./params/copter.parm:/params/copter.parm:ro
+      - ./scripts/entrypoint-ap-tcp.sh:/usr/local/bin/entrypoint-ap-tcp.sh:ro
+
+  px4-tcp-11:
+    <<: *px4
+    container_name: nrc-px4-tcp-11
+    profiles: ["tcp"]
+    entrypoint: ["/bin/bash", "/usr/local/bin/entrypoint-px4-tcp.sh"]
+    environment:
+      <<: *px4-env
+      SYSID: "11"
+      INSTANCE: "0"
+    ports:
+      - "5770:5770"
+    volumes:
+      - ./logs/px4-tcp-11:/logs
+      - ./scripts/entrypoint-px4-tcp.sh:/usr/local/bin/entrypoint-px4-tcp.sh:ro
+      - ./params/px4-logging.env:/params/px4-logging.env:ro
+
+  # Shares px4-tcp-11's network namespace so it can reach 127.0.0.1:18570.
+  px4-tcp-bridge:
+    image: alpine/socat:1.8.0.0
+    container_name: nrc-px4-tcp-bridge
+    profiles: ["tcp"]
+    network_mode: "service:px4-tcp-11"
+    depends_on:
+      - px4-tcp-11
+    restart: unless-stopped
+    # TCP :5770 ↔ PX4 GCS UDP :18570, sourcing from :18580 (entrypoint points
+    # vehicle heartbeats at that fixed port so they reach connected TCP clients).
+    command:
+      [
+        "TCP-LISTEN:5770,fork,reuseaddr",
+        "UDP:127.0.0.1:18570,sp=18580",
+      ]
 
   nodered:
     profiles: ["nodered"]

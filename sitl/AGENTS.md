@@ -14,6 +14,7 @@ and does not open a results-only PR. See [`../testing.md`](../testing.md).
 |----|--------|
 | Use the official prebuilt AP binary (Dockerfile already does) | `waf copter` / clone ArduPilot in the image (~40 min in nested Docker) |
 | `docker compose --profile sitl --profile nodered up -d --build` | Hunt for a standalone Node-RED if Compose can host it |
+| TCP example 19: `docker compose --profile tcp up -d --build` (AP `:5760`, PX4 `:5770`) | Expect TCP on the default UDP sitl fleet — it never publishes `:5760` |
 | Recreate `nodered` after pulling package changes on `main` (`docker compose --profile nodered up -d --force-recreate nodered`) | Leave a long-lived `nrc-nodered` up across `git pull` — `/data` keeps the install from container start (`install-and-start.sh`), so runtime can still be on the old `sysids` CSV while flows already use `members` |
 | Wait for HEARTBEATs, then `node sitl/run-example-suite.js` | Deploy all example flows at once (UDP bind exclusivity) |
 | Post curated verdicts to a **GitHub Issue** (`sitl-results`) | Open a docs PR that only updates `testing.md` / results JSON |
@@ -88,7 +89,7 @@ generic `results: …` PASS does not early-exit — first ack is not “done”;
 **38** (signing) targets companion AP sysid 20: harness sends `SETUP_SIGNING` with
 `sha256(hunter11)` and injects `{ signingPassphrase: "hunter11" }` on Admin API
 deploy (`hunter11` is a joke lab passphrase, not a secret). Example **19** (TCP)
-is **SKIP** unless Compose exposes SITL TCP.
+is **SKIP** unless `docker compose --profile tcp` has published host `:5760`.
 
 
 Before each example the harness selectively `docker restart`s containers named by
@@ -153,6 +154,20 @@ node sitl/measure-swarm-mcast.js   # from host — ap-mcast-41 uses network_mode
 
 Probes group membership, broadcast arm, loopback, self-echo filter, and PX4 subnet
 broadcast. See `sitl/scripts/entrypoint-ap-mcast.sh` for the full brief.
+
+### TCP lab (1 AP + 1 PX4)
+
+```bash
+cd sitl && docker compose --profile tcp up -d --build
+# Host ports: AP TCP 5760 (nrc-ap-tcp-1), PX4 TCP 5770 (socat → PX4 UDP 18570)
+node sitl/run-example-suite.js --only 19
+```
+
+- **AP** — SITL default SERIAL0 TCP server (`entrypoint-ap-tcp.sh`). Matches
+  example 19 (`mode=tcp`, `127.0.0.1:5760`).
+- **PX4** — official `px4io` GCS mavlink is UDP-only; `entrypoint-px4-tcp.sh`
+  keeps localhost UDP and `nrc-px4-tcp-bridge` (alpine/socat) publishes TCP
+  `:5770`. Safe alongside the UDP sitl fleet (different published ports).
 
 ### Verification-debt queue (post-1.0)
 
