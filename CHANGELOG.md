@@ -6,6 +6,8 @@ config-node shapes and message contracts may still change without a major bump.
 
 ## [Unreleased]
 
+## [0.8.0] "Built, sent, accepted" - 2026-10-05
+
 From the review of 0.7.3, re-run on the SITL lab and in Node-RED 5.0.5 (PRs
 #513–#518). The measurements and rulings are in `DESIGN.md` §14.151–§14.169.
 **Breaking** marks a result word or an output shape a flow may switch on; no
@@ -23,6 +25,12 @@ aliases are kept (re-pick, never migrate).
   fetches exactly the upstream directory listing, which is already closed under
   `<include>`.
 
+### Added
+
+- **SITL TCP lab.** Compose profile `tcp`: one ArduPilot on host `:5760` (SITL
+  SERIAL0 TCP server) and one PX4 on host `:5770` (socat bridge over localhost
+  GCS UDP). Example 19 runs when `:5760` is up; otherwise SKIP.
+
 ### Changed
 
 - **Breaking — one result vocabulary (§14.163).** Build reports `built` with the
@@ -33,6 +41,10 @@ aliases are kept (re-pick, never migrate).
   carries the status record, as on Command. Fan-out members use the same
   words: a silent sequential ack is `unconfirmed`, a broadcast denial `denied`
   (was `result_2`).
+- **Breaking — Move and Payload Send Continue carry the sent message (§14.163 /
+  #521).** Same shape as Command and Param; no `{result, message}` wrapper, and
+  Payload no longer spells `sent (unconfirmed)` — `sent` already means nobody
+  answers.
 - **Breaking — Param runs on the transfer machines (R38, §14.161).** Confirm,
   read and collect re-send on silence up to **Max retries** (default 3, 0
   disables; the rows show on Confirm and Collect only). A set whose echo never
@@ -134,6 +146,9 @@ aliases are kept (re-pick, never migrate).
 - **Metadata.** `/mavlink/enums` serves exactly the tables named in the request.
 - **Package.** The root-only `overrides` are gone, so this repository's audit
   shows what a consumer installs (`SECURITY.md`).
+- **SITL suite.** Payload and other harness verdicts follow §14.163 words
+  (`accepted` / `sent`; `succeeded` only for multi-message exchanges /
+  aggregates).
 
 ### Fixed
 
